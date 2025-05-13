@@ -5,14 +5,20 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+// Rediriger la page d'accueil directement vers la page de connexion
 Route::get('/', function () {
+    return redirect()->route('login');
+});
+
+// Garder cette route si vous voulez encore accéder à la page d'accueil via /welcome
+Route::get('/welcome', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
+        'canRegister' => false, // Désactiver l'option d'enregistrement
         'laravelVersion' => Application::VERSION,
         'phpVersion' => PHP_VERSION,
     ]);
-});
+})->name('welcome');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
