@@ -12,8 +12,8 @@ class SessionExam extends Model
     protected $table = 'session_exams';
 
     protected $fillable = [
-        'code',
-        'nom',
+        'is_active',
+        'is_current',
         'annee_universitaire_id',
         'type',
         'date_start',
@@ -22,7 +22,9 @@ class SessionExam extends Model
 
     protected $casts = [
         'date_start' => 'date',
-        'date_end' => 'date'
+        'date_end' => 'date',
+        'is_active' => 'boolean',
+        'is_current' => 'boolean'
     ];
 
     /**
@@ -65,5 +67,16 @@ class SessionExam extends Model
     public function scopeConcours($query)
     {
         return $query->where('type', 'concours');
+    }
+
+    /**
+     * Scope pour les sessions actives dans l'année universitaire active
+     */
+    public function scopeActiveInActiveYear($query)
+    {
+        return $query->where('is_active', true)
+                    ->whereHas('anneeUniversitaire', function($q) {
+                        $q->where('is_active', true);
+                    });
     }
 }

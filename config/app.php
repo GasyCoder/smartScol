@@ -2,6 +2,15 @@
 
 return [
 
+    'name' => env('APP_NAME', 'Smart Scol'),
+    'desc' => env('APP_DESC', 'Smart Scol - Faculté de Médecine Université de Mahajanga'),
+    'version' => env('APP_VERSION', '1.0.0'),
+    'build' => env('APP_RELEASE', '12122024'),
+
+    // Site Information
+    'site_name' => env('SITE_NAME', 'DashWind'),
+    'site_email' => env('SITE_EMAIL', 'info@softnio.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Name
@@ -65,7 +74,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Indian/Antananarivo'),
 
     /*
     |--------------------------------------------------------------------------
@@ -78,11 +87,11 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'fr'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'fr'),
 
-    'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
+    'faker_locale' => env('APP_FAKER_LOCALE', 'fr_FR'),
 
     /*
     |--------------------------------------------------------------------------

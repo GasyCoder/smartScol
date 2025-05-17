@@ -10,8 +10,8 @@ class Salle extends Model
     use HasFactory;
 
     protected $fillable = [
+        'code_base',
         'nom',
-        'code',  // Code utilisé pour l'anonymat (ex: TA, SA)
         'capacite'
     ];
 
@@ -20,34 +20,40 @@ class Salle extends Model
     ];
 
     /**
-     * Relations
+     * Relation avec les schémas de codage
+     * Remplace l'ancienne relation avec RegleCodage
      */
-    public function placements()
+    public function schemasCodage()
     {
-        return $this->hasMany(Placement::class);
+        return $this->hasMany(SchemaCodage::class, 'salle_id');
     }
 
     /**
-     * Copies utilisant ce code de salle pour l'anonymat
+     * Obtient les codes d'anonymat associés à cette salle via les schémas de codage
      */
-    public function copies()
+    public function codesAnonymat()
     {
-        return Copie::where('code_salle', $this->code);
+        return $this->hasManyThrough(
+            CodeAnonymat::class,
+            'salle_id',     // Clé étrangère sur SchemaCodage
+            'id',           // Clé locale de Salle
+            'id'            // Clé locale de SchemaCodage
+        );
     }
 
     /**
-     * Manchettes utilisant ce code de salle pour l'anonymat
+     * Retourne le nombre total d'étudiants pouvant être accueillis dans cette salle
      */
-    public function manchettes()
+    public function getCapaciteDisponibleAttribute($date = null)
     {
-        return Manchette::where('code_salle', $this->code);
-    }
+        // Si une date est spécifiée, on peut vérifier les examens programmés ce jour-là
+        if ($date) {
+            $examensJour = Examen::whereDate('date', $date)->get();
 
-    /**
-     * Scope pour rechercher par code
-     */
-    public function scopeParCode($query, $code)
-    {
-        return $query->where('code', $code);
+            // TODO: Logique pour calculer la capacité disponible en fonction des examens
+            // Pour l'instant, on retourne simplement la capacité totale
+        }
+
+        return $this->capacite;
     }
 }

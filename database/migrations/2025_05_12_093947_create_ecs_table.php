@@ -15,14 +15,13 @@ return new class extends Migration
             $table->id();
             $table->string('abr', 10)->nullable()->comment('Ex: EC1, EC2');
             $table->string('nom', 100)->comment('Ex: Anatomie, Histologie');
-            $table->decimal('coefficient', 5, 2)->default(1)->comment('Coefficient de pondération');
+            $table->decimal('coefficient', 3, 1)->default(1.0);
             $table->unsignedBigInteger('ue_id')->comment('UE à laquelle appartient l\'EC');
-            $table->unsignedBigInteger('enseignant_id')->comment('Enseignant responsable de l\'EC');
+            $table->string('enseignant')->comment('Enseignant responsable de l\'EC');
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('ue_id')->references('id')->on('ues')->onDelete('restrict');
-            $table->foreign('enseignant_id')->references('id')->on('users')->onDelete('restrict');
+            $table->foreign('ue_id')->references('id')->on('ues')->onDelete('cascade');
         });
     }
 

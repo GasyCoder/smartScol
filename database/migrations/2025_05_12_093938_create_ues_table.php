@@ -15,13 +15,15 @@ return new class extends Migration
             $table->id();
             $table->string('abr', 10)->nullable()->comment('Ex: UE1, UE2');
             $table->string('nom', 100)->comment('Ex: Médecine humaine, Physiologie');
+            $table->decimal('credits', 5, 2)->default(0)
+                  ->comment('Nombre de crédits associés à cette UE');
             $table->unsignedBigInteger('niveau_id');
             $table->unsignedBigInteger('parcours_id')->nullable()->comment('Uniquement pour les UE spécifiques à un parcours (PACES)');
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('niveau_id')->references('id')->on('niveaux')->onDelete('restrict');
-            $table->foreign('parcours_id')->references('id')->on('parcours')->onDelete('restrict');
+            $table->foreign('niveau_id')->references('id')->on('niveaux')->onDelete('cascade');
+            $table->foreign('parcours_id')->references('id')->on('parcours')->onDelete('cascade');
         });
     }
 

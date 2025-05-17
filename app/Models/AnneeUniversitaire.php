@@ -12,7 +12,6 @@ class AnneeUniversitaire extends Model
     protected $table = 'annees_universitaires';
 
     protected $fillable = [
-        'uuid',
         'date_start',
         'date_end',
         'is_active'
@@ -23,6 +22,11 @@ class AnneeUniversitaire extends Model
         'date_end' => 'date',
         'is_active' => 'boolean'
     ];
+
+    public function modelesCodage()
+    {
+        return $this->hasMany(SchemaCodage::class, 'annee_universitaire_id');
+    }
 
     /**
      * Relations

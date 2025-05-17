@@ -43,4 +43,3 @@ class Parcour extends Model
         return $this->hasMany(Examen::class);
     }
 }
-

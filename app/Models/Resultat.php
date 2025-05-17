@@ -12,11 +12,12 @@ class Resultat extends Model
     protected $table = 'resultats';
 
     protected $fillable = [
-        'etudiant_id',   // ID de l'étudiant
-        'examen_id',     // ID de l'examen (matière)
-        'copie_id',      // ID de la copie avec la note
-        'manchette_id',  // ID de la manchette avec l'identification
-        'note'           // Note finale (reprise de la copie)
+        'etudiant_id',       // ID de l'étudiant
+        'examen_id',         // ID de l'examen
+        'code_anonymat_id',  // ID du code d'anonymat
+        'note',              // Note finale
+        'genere_par',        // Utilisateur qui a généré le résultat
+        'statut'             // État du résultat (provisoire, validé, publié)
     ];
 
     protected $casts = [
@@ -36,44 +37,33 @@ class Resultat extends Model
         return $this->belongsTo(Examen::class);
     }
 
-    public function copie()
+    public function codeAnonymat()
     {
-        return $this->belongsTo(Copie::class);
+        return $this->belongsTo(CodeAnonymat::class);
     }
 
-    public function manchette()
+    public function utilisateurGeneration()
     {
-        return $this->belongsTo(Manchette::class);
+        return $this->belongsTo(User::class, 'genere_par');
     }
 
     /**
-     * Associe une copie et une manchette pour créer un résultat
+     * Récupère la copie associée à ce résultat via le code d'anonymat
      */
-    public static function fusionnerCopieManchette(Copie $copie, Manchette $manchette)
+    public function copie()
     {
-        // Vérifier que les deux éléments appartiennent au même examen
-        if ($copie->examen_id !== $manchette->examen_id) {
-            return null;
-        }
+        return Copie::where('examen_id', $this->examen_id)
+            ->where('code_anonymat_id', $this->code_anonymat_id)
+            ->first();
+    }
 
-        // Vérifier que les codes d'anonymat correspondent
-        if ($copie->code_anonymat !== $manchette->code_anonymat) {
-            return null;
-        }
-
-        // Trouver l'étudiant associé à la manchette
-        $etudiant = Etudiant::where('matricule', $manchette->matricule_etudiant)->first();
-        if (!$etudiant) {
-            return null;
-        }
-
-        // Créer le résultat
-        return self::create([
-            'etudiant_id' => $etudiant->id,
-            'examen_id' => $copie->examen_id,
-            'copie_id' => $copie->id,
-            'manchette_id' => $manchette->id,
-            'note' => $copie->note
-        ]);
+    /**
+     * Récupère la manchette associée à ce résultat via le code d'anonymat
+     */
+    public function manchette()
+    {
+        return Manchette::where('examen_id', $this->examen_id)
+            ->where('code_anonymat_id', $this->code_anonymat_id)
+            ->first();
     }
 }

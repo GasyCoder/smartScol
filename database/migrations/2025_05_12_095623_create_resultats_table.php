@@ -13,29 +13,27 @@ return new class extends Migration
     {
         Schema::create('resultats', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('etudiant_id')->comment('Étudiant concerné')
-                  ->constrained()
-                  ->onDelete('cascade');
-            $table->foreignId('examen_id')->comment('Examen concerné')
-                  ->constrained()
-                  ->onDelete('cascade');
-            $table->foreignId('copie_id')->comment('Copie associée')
-                  ->constrained()
-                  ->onDelete('cascade');
-            $table->foreignId('manchette_id')->comment('Manchette associée')
-                  ->constrained()
-                  ->onDelete('cascade');
+
+            $table->unsignedBigInteger('etudiant_id')->comment('Étudiant concerné');
+            $table->unsignedBigInteger('examen_id')->comment('Examen concerné');
+            $table->unsignedBigInteger('code_anonymat_id')->comment('Code d\'anonymat utilisé');
             $table->decimal('note', 5, 2)->comment('Note finale');
-            $table->timestamp('date_fusion')->useCurrent();
+            $table->unsignedBigInteger('genere_par')->comment('Utilisateur ayant généré le résultat');
+            $table->timestamp('date_generation')->useCurrent();
+            $table->enum('statut', ['provisoire', 'valide', 'publie'])->default('provisoire');
             $table->timestamps();
 
-            // Un étudiant ne peut avoir qu'un seul résultat par examen
-            $table->unique(['etudiant_id', 'examen_id'], 'unique_resultat_etudiant');
+            // Contraintes étrangères
+            $table->foreign('etudiant_id')->references('id')->on('etudiants')->onDelete('cascade');
+            $table->foreign('examen_id')->references('id')->on('examens')->onDelete('cascade');
+            $table->foreign('code_anonymat_id')->references('id')->on('codes_anonymat')->onDelete('cascade');
+            $table->foreign('genere_par')->references('id')->on('users')->onDelete('cascade');
 
-            // Une copie et une manchette ne peuvent être associées qu'à un seul résultat
-            $table->unique('copie_id', 'unique_resultat_copie');
-            $table->unique('manchette_id', 'unique_resultat_manchette');
+            // Contrainte d'unicité
+            $table->unique(['etudiant_id', 'examen_id'], 'unique_resultat_etudiant');
         });
+
+
     }
 
     /**

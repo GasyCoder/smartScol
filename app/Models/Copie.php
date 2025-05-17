@@ -4,25 +4,26 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Copie extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
-        'examen_id',      // ID de l'examen (définit la matière/EC)
-        'code_anonymat',  // Code complet (ex: TA1, TA2, SA1, SA2)
-        'note',           // La note attribuée à cette copie
-        'saisie_par'      // L'utilisateur qui a saisi la note
+        'examen_id',        // ID de l'examen (définit la matière/EC)
+        'ec_id',
+        'code_anonymat_id', // Référence au code d'anonymat
+        'note',             // La note attribuée à cette copie
+        'saisie_par'        // L'utilisateur qui a saisi la note
     ];
 
     protected $casts = [
         'note' => 'decimal:2',
     ];
 
-    /**
-     * Relations
-     */
+    // Relations
     public function examen()
     {
         return $this->belongsTo(Examen::class);
@@ -35,50 +36,74 @@ class Copie extends Model
 
     public function resultat()
     {
-        return $this->hasOne(Resultat::class);
+        // La relation se fait via examen_id et code_anonymat_id
+        return Resultat::where('examen_id', $this->examen_id)
+            ->where('code_anonymat_id', $this->code_anonymat_id);
     }
 
-    /**
-     * Attributs et méthodes
-     */
+
+    public function codeAnonymat()
+    {
+        return $this->belongsTo(CodeAnonymat::class, 'code_anonymat_id');
+    }
+
+    public function ec()
+    {
+        return $this->belongsTo(EC::class);
+    }
+
+    // Accesseur pour le code d'anonymat complet
+    public function getCodeCompletAttribute()
+    {
+        // L'attribut sur CodeAnonymat est code_complet et non pas code
+        return optional($this->codeAnonymat)->code_complet;
+    }
+
     // Extrait le code salle (les lettres) du code_anonymat
     public function getCodeSalleAttribute()
     {
-        return preg_replace('/[0-9]+/', '', $this->code_anonymat);
+        if (!$this->codeAnonymat) {
+            return null;
+        }
+
+        // Extrait toutes les lettres du code (TA1 => TA)
+        preg_match('/([A-Za-z]+)/', $this->codeAnonymat->code_complet, $matches);
+        return isset($matches[1]) ? $matches[1] : null;
     }
 
     // Extrait le numéro (les chiffres) du code_anonymat
     public function getNumeroAttribute()
     {
-        preg_match('/([0-9]+)/', $this->code_anonymat, $matches);
-        return $matches[0] ?? null;
+        if (!$this->codeAnonymat) {
+            return null;
+        }
+
+        // Extrait tous les chiffres du code (TA1 => 1)
+        preg_match('/(\d+)$/', $this->codeAnonymat->code_complet, $matches);
+        return isset($matches[1]) ? (int)$matches[1] : null;
     }
 
-    // Récupérer la matière (EC) à travers l'examen
-    public function getEcAttribute()
+    public function etudiant()
     {
-        return $this->examen->ec;
+        return optional($this->codeAnonymat)->etudiant;
     }
 
-    // Récupérer la salle correspondant au code
-    public function getSalleAttribute()
-    {
-        $code_salle = $this->getCodeSalleAttribute();
-        return Salle::where('code', $code_salle)->first();
-    }
-
-    // Vérifie si cette copie est déjà associée à un résultat
     public function isAssociated()
     {
-        return $this->resultat()->exists();
+        // Vérifier si un résultat existe avec le même code d'anonymat et examen
+        return Resultat::where('examen_id', $this->examen_id)
+            ->where('code_anonymat_id', $this->code_anonymat_id)
+            ->exists();
     }
+
 
     // Trouve la manchette correspondante avec le même code d'anonymat
     public function findCorrespondingManchette()
     {
-        return Manchette::where('examen_id', $this->examen_id)
-            ->where('code_anonymat', $this->code_anonymat)
-            ->first();
+        if (!$this->code_anonymat_id) {
+            return null;
+        }
+
+        return Manchette::where('code_anonymat_id', $this->code_anonymat_id)->first();
     }
 }
-

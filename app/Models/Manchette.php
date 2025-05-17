@@ -4,21 +4,29 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Manchette extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'manchettes';
 
     protected $fillable = [
-        'examen_id',        // ID de l'examen (définit la matière/EC)
-        'code_anonymat',    // Code complet (ex: TA1, TA2, SA1, SA2)
-        'matricule_etudiant', // Matricule de l'étudiant associé
-        'saisie_par'        // L'utilisateur qui a saisi la manchette
+        'examen_id',
+        'code_anonymat_id',
+        'etudiant_id',
+        'saisie_par',
+        'date_saisie'
     ];
 
-    /**
-     * Relations
-     */
+
+    public function ecs()
+    {
+        return $this->belongsToMany(EC::class, 'examen_ec', 'examen_id', 'ec_id');
+    }
+
+    // Relations
     public function examen()
     {
         return $this->belongsTo(Examen::class);
@@ -29,57 +37,94 @@ class Manchette extends Model
         return $this->belongsTo(User::class, 'saisie_par');
     }
 
+    // Correction de la relation resultat
     public function resultat()
     {
-        return $this->hasOne(Resultat::class);
+        // On utilise examen_id et code_anonymat_id pour la relation
+        return $this->hasOne(Resultat::class, 'code_anonymat_id', 'code_anonymat_id')
+                    ->where('examen_id', $this->examen_id);
+    }
+
+    public function codeAnonymat()
+    {
+        return $this->belongsTo(CodeAnonymat::class, 'code_anonymat_id');
+    }
+
+    public function etudiant()
+    {
+        return $this->belongsTo(Etudiant::class, 'etudiant_id');
     }
 
     /**
      * Attributs et méthodes
      */
+    // Accesseur pour le code d'anonymat complet (renommé pour éviter les conflits)
+    public function getCodeAnonymatCompletAttribute()
+    {
+        return $this->codeAnonymat ? $this->codeAnonymat->code_complet : null;
+    }
+
     // Extrait le code salle (les lettres) du code_anonymat
     public function getCodeSalleAttribute()
     {
-        return preg_replace('/[0-9]+/', '', $this->code_anonymat);
+        $codeObj = $this->codeAnonymat;
+        if ($codeObj && preg_match('/^([A-Za-z]+)/', $codeObj->code_complet, $matches)) {
+            return $matches[1];
+        }
+        return null;
     }
 
     // Extrait le numéro (les chiffres) du code_anonymat
     public function getNumeroAttribute()
     {
-        preg_match('/([0-9]+)/', $this->code_anonymat, $matches);
-        return $matches[0] ?? null;
+        $codeObj = $this->codeAnonymat;
+        if ($codeObj && preg_match('/(\d+)$/', $codeObj->code_complet, $matches)) {
+            return (int) $matches[1];
+        }
+        return null;
     }
 
     // Récupérer la matière (EC) à travers l'examen
     public function getEcAttribute()
     {
-        return $this->examen->ec;
+        return $this->examen ? $this->examen->ec : null;
     }
 
-    // Récupérer l'étudiant associé par son matricule
-    public function getEtudiantAttribute()
+    // Accesseur pour retrouver le matricule de l'étudiant
+    public function getMatriculeEtudiantAttribute()
     {
-        return Etudiant::where('matricule', $this->matricule_etudiant)->first();
+        return $this->etudiant ? $this->etudiant->matricule : null;
     }
 
     // Récupérer la salle correspondant au code
     public function getSalleAttribute()
     {
-        $code_salle = $this->getCodeSalleAttribute();
-        return Salle::where('code', $code_salle)->first();
+        $codeSalle = $this->getCodeSalleAttribute();
+        if ($codeSalle) {
+            return Salle::where('code_base', $codeSalle)->first();
+        }
+        return null;
     }
 
     // Vérifie si cette manchette est déjà associée à un résultat
     public function isAssociated()
     {
-        return $this->resultat()->exists();
+        if (!$this->code_anonymat_id || !$this->examen_id) {
+            return false;
+        }
+        
+        return Resultat::where('examen_id', $this->examen_id)
+                      ->where('code_anonymat_id', $this->code_anonymat_id)
+                      ->exists();
     }
 
     // Trouve la copie correspondante avec le même code d'anonymat
     public function findCorrespondingCopie()
     {
-        return Copie::where('examen_id', $this->examen_id)
-            ->where('code_anonymat', $this->code_anonymat)
-            ->first();
+        if (!$this->code_anonymat_id) {
+            return null;
+        }
+        
+        return Copie::where('code_anonymat_id', $this->code_anonymat_id)->first();
     }
 }

@@ -16,6 +16,14 @@ class DatabaseSeeder extends Seeder
         // Appeler d'abord le seeder des rôles et permissions
         $this->call(RolesAndPermissionsSeeder::class);
 
+        // Créer les structures de base pour les entités académiques
+        $this->call([
+            AnneeUniversitaireSeeder::class,
+            NiveauxSeeder::class,
+            ParcoursSeeder::class,
+            SessionExamSeeder::class, // Sessions d'examens (dépend des années universitaires)
+        ]);
+
         // Créer les utilisateurs de test avec leurs rôles
 
         // Superadmin

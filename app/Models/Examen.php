@@ -14,20 +14,14 @@ class Examen extends Model
     protected $table = 'examens';
 
     protected $fillable = [
-        'code',
-        'ec_id',
         'session_id',
         'niveau_id',
         'parcours_id',
-        'date',
-        'heure_debut',
         'duree',
         'note_eliminatoire'
     ];
 
     protected $casts = [
-        'date' => 'date',
-        'heure_debut' => 'datetime:H:i',
         'duree' => 'integer',
         'note_eliminatoire' => 'decimal:2'
     ];
@@ -35,9 +29,12 @@ class Examen extends Model
     /**
      * Relations
      */
-    public function ec()
+    public function ecs()
     {
-        return $this->belongsTo(EC::class);
+        return $this->belongsToMany(EC::class, 'examen_ec', 'examen_id', 'ec_id')
+                    ->using(ExamenEc::class)
+                    ->withPivot('salle_id', 'date_specifique', 'heure_specifique')
+                    ->withTimestamps();
     }
 
     public function session()
@@ -55,9 +52,9 @@ class Examen extends Model
         return $this->belongsTo(Parcour::class);
     }
 
-    public function placements()
+    public function salles()
     {
-        return $this->hasMany(Placement::class);
+        return $this->hasManyThrough(Salle::class, 'examen_ec', 'examen_id', 'id', 'id', 'salle_id');
     }
 
     public function copies()
@@ -75,16 +72,9 @@ class Examen extends Model
         return $this->hasMany(Resultat::class);
     }
 
-    /**
-     * Génère un code unique pour l'examen
-     */
-    public static function genererCode()
+    public function codesAnonymat()
     {
-        $code = strtoupper(Str::random(8));
-        while (self::where('code', $code)->exists()) {
-            $code = strtoupper(Str::random(8));
-        }
-        return $code;
+        return $this->hasMany(CodeAnonymat::class, 'examen_id');
     }
 
     /**
@@ -107,10 +97,10 @@ class Examen extends Model
      */
     public function areAllNotesSaisies()
     {
-        $placements = $this->placements->where('is_present', true)->count();
+        $total = $this->etudiantsConcernes->count();
         $copies = $this->copies->count();
 
-        return $placements > 0 && $placements === $copies;
+        return $total > 0 && $total === $copies;
     }
 
     /**
@@ -118,18 +108,129 @@ class Examen extends Model
      */
     public function areAllManchettesSaisies()
     {
-        $placements = $this->placements->where('is_present', true)->count();
+        $total = $this->etudiantsConcernes->count();
         $manchettes = $this->manchettes->count();
 
-        return $placements > 0 && $placements === $manchettes;
+        return $total > 0 && $total === $manchettes;
     }
 
     /**
-     * Vérifie si la correspondance copies-manchettes est complète
+     * Vérifie si la correspondance copies-manchettes est complète pour fusion
      */
     public function isCorrespondanceComplete()
     {
-        return $this->areAllNotesSaisies() && $this->areAllManchettesSaisies() &&
-               $this->resultats->count() === $this->placements->where('is_present', true)->count();
+        // Si le nombre de copies et manchettes n'est pas égal, il manque des données
+        $nbCopies = $this->copies->count();
+        $nbManchettes = $this->manchettes->count();
+
+        if ($nbCopies !== $nbManchettes) {
+            return false;
+        }
+
+        // Vérifier que tous les codes d'anonymat dans les copies ont une manchette correspondante
+        $codesCopies = $this->copies->pluck('code_anonymat_id')->toArray();
+        $codesManchettes = $this->manchettes->pluck('code_anonymat_id')->toArray();
+
+        return count(array_diff($codesCopies, $codesManchettes)) === 0;
+    }
+
+    /**
+     * Vérifie si un code d'anonymat existe déjà pour cet examen
+     */
+    public function codeAnonymatExists($code)
+    {
+        return $this->codesAnonymat()->where('code_complet', $code)->exists();
+    }
+
+    /**
+     * Récupère le code d'anonymat d'un étudiant pour cet examen
+     */
+    public function getCodeAnonymatEtudiant($etudiantId)
+    {
+        return CodeAnonymat::where('examen_id', $this->id)
+            ->where('etudiant_id', $etudiantId)
+            ->first();
+    }
+
+    /**
+     * Retourne les EC groupés par UE pour cet examen
+     */
+    public function getEcsGroupedByUEAttribute()
+    {
+        return $this->ecs->groupBy(function($ec) {
+            return $ec->ue_id;
+        })->map(function($ecs, $ue_id) {
+            $ue = UE::find($ue_id);
+            return [
+                'ue' => $ue,
+                'ue_nom' => $ue ? $ue->nom : 'UE inconnue',
+                'ue_abr' => $ue ? $ue->abr : 'UE',
+                'ecs' => $ecs
+            ];
+        });
+    }
+
+    /**
+     * Calcule le statut général des copies et manchettes
+     */
+    public function getStatusGeneralAttribute()
+    {
+        $totalEtudiants = $this->etudiantsConcernes->count();
+        $totalCopies = $this->copies->count();
+        $totalManchettes = $this->manchettes->count();
+
+        return [
+            'total_etudiants' => $totalEtudiants,
+            'copies' => [
+                'total' => $totalCopies,
+                'pourcentage' => $totalEtudiants > 0 ? round(($totalCopies / $totalEtudiants) * 100) : 0,
+                'complete' => $totalEtudiants > 0 && $totalCopies >= $totalEtudiants
+            ],
+            'manchettes' => [
+                'total' => $totalManchettes,
+                'pourcentage' => $totalEtudiants > 0 ? round(($totalManchettes / $totalEtudiants) * 100) : 0,
+                'complete' => $totalEtudiants > 0 && $totalManchettes >= $totalEtudiants
+            ],
+            'fusion_possible' => $this->isCorrespondanceComplete()
+        ];
+    }
+
+    /**
+     * Retourne la première date d'examen disponible dans les ECs (pour compatibilité)
+     */
+    public function getFirstDateAttribute()
+    {
+        $relation = $this->ecs;
+        $firstEC = $relation->first();
+
+        return $firstEC && $firstEC->pivot && $firstEC->pivot->date_specifique
+            ? \Carbon\Carbon::parse($firstEC->pivot->date_specifique)
+            : null;
+    }
+
+    /**
+     * Retourne la première heure de début disponible dans les ECs (pour compatibilité)
+     */
+    public function getFirstHeureDebutAttribute()
+    {
+        $relation = $this->ecs;
+        $firstEC = $relation->first();
+
+        return $firstEC && $firstEC->pivot && $firstEC->pivot->heure_specifique
+            ? \Carbon\Carbon::parse($firstEC->pivot->heure_specifique)
+            : null;
+    }
+
+    /**
+     * Retourne la première salle disponible dans les ECs (pour compatibilité)
+     */
+    public function getFirstSalleAttribute()
+    {
+        $relation = $this->ecs;
+        $firstEC = $relation->first();
+
+        return $firstEC && $firstEC->pivot && $firstEC->pivot->salle_id
+            ? Salle::find($firstEC->pivot->salle_id)
+            : null;
     }
 }

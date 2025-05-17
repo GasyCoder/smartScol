@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class Etudiant extends Model
 {
@@ -20,7 +21,33 @@ class Etudiant extends Model
         'sexe',
         'niveau_id',
         'parcours_id',
+        'is_active',
     ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'date_naissance' => 'date', // Indique à Laravel de traiter ce champ comme une date
+    ];
+
+    // Définit les champs de type date qui seront gérés par Carbon
+    protected $dates = [
+        'date_naissance',
+        'created_at',
+        'updated_at',
+        'deleted_at'
+    ];
+
+    /**
+     * Accesseur/Mutateur pour la date de naissance
+     * Convertit automatiquement le format
+     */
+    protected function dateNaissance(): Attribute
+    {
+        return Attribute::make(
+            get: fn ($value) => $value ? date('d/m/Y', strtotime($value)) : null,
+            set: fn ($value) => $value ? date('Y-m-d', strtotime(str_replace('/', '-', $value))) : null,
+        );
+    }
 
     /**
      * Relations
