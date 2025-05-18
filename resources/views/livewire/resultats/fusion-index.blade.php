@@ -18,65 +18,7 @@
         </div>
 
         <!-- Visualisation du processus -->
-        <div class="mb-6 overflow-hidden bg-white border border-gray-200 shadow-sm dark:bg-gray-800 sm:rounded-lg dark:border-gray-700">
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white">
-                    Processus de gestion des résultats
-                </h3>
-            </div>
-            <div class="p-4">
-                <div class="relative">
-                    <!-- Ligne de progression -->
-                    <div class="absolute top-5 w-full h-0.5 bg-gray-200 dark:bg-gray-700"></div>
-
-                    <!-- Étapes du processus -->
-                    <div class="relative flex justify-between">
-                        <div class="text-center">
-                            <div class="flex items-center justify-center w-10 h-10 mx-auto mb-2 text-white bg-green-500 rounded-full dark:bg-green-600">
-                                <em class="icon ni ni-cards"></em>
-                            </div>
-                            <div class="text-xs font-medium text-green-500 dark:text-green-400">Manchettes</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="flex items-center justify-center w-10 h-10 mx-auto mb-2 text-white bg-green-500 rounded-full dark:bg-green-600">
-                                <em class="icon ni ni-files"></em>
-                            </div>
-                            <div class="text-xs font-medium text-green-500 dark:text-green-400">Copies</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="flex items-center justify-center w-10 h-10 mx-auto mb-2 text-white bg-blue-500 rounded-full dark:bg-blue-600">
-                               <em class="icon ni ni-exchange"></em>
-                            </div>
-                            <div class="text-xs font-medium text-blue-500 dark:text-blue-400">Fusion</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="flex items-center justify-center w-10 h-10 mx-auto mb-2 text-gray-600 bg-gray-300 rounded-full dark:bg-gray-700 dark:text-gray-400">
-                                <em class="icon ni ni-check-circle"></em>
-                            </div>
-                            <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Vérification</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="flex items-center justify-center w-10 h-10 mx-auto mb-2 text-gray-600 bg-gray-300 rounded-full dark:bg-gray-700 dark:text-gray-400">
-                                <em class="icon ni ni-check-thick"></em>
-                            </div>
-                            <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Validation</div>
-                        </div>
-
-                        <div class="text-center">
-                            <div class="flex items-center justify-center w-10 h-10 mx-auto mb-2 text-gray-600 bg-gray-300 rounded-full dark:bg-gray-700 dark:text-gray-400">
-                                <em class="icon ni ni-upload"></em>
-                            </div>
-                            <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Publication</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        @include('livewire.resultats.partials.processus')
         <!-- Messages d'alerte -->
         @if($message)
         <div class="mb-6">
@@ -209,13 +151,15 @@
                         </div>
                     </div>
 
-                    <div class="p-4 border rounded-lg bg-green-50 dark:bg-gray-700 dark:border-gray-600">
+                    <div class="p-4 border rounded-lg bg-yellow-50 dark:bg-gray-700 dark:border-gray-600">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
-                                <em class="text-2xl text-green-500 icon ni ni-puzzle"></em>
+                                <em class="text-2xl text-yellow-500 icon ni ni-puzzle"></em>
                             </div>
                             <div class="ml-4">
-                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">Fusion des données</h4>
+                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">
+                                    Fusion des données (1er étape)
+                                </h4>
                                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                                     Fusionnez les manchettes et les copies pour générer les résultats provisoires.
                                 </p>
@@ -223,9 +167,9 @@
                                     <button
                                         wire:click="confirmerFusion"
                                         wire:loading.attr="disabled"
-                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-yellow-600 border border-transparent rounded-md shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
                                     >
-                                        <em class="mr-2 -ml-1 icon ni ni-cards-shuffle"></em>
+                                        <em class="mr-2 -ml-1 icon ni ni-shuffle"></em>
                                         Fusionner les données
                                     </button>
                                 </div>
@@ -268,149 +212,28 @@
                         </div>
                     </div>
 
-                    <div class="p-4 border rounded-lg bg-amber-50 dark:bg-gray-700 dark:border-gray-600">
+                    <div class="p-4 border rounded-lg bg-green-50 dark:bg-gray-700 dark:border-gray-600">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
-                                <em class="text-2xl icon ni ni-bar-chart text-amber-500"></em>
+                                <em class="text-2xl text-green-500 icon ni ni-trophy"></em>
                             </div>
                             <div class="ml-4">
-                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">Statistiques</h4>
+                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">Publier les résultats finale</h4>
                                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                                    Consultez les statistiques des résultats générés pour l'analyse et la prise de décision.
+                                    Publiez les résultats finaux pour les rendre accessibles aux étudiants.
                                 </p>
                                 <div class="mt-3">
                                     <button
                                         wire:click="calculerStatistiques"
                                         wire:loading.attr="disabled"
-                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
-                                    >
-                                        <em class="mr-2 -ml-1 icon ni ni-bar-chart"></em>
-                                        Voir les statistiques
+                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                        <em class="mr-2 -ml-1 icon ni ni-trophy"></em>
+                                        Voir les résultats
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-        @endif
-
-        <!-- Affichage des résultats de la fusion si disponible -->
-        @if($resultatFusion)
-        <div class="mb-6 overflow-hidden bg-white border border-gray-200 shadow-sm dark:bg-gray-800 sm:rounded-lg dark:border-gray-700">
-            <div class="p-4 border-b border-green-100 bg-green-50 dark:bg-green-900 dark:border-green-800">
-                <h3 class="text-base font-medium text-green-800 dark:text-green-100">Résultats de la fusion</h3>
-                <p class="mt-1 text-sm text-green-600 dark:text-green-300">
-                    La fusion des données a été effectuée. Veuillez vérifier les résultats ci-dessous.
-                </p>
-            </div>
-
-            <div class="p-4 sm:p-6">
-                <!-- Statistiques en cards -->
-                <div class="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
-                    <div class="p-4 bg-blue-100 rounded-lg dark:bg-blue-800">
-                        <div class="flex items-center">
-                            <div class="flex-shrink-0">
-                                <em class="text-xl text-blue-600 icon ni ni-cards dark:text-blue-300"></em>
-                            </div>
-                            <div class="ml-3">
-                                <h4 class="text-sm font-medium text-blue-800 dark:text-blue-100">Manchettes</h4>
-                                <p class="text-lg font-semibold text-blue-900 dark:text-white">
-                                    {{ $resultatFusion['statistiques']['total_manchettes'] }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="p-4 bg-green-100 rounded-lg dark:bg-green-800">
-                        <div class="flex items-center">
-                            <div class="flex-shrink-0">
-                                <em class="text-xl text-green-600 icon ni ni-files dark:text-green-300"></em>
-                            </div>
-                            <div class="ml-3">
-                                <h4 class="text-sm font-medium text-green-800 dark:text-green-100">Copies</h4>
-                                <p class="text-lg font-semibold text-green-900 dark:text-white">
-                                    {{ $resultatFusion['statistiques']['total_copies'] }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="p-4 bg-purple-100 rounded-lg dark:bg-purple-800">
-                        <div class="flex items-center">
-                            <div class="flex-shrink-0">
-                                <em class="text-xl text-purple-600 icon ni ni-list-check dark:text-purple-300"></em>
-                            </div>
-                            <div class="ml-3">
-                                <h4 class="text-sm font-medium text-purple-800 dark:text-purple-100">Résultats générés</h4>
-                                <p class="text-lg font-semibold text-purple-900 dark:text-white">
-                                    {{ $resultatFusion['statistiques']['resultats_generes'] }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="p-4 rounded-lg {{ count($resultatFusion['erreurs']) > 0 ? 'bg-red-100 dark:bg-red-800' : 'bg-green-100 dark:bg-green-800' }}">
-                        <div class="flex items-center">
-                            <div class="flex-shrink-0">
-                                <em class="icon ni {{ count($resultatFusion['erreurs']) > 0 ? 'ni-alert-circle text-red-600 dark:text-red-300' : 'ni-check-circle text-green-600 dark:text-green-300' }} text-xl"></em>
-                            </div>
-                            <div class="ml-3">
-                                <h4 class="text-sm font-medium {{ count($resultatFusion['erreurs']) > 0 ? 'text-red-800 dark:text-red-100' : 'text-green-800 dark:text-green-100' }}">Erreurs</h4>
-                                <p class="text-lg font-semibold {{ count($resultatFusion['erreurs']) > 0 ? 'text-red-900 dark:text-white' : 'text-green-900 dark:text-white' }}">
-                                    {{ count($resultatFusion['erreurs']) }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Liste des erreurs si présentes -->
-                @if(count($resultatFusion['erreurs']) > 0)
-                <div class="mt-6">
-                    <div class="flex items-center mb-3">
-                        <em class="text-xl text-red-500 icon ni ni-alert-circle"></em>
-                        <h4 class="ml-2 text-lg font-medium text-red-700 dark:text-red-400">Erreurs détectées</h4>
-                    </div>
-                    <div class="mt-2 overflow-y-auto border border-red-200 rounded-lg max-h-80 dark:border-red-700">
-                        <ul class="divide-y divide-red-200 dark:divide-red-700">
-                            @foreach($resultatFusion['erreurs'] as $erreur)
-                            <li class="p-3 bg-red-50 dark:bg-red-900/30">
-                                <div class="flex items-start">
-                                    <em class="icon ni ni-alert-circle mt-0.5 text-red-500"></em>
-                                    <div class="ml-3">
-                                        <p class="text-sm text-red-800 dark:text-red-200">{{ $erreur['message'] }}</p>
-                                        <span class="text-xs text-red-600 dark:text-red-400">
-                                            Type: {{ $erreur['type'] }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </li>
-                            @endforeach
-                        </ul>
-                    </div>
-                    <div class="mt-4">
-                        <button
-                            wire:click="afficherResolutionErreurs"
-                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                        >
-                            <em class="mr-2 icon ni ni-setting"></em>
-                            Résoudre les erreurs
-                        </button>
-                    </div>
-                </div>
-                @endif
-
-                <!-- Actions après fusion -->
-                <div class="flex justify-end mt-6 space-x-3">
-                    <button
-                        wire:click="imprimer"
-                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                        <em class="mr-2 icon ni ni-printer"></em>
-                        Imprimer pour vérification
-                    </button>
                 </div>
             </div>
         </div>

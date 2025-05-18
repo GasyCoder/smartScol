@@ -19,18 +19,13 @@ class Resultat extends Model
         'note',
         'genere_par',
         'modifie_par',
-        'date_generation',
-        'date_modification',
         'statut',
-        'observation_jury',
         'decision',
         'deliberation_id'
     ];
 
     protected $casts = [
         'note' => 'decimal:2',
-        'date_generation' => 'datetime',
-        'date_modification' => 'datetime'
     ];
 
     /**
@@ -128,5 +123,10 @@ class Resultat extends Model
     public function scopeRattrapage($query)
     {
         return $query->where('decision', 'rattrapage');
+    }
+
+    public function scopeExclus($query)
+    {
+        return $query->where('decision', 'exclus');
     }
 }

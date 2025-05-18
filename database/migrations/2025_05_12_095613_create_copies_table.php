@@ -19,6 +19,9 @@ return new class extends Migration
             $table->decimal('note', 5, 2)->comment('Note obtenue');
             $table->unsignedBigInteger('saisie_par')->comment('Utilisateur ayant saisi la note');
             $table->timestamp('date_saisie')->useCurrent();
+            $table->decimal('note_corriged', 5, 2)->nullable()->comment('Note corrigée');
+            $table->boolean('is_checked')->default(false);
+            $table->string('commentaire')->nullable()->comment('Commentaire sur la note');
             $table->timestamps();
             $table->softDeletes();
 

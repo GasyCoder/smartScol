@@ -16,11 +16,9 @@ use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
 use App\Livewire\Resultats\FusionIndex;
-use App\Livewire\Resultats\ResultatsIndex;
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Manchette\ManchettesIndex;
-use App\Livewire\Resultats\RapportCoherence;
-use App\Livewire\Resultats\DeliberationIndex;
+use App\Livewire\Resultats\ResultatsFinale;
 use App\Livewire\Manchette\ManchettesCorbeille;
 use App\Livewire\Resultats\ResultatsProvisoires;
 
@@ -67,10 +65,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/corbeille', ManchettesCorbeille::class)->name('corbeille');
     });
 
-    Route::get('/resultats', ResultatsIndex::class)->name('resultats.index');
-    Route::get('/resultats/fusion', FusionIndex::class)->name('resultats.fusion');
-    Route::get('/resultats/provisoires', ResultatsProvisoires::class)->name('resultats.provisoires');
-    Route::get('/resultats/deliberation', DeliberationIndex::class)->name('resultats.deliberation');
+    // Resultats
+    Route::prefix('resultats')->name('resultats.')->group(function () {
+        Route::get('/', ResultatsFinale::class)->name('finale');
+        Route::get('/fusion', FusionIndex::class)->name('fusion');
+        Route::get('/provisoires', ResultatsProvisoires::class)->name('provisoires');
+    });
 
     // Routes de gestion du profil
     Route::controller(ProfileController::class)->group(function () {

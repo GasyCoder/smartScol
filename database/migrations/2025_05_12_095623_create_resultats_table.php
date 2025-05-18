@@ -22,12 +22,9 @@ class CreateResultatsTable extends Migration
             $table->unsignedBigInteger('ec_id');
             $table->decimal('note', 5, 2)->comment('Note finale');
             $table->unsignedBigInteger('genere_par')->comment('Utilisateur ayant généré le résultat');
-            $table->timestamp('date_generation')->useCurrent();
             $table->unsignedBigInteger('modifie_par')->nullable();
-            $table->timestamp('date_modification')->nullable();
             $table->enum('statut', ['provisoire', 'valide', 'publie'])->default('provisoire');
-            $table->text('observation_jury')->nullable()->comment('Observation du jury');
-            $table->enum('decision', ['admis', 'ajourne', 'rattrapage'])->nullable();
+            $table->enum('decision', ['admis', 'ajourne', 'rattrapage', 'exclus'])->nullable();
             $table->unsignedBigInteger('deliberation_id')->nullable();
             $table->timestamps();
 

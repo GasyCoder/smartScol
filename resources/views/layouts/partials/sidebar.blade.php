@@ -132,7 +132,7 @@
                             <span
                                 class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
                                 <em
-                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-file-text"></em>
+                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-notes-alt"></em>
                             </span>
                             <span
                                 class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
@@ -147,7 +147,7 @@
                             <span
                                 class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
                                 <em
-                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-bookmark"></em>
+                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-notice"></em>
                             </span>
                             <span
                                 class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
@@ -156,34 +156,37 @@
                         </a>
                     </li>
 
-                    {{-- sidebar --}}
-                     <li class="nk-menu-item py-0.5{{ request()->routeIs('resultats.fusion.*') ? ' active' : '' }} group/item">
-                        <a href="{{ route('resultats.fusion') }}"
-                            class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
-                            <span
-                                class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-exchange"></em>
-                            </span>
-                            <span
-                                class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                            FUSSION
-                            </span>
-                        </a>
-                    </li>
-
-                    <li class="nk-menu-item py-0.5{{ request()->routeIs('resultats.deliberation.*') ? ' active' : '' }} group/item">
-                        <a href="{{ route('resultats.deliberation') }}"
-                            class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
+                     <li class="nk-menu-item py-0.5 has-sub group/item {{ is_route('resultats.index.*') ? ' active' : '' }}">
+                        <a href="#" class="nk-menu-link sub nk-menu-toggle flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
                             <span class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-list-check"></em>
+                                <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-award"></em>
                             </span>
                             <span class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                DÉLIBÉRATION
+                                RESULTATS
                             </span>
+                            <em class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-base leading-none text-slate-400 group-[.active]/item:text-primary-500 absolute end-5 top-1/2 -translate-y-1/2 rtl:-scale-x-100 group-[.active]/item:rotate-90 group-[.active]/item:rtl:-rotate-90 transition-all duration-300 icon ni ni-chevron-right"></em>
                         </a>
+                        <ul class="nk-menu-sub mb-1 hidden group-[&.is-compact:not(.has-hover)]/sidebar:!hidden"  {{ is_route('resultats.index.*') ? 'style=display:block' : '' }}>
+                            <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.fusion') ? ' active' : '' }}">
+                                <a href="{{ route('resultats.fusion') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
+                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
+                                         <em class="text-lg leading-none text-current transition-all duration-300 icon ni ni-shuffle"></em>
+                                        Fussion
+                                    </span>
+                                </a>
+                            </li>
+                            <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.finale') ? ' active' : '' }}">
+                                <a href="{{ route('resultats.finale') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
+                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
+                                        <em class="text-lg leading-none text-current transition-all duration-300 icon ni ni-list-check"></em>
+                                        Résultats finaux
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
                     </li>
-
                 </ul>
+
             </div>
         </div>
     </div>

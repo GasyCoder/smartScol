@@ -4,10 +4,10 @@ namespace App\Livewire\Resultats;
 
 use Livewire\Component;
 
-class ResultatsIndex extends Component
+class ResultatsFinale extends Component
 {
     public function render()
     {
-        return view('livewire.resultats.resultats-index');
+        return view('livewire.resultats.resultats-finale');
     }
 }
