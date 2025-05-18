@@ -37,6 +37,7 @@ class Examen extends Model
                     ->withTimestamps();
     }
 
+
     public function session()
     {
         return $this->belongsTo(SessionExam::class, 'session_id');
@@ -116,41 +117,67 @@ class Examen extends Model
 
     /**
      * Vérifie si la correspondance copies-manchettes est complète pour fusion
+     * Mise à jour pour vérifier par EC
      */
     public function isCorrespondanceComplete()
     {
-        // Si le nombre de copies et manchettes n'est pas égal, il manque des données
-        $nbCopies = $this->copies->count();
-        $nbManchettes = $this->manchettes->count();
+        // Récupérer toutes les ECs pour cet examen
+        $ecs = $this->ecs;
 
-        if ($nbCopies !== $nbManchettes) {
-            return false;
+        foreach ($ecs as $ec) {
+            // Compter les codes d'anonymat pour cette EC
+            $codes = CodeAnonymat::where('examen_id', $this->id)
+                ->where('ec_id', $ec->id)
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($codes)) {
+                continue; // Passer si aucun code pour cette EC
+            }
+
+            // Vérifier que chaque code a une copie et une manchette
+            $copiesCount = Copie::whereIn('code_anonymat_id', $codes)->count();
+            $manchettesCount = Manchette::whereIn('code_anonymat_id', $codes)->count();
+
+            // Si les nombres ne correspondent pas, la fusion n'est pas possible
+            if ($copiesCount != count($codes) || $manchettesCount != count($codes)) {
+                return false;
+            }
         }
 
-        // Vérifier que tous les codes d'anonymat dans les copies ont une manchette correspondante
-        $codesCopies = $this->copies->pluck('code_anonymat_id')->toArray();
-        $codesManchettes = $this->manchettes->pluck('code_anonymat_id')->toArray();
-
-        return count(array_diff($codesCopies, $codesManchettes)) === 0;
+        return true;
     }
 
     /**
-     * Vérifie si un code d'anonymat existe déjà pour cet examen
+     * Vérifie si un code d'anonymat existe déjà pour cet examen et cette matière
+     * Mise à jour pour prendre en compte l'EC
      */
-    public function codeAnonymatExists($code)
+    public function codeAnonymatExists($code, $ec_id)
     {
-        return $this->codesAnonymat()->where('code_complet', $code)->exists();
+        return $this->codesAnonymat()
+            ->where('code_complet', $code)
+            ->where('ec_id', $ec_id)
+            ->exists();
     }
 
+
+
     /**
-     * Récupère le code d'anonymat d'un étudiant pour cet examen
+     * Récupère le code d'anonymat d'un étudiant pour une matière spécifique de cet examen
      */
-    public function getCodeAnonymatEtudiant($etudiantId)
+    public function getCodeAnonymatEtudiant($etudiant_id, $ec_id)
     {
-        return CodeAnonymat::where('examen_id', $this->id)
-            ->where('etudiant_id', $etudiantId)
+        // Trouver la manchette qui lie l'étudiant à un code pour cette matière
+        $manchette = Manchette::where('examen_id', $this->id)
+            ->where('etudiant_id', $etudiant_id)
+            ->whereHas('codeAnonymat', function($q) use ($ec_id) {
+                $q->where('ec_id', $ec_id);
+            })
             ->first();
+
+        return $manchette ? $manchette->codeAnonymat : null;
     }
+
 
     /**
      * Retourne les EC groupés par UE pour cet examen
@@ -170,30 +197,86 @@ class Examen extends Model
         });
     }
 
+
     /**
-     * Calcule le statut général des copies et manchettes
+     * Récupère les codes d'anonymat groupés par EC
+     */
+    public function getCodesGroupedByECAttribute()
+    {
+        return $this->codesAnonymat()
+            ->with(['ec', 'copie', 'manchette'])
+            ->get()
+            ->groupBy('ec_id')
+            ->map(function($codes, $ec_id) {
+                $ec = EC::find($ec_id);
+                return [
+                    'ec' => $ec,
+                    'ec_nom' => $ec ? $ec->nom : 'EC inconnue',
+                    'codes' => $codes,
+                    'total' => $codes->count(),
+                    'avec_copies' => $codes->filter(function($code) {
+                        return $code->copie !== null;
+                    })->count(),
+                    'avec_manchettes' => $codes->filter(function($code) {
+                        return $code->manchette !== null;
+                    })->count()
+                ];
+            });
+    }
+
+    /**
+     * Calcule le statut général des copies et manchettes, amélioré pour tenir compte des ECs
      */
     public function getStatusGeneralAttribute()
     {
         $totalEtudiants = $this->etudiantsConcernes->count();
+        $totalECs = $this->ecs->count();
+
+        // Total théorique: nombre d'étudiants × nombre de matières
+        $totalTheorique = $totalEtudiants * $totalECs;
+
+        // Nombre réel de codes d'anonymat, copies et manchettes
+        $totalCodes = $this->codesAnonymat()->count();
         $totalCopies = $this->copies->count();
         $totalManchettes = $this->manchettes->count();
 
+        // Statut par matière
+        $statutParEC = [];
+        foreach ($this->ecs as $ec) {
+            $codesEC = $this->codesAnonymat()->where('ec_id', $ec->id)->pluck('id')->toArray();
+
+            $copiesEC = Copie::whereIn('code_anonymat_id', $codesEC)->count();
+            $manchettesEC = Manchette::whereIn('code_anonymat_id', $codesEC)->count();
+
+            $statutParEC[$ec->id] = [
+                'ec_nom' => $ec->nom,
+                'codes' => count($codesEC),
+                'copies' => $copiesEC,
+                'manchettes' => $manchettesEC,
+                'complet' => (count($codesEC) == $copiesEC && $copiesEC == $manchettesEC && $copiesEC > 0)
+            ];
+        }
+
         return [
             'total_etudiants' => $totalEtudiants,
+            'total_ecs' => $totalECs,
+            'total_theorique' => $totalTheorique,
             'copies' => [
                 'total' => $totalCopies,
-                'pourcentage' => $totalEtudiants > 0 ? round(($totalCopies / $totalEtudiants) * 100) : 0,
-                'complete' => $totalEtudiants > 0 && $totalCopies >= $totalEtudiants
+                'pourcentage' => $totalTheorique > 0 ? round(($totalCopies / $totalTheorique) * 100) : 0,
             ],
             'manchettes' => [
                 'total' => $totalManchettes,
-                'pourcentage' => $totalEtudiants > 0 ? round(($totalManchettes / $totalEtudiants) * 100) : 0,
-                'complete' => $totalEtudiants > 0 && $totalManchettes >= $totalEtudiants
+                'pourcentage' => $totalTheorique > 0 ? round(($totalManchettes / $totalTheorique) * 100) : 0,
             ],
+            'par_ec' => $statutParEC,
             'fusion_possible' => $this->isCorrespondanceComplete()
         ];
     }
+
+
+
+
 
     /**
      * Retourne la première date d'examen disponible dans les ECs (pour compatibilité)

@@ -15,9 +15,14 @@ use App\Livewire\Student\AddEtudiant;
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
+use App\Livewire\Resultats\FusionIndex;
+use App\Livewire\Resultats\ResultatsIndex;
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Manchette\ManchettesIndex;
+use App\Livewire\Resultats\RapportCoherence;
+use App\Livewire\Resultats\DeliberationIndex;
 use App\Livewire\Manchette\ManchettesCorbeille;
+use App\Livewire\Resultats\ResultatsProvisoires;
 
 
 Route::redirect('/', '/login');
@@ -53,15 +58,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Copies
     Route::prefix('copies')->name('copies.')->group(function () {
         Route::get('/', CopiesIndex::class)->name('index');
-        Route::get('/copies/corbeille', CopiesCorbeille::class)->name('corbeille');
+        Route::get('/corbeille', CopiesCorbeille::class)->name('corbeille');
     });
 
     // Manchettes
     Route::prefix('manchettes')->name('manchettes.')->group(function () {
         Route::get('/', ManchettesIndex::class)->name('index');
-        Route::get('/manchette/corbeille', ManchettesCorbeille::class)->name('corbeille');
+        Route::get('/corbeille', ManchettesCorbeille::class)->name('corbeille');
     });
 
+    Route::get('/resultats', ResultatsIndex::class)->name('resultats.index');
+    Route::get('/resultats/fusion', FusionIndex::class)->name('resultats.fusion');
+    Route::get('/resultats/provisoires', ResultatsProvisoires::class)->name('resultats.provisoires');
+    Route::get('/resultats/deliberation', DeliberationIndex::class)->name('resultats.deliberation');
 
     // Routes de gestion du profil
     Route::controller(ProfileController::class)->group(function () {

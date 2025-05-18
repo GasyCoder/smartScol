@@ -14,7 +14,7 @@ class CodeAnonymat extends Model
 
     protected $fillable = [
         'examen_id',
-        'etudiant_id',
+        'ec_id',
         'code_complet',
         'sequence'
     ];
@@ -25,9 +25,9 @@ class CodeAnonymat extends Model
         return $this->belongsTo(Examen::class);
     }
 
-    public function etudiant()
+    public function ec()
     {
-        return $this->belongsTo(Etudiant::class);
+        return $this->belongsTo(EC::class, 'ec_id');
     }
 
     public function copie()
@@ -39,6 +39,12 @@ class CodeAnonymat extends Model
     {
         return $this->hasOne(Manchette::class, 'code_anonymat_id');
     }
+
+    public function getEtudiantAttribute()
+    {
+        return $this->manchette ? $this->manchette->etudiant : null;
+    }
+
 
     /**
      * Extracte la séquence numérique du code complet (ex: 'TA1' => 1)

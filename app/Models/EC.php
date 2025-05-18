@@ -50,6 +50,14 @@ class EC extends Model
     }
 
     /**
+     * Relation avec la table pivot examen_ec
+     */
+    public function examenEc()
+    {
+        return $this->hasMany(ExamenEc::class, 'ec_id');
+    }
+
+    /**
      * Obtient le parcours à travers l'UE (si applicable)
      */
     public function getParcoursAttribute()

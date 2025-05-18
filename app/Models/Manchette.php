@@ -20,12 +20,6 @@ class Manchette extends Model
         'date_saisie'
     ];
 
-
-    public function ecs()
-    {
-        return $this->belongsToMany(EC::class, 'examen_ec', 'examen_id', 'ec_id');
-    }
-
     // Relations
     public function examen()
     {
@@ -37,7 +31,6 @@ class Manchette extends Model
         return $this->belongsTo(User::class, 'saisie_par');
     }
 
-    // Correction de la relation resultat
     public function resultat()
     {
         // On utilise examen_id et code_anonymat_id pour la relation
@@ -55,16 +48,12 @@ class Manchette extends Model
         return $this->belongsTo(Etudiant::class, 'etudiant_id');
     }
 
-    /**
-     * Attributs et méthodes
-     */
-    // Accesseur pour le code d'anonymat complet (renommé pour éviter les conflits)
+    // Attributs et méthodes
     public function getCodeAnonymatCompletAttribute()
     {
         return $this->codeAnonymat ? $this->codeAnonymat->code_complet : null;
     }
 
-    // Extrait le code salle (les lettres) du code_anonymat
     public function getCodeSalleAttribute()
     {
         $codeObj = $this->codeAnonymat;
@@ -74,7 +63,6 @@ class Manchette extends Model
         return null;
     }
 
-    // Extrait le numéro (les chiffres) du code_anonymat
     public function getNumeroAttribute()
     {
         $codeObj = $this->codeAnonymat;
@@ -84,19 +72,17 @@ class Manchette extends Model
         return null;
     }
 
-    // Récupérer la matière (EC) à travers l'examen
+    // Mise à jour pour obtenir l'EC via le code d'anonymat
     public function getEcAttribute()
     {
-        return $this->examen ? $this->examen->ec : null;
+        return $this->codeAnonymat ? $this->codeAnonymat->ec : null;
     }
 
-    // Accesseur pour retrouver le matricule de l'étudiant
     public function getMatriculeEtudiantAttribute()
     {
         return $this->etudiant ? $this->etudiant->matricule : null;
     }
 
-    // Récupérer la salle correspondant au code
     public function getSalleAttribute()
     {
         $codeSalle = $this->getCodeSalleAttribute();
@@ -112,19 +98,21 @@ class Manchette extends Model
         if (!$this->code_anonymat_id || !$this->examen_id) {
             return false;
         }
-        
+
         return Resultat::where('examen_id', $this->examen_id)
                       ->where('code_anonymat_id', $this->code_anonymat_id)
                       ->exists();
     }
 
-    // Trouve la copie correspondante avec le même code d'anonymat
+    // Mise à jour pour trouver la copie correspondante (tenant compte de l'EC)
     public function findCorrespondingCopie()
     {
         if (!$this->code_anonymat_id) {
             return null;
         }
-        
-        return Copie::where('code_anonymat_id', $this->code_anonymat_id)->first();
+
+        return Copie::where('code_anonymat_id', $this->code_anonymat_id)
+                   ->where('ec_id', $this->getEcAttribute()->id ?? null)
+                   ->first();
     }
 }

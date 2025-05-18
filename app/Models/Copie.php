@@ -12,11 +12,11 @@ class Copie extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'examen_id',        // ID de l'examen (définit la matière/EC)
+        'examen_id',
         'ec_id',
-        'code_anonymat_id', // Référence au code d'anonymat
-        'note',             // La note attribuée à cette copie
-        'saisie_par'        // L'utilisateur qui a saisi la note
+        'code_anonymat_id',
+        'note',
+        'saisie_par'
     ];
 
     protected $casts = [
@@ -41,7 +41,6 @@ class Copie extends Model
             ->where('code_anonymat_id', $this->code_anonymat_id);
     }
 
-
     public function codeAnonymat()
     {
         return $this->belongsTo(CodeAnonymat::class, 'code_anonymat_id');
@@ -55,7 +54,6 @@ class Copie extends Model
     // Accesseur pour le code d'anonymat complet
     public function getCodeCompletAttribute()
     {
-        // L'attribut sur CodeAnonymat est code_complet et non pas code
         return optional($this->codeAnonymat)->code_complet;
     }
 
@@ -66,7 +64,6 @@ class Copie extends Model
             return null;
         }
 
-        // Extrait toutes les lettres du code (TA1 => TA)
         preg_match('/([A-Za-z]+)/', $this->codeAnonymat->code_complet, $matches);
         return isset($matches[1]) ? $matches[1] : null;
     }
@@ -78,14 +75,18 @@ class Copie extends Model
             return null;
         }
 
-        // Extrait tous les chiffres du code (TA1 => 1)
         preg_match('/(\d+)$/', $this->codeAnonymat->code_complet, $matches);
         return isset($matches[1]) ? (int)$matches[1] : null;
     }
 
-    public function etudiant()
+    // Accesseur pour retrouver l'étudiant via la manchette
+    public function getEtudiantAttribute()
     {
-        return optional($this->codeAnonymat)->etudiant;
+        // Trouver la manchette correspondante
+        $manchette = $this->findCorrespondingManchette();
+
+        // Retourner l'étudiant si la manchette existe
+        return $manchette ? $manchette->etudiant : null;
     }
 
     public function isAssociated()
@@ -96,14 +97,17 @@ class Copie extends Model
             ->exists();
     }
 
-
-    // Trouve la manchette correspondante avec le même code d'anonymat
+    // Mise à jour pour trouver la manchette correspondante (tenant compte de l'EC)
     public function findCorrespondingManchette()
     {
         if (!$this->code_anonymat_id) {
             return null;
         }
 
-        return Manchette::where('code_anonymat_id', $this->code_anonymat_id)->first();
+        return Manchette::where('code_anonymat_id', $this->code_anonymat_id)
+                       ->whereHas('codeAnonymat', function($q) {
+                           $q->where('ec_id', $this->ec_id);
+                       })
+                       ->first();
     }
 }

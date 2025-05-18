@@ -46,11 +46,101 @@ class SessionExam extends Model
     }
 
     /**
+     * Récupère les résultats associés à cette session
+     */
+    public function resultats()
+    {
+        return Resultat::whereHas('examen', function($query) {
+            $query->where('session_id', $this->id);
+        });
+    }
+
+    /**
+     * Vérifie si c'est une session de première session (normale)
+     */
+    public function isPremiereSession()
+    {
+        return $this->type === 'Normale';
+    }
+
+    /**
+     * Vérifie si c'est une session de rattrapage
+     */
+    public function isRattrapage()
+    {
+        return $this->type === 'Rattrapage';
+    }
+
+    /**
+     * Vérifie si cette session nécessite une délibération
+     * Dans votre cas, uniquement la 2ème session (rattrapage) requiert délibération
+     */
+    public function needsDeliberation()
+    {
+        return $this->isRattrapage();
+    }
+
+    /**
+     * Créé une délibération pour cette session si nécessaire
+     */
+    public function creerDeliberationSiNecessaire($niveau_id, $president_jury_id)
+    {
+        if (!$this->needsDeliberation()) {
+            return null;
+        }
+
+        // Vérifier si une délibération existe déjà
+        $existante = Deliberation::where('session_id', $this->id)
+            ->where('niveau_id', $niveau_id)
+            ->where('annee_universitaire_id', $this->annee_universitaire_id)
+            ->first();
+
+        if ($existante) {
+            return $existante;
+        }
+
+        // Créer une nouvelle délibération
+        return Deliberation::create([
+            'niveau_id' => $niveau_id,
+            'session_id' => $this->id,
+            'annee_universitaire_id' => $this->annee_universitaire_id,
+            'date_deliberation' => now(),
+            'president_jury' => $president_jury_id
+        ]);
+    }
+
+    /**
+     * Publie directement les résultats pour les sessions normales (sans délibération)
+     */
+    public function publierResultatsDirectement()
+    {
+        if (!$this->isPremiereSession()) {
+            return [
+                'success' => false,
+                'message' => 'Cette méthode ne peut être utilisée que pour la première session'
+            ];
+        }
+
+        $count = $this->resultats()
+            ->where('statut', 'valide')
+            ->update([
+                'statut' => 'publie',
+                'date_modification' => now()
+            ]);
+
+        return [
+            'success' => true,
+            'count' => $count,
+            'message' => "$count résultats publiés directement"
+        ];
+    }
+
+    /**
      * Scope pour les sessions de type "normale"
      */
     public function scopeNormale($query)
     {
-        return $query->where('type', 'normale');
+        return $query->where('type', 'Normale');
     }
 
     /**
@@ -58,15 +148,7 @@ class SessionExam extends Model
      */
     public function scopeRattrapage($query)
     {
-        return $query->where('type', 'rattrapage');
-    }
-
-    /**
-     * Scope pour les sessions de type "concours"
-     */
-    public function scopeConcours($query)
-    {
-        return $query->where('type', 'concours');
+        return $query->where('type', 'Rattrapage');
     }
 
     /**
@@ -78,5 +160,13 @@ class SessionExam extends Model
                     ->whereHas('anneeUniversitaire', function($q) {
                         $q->where('is_active', true);
                     });
+    }
+
+    /**
+     * Scope pour la session courante
+     */
+    public function scopeCurrent($query)
+    {
+        return $query->where('is_current', true);
     }
 }

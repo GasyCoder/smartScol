@@ -24,8 +24,6 @@ namespace App\Models{
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Deliberation> $deliberations
  * @property-read int|null $deliberations_count
  * @property-read mixed $libelle
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\SchemaCodage> $modelesCodage
- * @property-read int|null $modeles_codage_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\SessionExam> $sessionExams
  * @property-read int|null $session_exams_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire newModelQuery()
@@ -47,15 +45,19 @@ namespace App\Models{
  *
  * @property int $id
  * @property int $examen_id Examen concerné
- * @property int|null $etudiant_id Référence à l'étudiant
+ * @property int|null $ec_id
  * @property string $code_complet Code complet d'anonymat (Ex: TA1, SA2)
  * @property int|null $sequence Numéro séquentiel (Ex: 1 dans TA1)
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property-read \App\Models\Copie|null $copie
- * @property-read \App\Models\Etudiant|null $etudiant
+ * @property-read \App\Models\EC|null $ec
  * @property-read \App\Models\Examen $examen
+ * @property-read mixed $code_salle
+ * @property-read mixed $etudiant
+ * @property-read mixed $numero
+ * @property-read mixed $salle
  * @property-read \App\Models\Manchette|null $manchette
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat newQuery()
@@ -64,7 +66,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereCodeComplet($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereDeletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereEtudiantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereEcId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereSequence($value)
@@ -94,8 +96,8 @@ namespace App\Models{
  * @property-read \App\Models\Examen $examen
  * @property-read mixed $code_complet
  * @property-read mixed $code_salle
+ * @property-read mixed $etudiant
  * @property-read mixed $numero
- * @property-read \App\Models\Resultat|null $resultat
  * @property-read \App\Models\User $utilisateurSaisie
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie newQuery()
@@ -165,6 +167,8 @@ namespace App\Models{
  * @property-read int|null $decisions_count
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\User $presidentJury
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Resultat> $resultats
+ * @property-read int|null $resultats_count
  * @property-read \App\Models\SessionExam $session
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation newQuery()
@@ -195,6 +199,8 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ExamenEc> $examenEc
+ * @property-read int|null $examen_ec_count
  * @property-read \App\Models\ExamenEc|null $pivot
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Examen> $examens
  * @property-read int|null $examens_count
@@ -287,6 +293,7 @@ namespace App\Models{
  * @property-read \App\Models\ExamenEc|null $pivot
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\EC> $ecs
  * @property-read int|null $ecs_count
+ * @property-read mixed $codes_grouped_by_e_c
  * @property-read mixed $ecs_grouped_by_u_e
  * @property-read mixed $etudiants_concernes
  * @property-read mixed $first_date
@@ -363,7 +370,7 @@ namespace App\Models{
  * @property-read \App\Models\CodeAnonymat $codeAnonymat
  * @property-read \App\Models\Etudiant $etudiant
  * @property-read \App\Models\Examen $examen
- * @property-read mixed $code_anonymat
+ * @property-read mixed $code_anonymat_complet
  * @property-read mixed $code_salle
  * @property-read mixed $ec
  * @property-read mixed $matricule_etudiant
@@ -506,22 +513,37 @@ namespace App\Models{
  * @property int $etudiant_id Étudiant concerné
  * @property int $examen_id Examen concerné
  * @property int $code_anonymat_id Code d'anonymat utilisé
+ * @property int $ec_id
  * @property numeric $note Note finale
  * @property int $genere_par Utilisateur ayant généré le résultat
- * @property string $date_generation
+ * @property \Illuminate\Support\Carbon $date_generation
  * @property string $statut
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Copie|null $copie
+ * @property-read \App\Models\CodeAnonymat $codeAnonymat
+ * @property-read \App\Models\Deliberation|null $deliberation
+ * @property-read \App\Models\EC $ec
  * @property-read \App\Models\Etudiant $etudiant
  * @property-read \App\Models\Examen $examen
- * @property-read \App\Models\Manchette|null $manchette
+ * @property-read mixed $est_modifie
+ * @property-read mixed $est_reussie
+ * @property-read \App\Models\User $utilisateurGeneration
+ * @property-read \App\Models\User|null $utilisateurModification
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat admis()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat ajourne()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat echoue()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat provisoire()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat publie()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat rattrapage()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat reussi()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat valide()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereDateGeneration($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereEcId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereEtudiantId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereGenerePar($value)
@@ -544,8 +566,6 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read mixed $capacite_disponible
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\SchemaCodage> $schemasCodage
- * @property-read int|null $schemas_codage_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Salle newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Salle newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Salle query()
@@ -557,49 +577,6 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Salle whereUpdatedAt($value)
  */
 	class Salle extends \Eloquent {}
-}
-
-namespace App\Models{
-/**
- * 
- *
- * @property int $id
- * @property string $nom Ex: Codage 6e année 2024-2025
- * @property int $niveau_id Niveau concerné
- * @property int $annee_universitaire_id Année universitaire
- * @property int $salle_id
- * @property \Illuminate\Support\Carbon $jour_examen
- * @property string $epreuve Nom de l'épreuve
- * @property string $code_prefix Préfixe du code (Ex: TA, SA)
- * @property string|null $description
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property \Illuminate\Support\Carbon|null $deleted_at
- * @property-read \App\Models\AnneeUniversitaire $anneeUniversitaire
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\CodeAnonymat> $codesAnonymat
- * @property-read int|null $codes_anonymat_count
- * @property-read \App\Models\Niveau $niveau
- * @property-read \App\Models\Salle $salle
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage onlyTrashed()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereAnneeUniversitaireId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereCodePrefix($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereDeletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereDescription($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereEpreuve($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereJourExamen($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereNiveauId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereNom($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereSalleId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage withTrashed()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SchemaCodage withoutTrashed()
- */
-	class SchemaCodage extends \Eloquent {}
 }
 
 namespace App\Models{
@@ -621,7 +598,7 @@ namespace App\Models{
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Examen> $examens
  * @property-read int|null $examens_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam activeInActiveYear()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam concours()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam current()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam normale()

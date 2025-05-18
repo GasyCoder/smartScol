@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('codes_anonymat', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('examen_id')->comment('Examen concerné');
-            $table->unsignedBigInteger('etudiant_id')->nullable()->comment('Référence à l\'étudiant');
+            $table->unsignedBigInteger('ec_id')->nullable();
             $table->string('code_complet', 20)->comment('Code complet d\'anonymat (Ex: TA1, SA2)');
             $table->integer('sequence')->nullable()->comment('Numéro séquentiel (Ex: 1 dans TA1)');
             $table->timestamps();
@@ -19,11 +19,10 @@ return new class extends Migration
 
             // Contraintes
             $table->foreign('examen_id')->references('id')->on('examens')->onDelete('cascade');
-            $table->foreign('etudiant_id')->references('id')->on('etudiants')->onDelete('cascade');
+            $table->foreign('ec_id')->references('id')->on('ecs');
 
             // Unicité
-            $table->unique(['examen_id', 'etudiant_id']);
-            $table->unique(['examen_id', 'code_complet']);
+            $table->unique(['examen_id', 'ec_id', 'code_complet']);
         });
     }
 

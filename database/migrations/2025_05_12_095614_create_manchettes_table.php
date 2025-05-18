@@ -21,9 +21,14 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
+            // Garder cette contrainte: un code_anonymat ne peut être utilisé que dans une seule manchette
             $table->unique(['examen_id', 'code_anonymat_id']);
-            $table->unique(['examen_id', 'etudiant_id']);
 
+            // SUPPRIMÉ: $table->unique(['examen_id', 'etudiant_id']);
+            // Cette contrainte empêche un étudiant d'avoir plusieurs manchettes pour différentes matières
+            // d'un même examen, ce qui ne correspond pas à la nouvelle logique
+
+            // Contraintes de clé étrangère (inchangées)
             $table->foreign('examen_id')->references('id')->on('examens');
             $table->foreign('code_anonymat_id')->references('id')->on('codes_anonymat')->onDelete('cascade');
             $table->foreign('etudiant_id')->references('id')->on('etudiants')->onDelete('cascade');
