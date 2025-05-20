@@ -2,7 +2,9 @@ import { config, today, yesterday, currentMonth } from "./function";
 import Message, { info_break } from "./app/messages";
 import Calendar from "./app/calendar";
 
-document.addEventListener('DOMContentLoaded', 
+
+
+document.addEventListener('DOMContentLoaded',
     function(){
         Message.autohide();
         Message.profile_toggle();

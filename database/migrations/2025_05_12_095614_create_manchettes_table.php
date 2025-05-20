@@ -23,7 +23,7 @@ return new class extends Migration
 
             // Garder cette contrainte: un code_anonymat ne peut être utilisé que dans une seule manchette
             $table->unique(['examen_id', 'code_anonymat_id']);
-
+            $table->index(['examen_id', 'code_anonymat_id'], 'manchettes_examen_code_idx');
             // SUPPRIMÉ: $table->unique(['examen_id', 'etudiant_id']);
             // Cette contrainte empêche un étudiant d'avoir plusieurs manchettes pour différentes matières
             // d'un même examen, ce qui ne correspond pas à la nouvelle logique

@@ -32,11 +32,11 @@ class CopiesIndex extends Component
     public $salle_id;
     public $ec_id;
     public $examen_id;
-    public $noteFilter = 'all'; // Pour filtrer par notes (réussies/échouées)
-    public $sortField = 'created_at'; // Pour le tri des colonnes
-    public $sortDirection = 'desc'; // Direction du tri (asc/desc)
-    public $perPage = 25; // Pour la pagination (déjà utilisé mais non déclaré)
-    public $totalEtudiantsPerEc = []; // Pour statistiques par matière
+    public $noteFilter = 'all';
+    public $sortField = 'created_at';
+    public $sortDirection = 'asc';
+    public $perPage = 25;
+    public $totalEtudiantsPerEc = [];
 
 
     // Liste des données pour les sélecteurs
@@ -308,6 +308,7 @@ class CopiesIndex extends Component
         }
     }
 
+
     public function updatedParcoursId()
     {
         // Réinitialiser les dépendances
@@ -340,7 +341,6 @@ class CopiesIndex extends Component
                 ->where('parcours_id', $this->parcours_id)
                 ->count();
 
-
             // S'il n'y a qu'une seule salle, la sélectionner automatiquement
             if ($this->salles->count() == 1) {
                 $this->salle_id = $this->salles->first()->id;
@@ -351,6 +351,8 @@ class CopiesIndex extends Component
         $this->storeFiltres();
         $this->resetPage();
     }
+
+
 
     public function updatedSalleId()
     {
@@ -558,80 +560,98 @@ class CopiesIndex extends Component
         $this->resetPage();
     }
 
+
     public function openCopieModal()
     {
-    // Vérifier que le contexte est complet
-    if (!$this->examen_id || !$this->ec_id || !$this->salle_id) {
-        $this->message = 'Veuillez sélectionner une salle et une matière';
-        $this->messageType = 'error';
-        toastr()->error($this->message);
-        return;
-    }
-
-    // Vérifier qu'une matière spécifique est sélectionnée (pas "all")
-    if (!$this->ec_id || $this->ec_id === 'all') {
-        $this->message = 'Veuillez sélectionner une matière spécifique pour ajouter une note';
-        $this->messageType = 'error';
-        toastr()->error($this->message);
-        return;
-    }
-
-    // Vérifier le nombre de copies déjà saisies
-    $copiesCount = Copie::where('examen_id', $this->examen_id)
-        ->where('ec_id', $this->ec_id)
-        ->count();
-
-    // Compter le nombre d'étudiants pour ce niveau et parcours
-    $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
-        ->where('parcours_id', $this->parcours_id)
-        ->count();
-        // Charger la liste des étudiants sans copie pour cette matière
-    $this->etudiantsSansNote = $this->etudiantsSansCopies;
-    // Empêcher la saisie si le maximum est atteint
-    if ($copiesCount >= $etudiantsCount) {
-        $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} copies pour {$etudiantsCount} étudiants.";
-        $this->messageType = 'error';
-        toastr()->error($this->message);
-        return;
-    }
-
-    // S'assurer que le code de salle est défini
-    if (empty($this->selectedSalleCode)) {
-        $salle = Salle::find($this->salle_id);
-        if ($salle) {
-            $this->selectedSalleCode = $salle->code_base;
-            $this->currentSalleName = $salle->nom;
+        // Vérifier que le contexte est complet
+        if (!$this->examen_id || !$this->ec_id || !$this->salle_id) {
+            $this->message = 'Veuillez sélectionner une salle et une matière';
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
         }
-    }
 
-    // Définir le code de base
-    $baseCode = $this->selectedSalleCode;
+        // Vérifier qu'une matière spécifique est sélectionnée (pas "all")
+        if (!$this->ec_id || $this->ec_id === 'all') {
+            $this->message = 'Veuillez sélectionner une matière spécifique pour ajouter une note';
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
 
-    // Commencer toujours à 1 et chercher le prochain code disponible
-    $nextNumber = 1;
-    $proposedCode = $baseCode . $nextNumber;
+        // Vérifier le nombre de copies déjà saisies
+        $copiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->whereNull('deleted_at')
+            ->count();
 
-    // Vérifier uniquement les codes déjà utilisés dans les COPIES (pas les manchettes)
-    // pour cette matière spécifique
-    while (Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
-        ->where('copies.examen_id', $this->examen_id)
-        ->where('copies.ec_id', $this->ec_id)
-        ->where('codes_anonymat.code_complet', $proposedCode)
-        ->whereNull('copies.deleted_at')
-        ->exists()) {
-        $nextNumber++;
+        // Compter le nombre d'étudiants pour ce niveau et parcours
+        $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
+            ->where('parcours_id', $this->parcours_id)
+            ->count();
+
+        // Vérifier que le nombre total d'étudiants est défini
+        if ($etudiantsCount === 0) {
+            $this->message = 'Aucun étudiant trouvé pour ce niveau et parcours. Veuillez vérifier vos filtres.';
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
+        // Empêcher la saisie si le maximum est atteint
+        if ($copiesCount >= $etudiantsCount) {
+            $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} copies pour {$etudiantsCount} étudiants.";
+            $this->messageType = 'warning';
+            toastr()->warning($this->message);
+            return;
+        }
+
+        // Charger la liste des étudiants sans copie pour cette matière
+        $this->etudiantsSansNote = $this->etudiantsSansCopies;
+
+        // S'assurer que le code de salle est défini
+        if (empty($this->selectedSalleCode)) {
+            $salle = Salle::find($this->salle_id);
+            if ($salle) {
+                $this->selectedSalleCode = $salle->code_base;
+                $this->currentSalleName = $salle->nom;
+            }
+        }
+
+        // Définir le code de base
+        $baseCode = $this->selectedSalleCode;
+
+        // Commencer toujours à 1 et chercher le prochain code disponible
+        $nextNumber = 1;
         $proposedCode = $baseCode . $nextNumber;
+
+        // Vérifier uniquement les codes déjà utilisés dans les COPIES (pas les manchettes)
+        // pour cette matière spécifique
+        while (Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('copies.examen_id', $this->examen_id)
+            ->where('copies.ec_id', $this->ec_id)
+            ->where('codes_anonymat.code_complet', $proposedCode)
+            ->whereNull('copies.deleted_at')
+            ->exists()) {
+            $nextNumber++;
+            $proposedCode = $baseCode . $nextNumber;
+        }
+
+        // Préinitialiser le code d'anonymat avec le code unique
+        $this->code_anonymat = $proposedCode;
+        $this->note = '';
+        $this->editingCopieId = null;
+
+        // Afficher une alerte informative sur le nombre de notes restantes
+        $remainingNotes = $etudiantsCount - $copiesCount;
+        $this->message = "Vous avez saisi {$copiesCount} notes sur {$etudiantsCount} étudiants. Il reste {$remainingNotes} notes à saisir pour cette matière.";
+        $this->messageType = 'info';
+        toastr()->info($this->message);
+
+        // Ouvrir la modale
+        $this->showCopieModal = true;
     }
 
-    // Préinitialiser le code d'anonymat avec le code unique
-    $this->code_anonymat = $proposedCode;
-    $this->note = '';
-    $this->editingCopieId = null;
-
-    // Ouvrir la modale
-    $this->showCopieModal = true;
-
-    }
 
     public function saveCopie()
     {
@@ -655,11 +675,31 @@ class CopiesIndex extends Component
                 throw new \Exception("La matière sélectionnée n'est pas associée à cet examen et cette salle.");
             }
 
+            // Vérifier le nombre de copies déjà saisies pour cette matière
+            $copiesCount = Copie::where('examen_id', $this->examen_id)
+                ->where('ec_id', $this->ec_id)
+                ->whereNull('deleted_at')
+                ->count();
+
+            // Compter le nombre d'étudiants pour ce niveau et parcours
+            $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->count();
+
+            // Vérifier la limite avant de sauvegarder
+            if ($copiesCount >= $etudiantsCount) {
+                $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} notes pour {$etudiantsCount} étudiants dans cette matière.";
+                $this->messageType = 'warning';
+                toastr()->warning($this->message);
+                $this->showCopieModal = false;
+                return;
+            }
+
             // Rechercher ou créer le code d'anonymat avec l'EC
             $codeAnonymat = CodeAnonymat::firstOrCreate(
                 [
                     'examen_id' => $this->examen_id,
-                    'ec_id' => $this->ec_id,  // IMPORTANT: Inclure l'EC_ID pour garantir l'unicité par matière
+                    'ec_id' => $this->ec_id,
                     'code_complet' => $this->code_anonymat,
                 ],
                 [
@@ -737,30 +777,67 @@ class CopiesIndex extends Component
                 ->where('saisie_par', Auth::id())
                 ->count();
 
-            // NOUVELLE PARTIE: Maintenir la modale ouverte si on est en mode création
+            // Maintenir la modale ouverte si on est en mode création
             if (!isset($this->editingCopieId)) {
                 // Réinitialiser seulement la note
                 $this->note = '';
 
-                // Incrémenter automatiquement le code d'anonymat pour la prochaine saisie
-                if (preg_match('/^([A-Za-z]+)(\d+)$/', $this->code_anonymat, $matches)) {
-                    $prefix = $matches[1];
-                    $number = (int)$matches[2] + 1;
+                // Définir le code de base à partir de la salle
+                $baseCode = $this->selectedSalleCode;
 
-                    // Vérifier si ce code existe déjà pour cette matière
-                    $newCode = $prefix . $number;
+                // Trouver tous les codes existants pour cet examen et EC dans les copies
+                $existingCodes = Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+                    ->where('copies.examen_id', $this->examen_id)
+                    ->where('copies.ec_id', $this->ec_id)
+                    ->where('codes_anonymat.code_complet', 'like', $baseCode . '%')
+                    ->whereNull('copies.deleted_at')
+                    ->pluck('codes_anonymat.code_complet')
+                    ->toArray();
 
-                    // Continuer d'incrémenter si le code existe déjà pour cette matière
-                    while (CodeAnonymat::where('examen_id', $this->examen_id)
-                        ->where('ec_id', $this->ec_id)
-                        ->where('code_complet', $newCode)
-                        ->exists()) {
-                        $number++;
-                        $newCode = $prefix . $number;
+                // Extraire les numéros des codes existants
+                $numbers = [];
+                foreach ($existingCodes as $code) {
+                    if (preg_match('/^([A-Za-z]+)(\d+)$/', $code, $matches)) {
+                        $numbers[] = (int)$matches[2];
                     }
-
-                    $this->code_anonymat = $newCode;
                 }
+
+                // Trouver le dernier numéro utilisé
+                $lastNumber = !empty($numbers) ? max($numbers) : 0;
+
+                // Déterminer le prochain numéro en commençant par lastNumber + 1
+                $prefix = $baseCode;
+                $nextNumber = $lastNumber + 1;
+
+                // Proposer le prochain code
+                $proposedCode = $prefix . $nextNumber;
+
+                // Vérifier si ce code existe déjà dans codes_anonymat mais n'est pas utilisé dans copies
+                // On ne veut incrémenter que si le code est réellement utilisé dans copies
+                while (CodeAnonymat::where('examen_id', $this->examen_id)
+                    ->where('ec_id', $this->ec_id)
+                    ->where('code_complet', $proposedCode)
+                    ->exists()) {
+                    // Vérifier si ce code est utilisé dans une copie active
+                    $codeUsedInCopie = Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+                        ->where('copies.examen_id', $this->examen_id)
+                        ->where('copies.ec_id', $this->ec_id)
+                        ->where('codes_anonymat.code_complet', $proposedCode)
+                        ->whereNull('copies.deleted_at')
+                        ->exists();
+
+                    if ($codeUsedInCopie) {
+                        // Si le code est utilisé dans une copie active, incrémenter
+                        $nextNumber++;
+                        $proposedCode = $prefix . $nextNumber;
+                    } else {
+                        // Si le code existe dans codes_anonymat mais n'est pas utilisé dans copies, on peut l'utiliser
+                        break;
+                    }
+                }
+
+                // Mettre à jour le code d'anonymat pour la prochaine saisie
+                $this->code_anonymat = $proposedCode;
 
                 // Garder la modale ouverte et mettre le focus sur le champ note
                 $this->showCopieModal = true;
@@ -777,12 +854,11 @@ class CopiesIndex extends Component
             toastr()->success($this->message);
 
         } catch (\Exception $e) {
-            $this->message = 'Erreur: '.$e->getMessage();
+            $this->message = 'Erreur: ' . $e->getMessage();
             $this->messageType = 'error';
             toastr()->error($this->message);
         }
     }
-
     public function editCopie($id)
     {
         $copie = Copie::with('codeAnonymat')->find($id);

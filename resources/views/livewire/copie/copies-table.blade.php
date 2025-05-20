@@ -1,7 +1,7 @@
 <!-- Tableau des copies - Design amélioré -->
 <div class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
 
-    @include('livewire.copie.table-header')
+    @include('livewire.copie.partials.table-header')
 
     <!-- Corps du tableau amélioré -->
     <div class="overflow-x-auto">
@@ -209,16 +209,10 @@
     @if(method_exists($copies, 'hasPages') && $copies->hasPages())
     <div class="px-4 py-3 bg-white border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700">
         <div class="flex flex-col items-center justify-between gap-3 sm:flex-row">
-            <div class="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                <span>Affichage de {{ $copies->firstItem() ?? 0 }} à {{ $copies->lastItem() ?? 0 }} sur {{ $copies->total() }} résultats</span>
-            </div>
-
             <div class="inline-flex items-center">
                 {{ $copies->links() }}
             </div>
-
             <div class="flex items-center">
-                <span class="mr-2 text-sm text-gray-600 dark:text-gray-400">Résultats par page:</span>
                 <select wire:model.live="perPage" class="py-1 pl-2 pr-8 text-sm border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                     <option value="10">10</option>
                     <option value="25">25</option>

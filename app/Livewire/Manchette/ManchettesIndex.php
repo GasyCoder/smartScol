@@ -83,6 +83,14 @@ class ManchettesIndex extends Component
         'etudiant_id' => 'required|exists:etudiants,id',
     ];
 
+    public function resetEtudiantSelection()
+    {
+        $this->etudiant_id = null;
+        $this->matricule = '';
+        $this->searchQuery = '';
+        $this->searchResults = [];
+    }
+
     // Méthode pour le tri des colonnes
     public function sortBy($field)
     {
@@ -122,37 +130,88 @@ class ManchettesIndex extends Component
         toastr()->info('Fonctionnalité d\'impression en cours de développement');
     }
 
-    // Pour ouvrir la modale par étudiant
+
+    /**
+     * Ouvre le modal de manchette avec les informations d'un étudiant préchargées
+     * @param int $etudiantId ID de l'étudiant sélectionné
+     */
     public function openManchetteModalForEtudiant($etudiantId)
     {
-        // Implémentation similaire à celle pour les copies
+        // Vérification des prérequis (examen, salle et EC sélectionnés)
+        if (!$this->examen_id || !$this->salle_id || !$this->ec_id || $this->ec_id === 'all') {
+            toastr()->error('Veuillez d\'abord sélectionner une matière spécifique');
+            return;
+        }
+
+        // Récupération de l'étudiant
         $etudiant = Etudiant::find($etudiantId);
         if (!$etudiant) {
             toastr()->error('Étudiant introuvable');
             return;
         }
 
-        $this->openManchetteModal();
+        // Vérification que l'étudiant n'a pas déjà une manchette pour cette matière
+        $hasExistingManchette = Manchette::whereHas('codeAnonymat', function($query) {
+                $query->where('ec_id', $this->ec_id);
+            })
+            ->where('examen_id', $this->examen_id)
+            ->where('etudiant_id', $etudiantId)
+            ->exists();
 
-        if ($this->showManchetteModal) {
-            // Logique spécifique selon votre contexte
-            toastr()->info('Saisie pour l\'étudiant : ' . $etudiant->nom . ' ' . $etudiant->prenom);
-        }
-    }
-
-    // Pour saisir toutes les manchettes manquantes
-    public function openManchetteModalForAll()
-    {
-        if (count($this->etudiantsSansManchette) === 0) {
-            toastr()->info('Tous les étudiants ont déjà une manchette pour cette matière');
+        if ($hasExistingManchette) {
+            toastr()->error('Cet étudiant a déjà une manchette pour cette matière');
             return;
         }
 
-        $this->openManchetteModal();
-
-        if ($this->showManchetteModal) {
-            toastr()->info('Prêt à saisir les ' . count($this->etudiantsSansManchette) . ' manchettes manquantes');
+        // S'assurer que le code de salle est défini
+        if (empty($this->selectedSalleCode)) {
+            $salle = Salle::find($this->salle_id);
+            if ($salle) {
+                $this->selectedSalleCode = $salle->code_base;
+                $this->currentSalleName = $salle->nom;
+            }
         }
+
+        // Génération du prochain code d'anonymat disponible
+        $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('code_complet', 'like', $this->selectedSalleCode . '%')
+            ->pluck('id')
+            ->toArray();
+
+        $manchettesCount = empty($codesIds) ? 0 : Manchette::whereIn('code_anonymat_id', $codesIds)->count();
+        $nextNumber = $manchettesCount + 1;
+        $proposedCode = $this->selectedSalleCode . $nextNumber;
+
+        // Vérifier si ce code est déjà utilisé et incrémenter si nécessaire
+        while (CodeAnonymat::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('code_complet', $proposedCode)
+            ->exists()) {
+            $nextNumber++;
+            $proposedCode = $this->selectedSalleCode . $nextNumber;
+        }
+
+        // Précharger les informations dans le formulaire
+        $this->code_anonymat = $proposedCode;
+        $this->etudiant_id = $etudiant->id;
+        $this->matricule = $etudiant->matricule;
+
+        // Effacer les champs de recherche
+        $this->searchQuery = '';
+        $this->searchResults = [];
+
+        // Réinitialiser toute édition en cours
+        $this->editingManchetteId = null;
+
+        // Ouvrir le modal
+        $this->showManchetteModal = true;
+
+        // Notification pour feedback utilisateur
+        toastr()->info('Prêt à enregistrer une manchette pour ' . $etudiant->nom . ' ' . $etudiant->prenom);
+
+        // Émettre un événement pour focus automatique sur le bouton d'enregistrement
+        $this->dispatch('manchette-etudiant-selected');
     }
 
     // Pour stocker les filtres en session
@@ -259,6 +318,10 @@ class ManchettesIndex extends Component
         $this->parcours = collect();
         $this->salles = collect();
         $this->ecs = collect();
+
+        // Définir l'ordre de tri par défaut (ajout)
+        $this->sortField = 'created_at';
+        $this->sortDirection = 'asc';
 
         // Charger les filtres enregistrés
         $this->loadFiltres();
@@ -1066,7 +1129,7 @@ class ManchettesIndex extends Component
                 }
             } else {
                 // Tri par défaut
-                $query->orderBy('created_at', 'desc');
+               $query->orderBy('created_at', 'asc');
             }
 
             // Pagination avec nombre personnalisable d'éléments par page

@@ -26,7 +26,8 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->unique(['examen_id', 'code_anonymat_id']);
-
+            $table->index(['examen_id', 'code_anonymat_id'], 'copies_examen_code_idx');
+            $table->index('ec_id', 'copies_ec_idx');
             $table->foreign('examen_id')->references('id')->on('examens');
             $table->foreign('ec_id')->references('id')->on('ecs');
             $table->foreign('code_anonymat_id')->references('id')->on('codes_anonymat')->onDelete('cascade');

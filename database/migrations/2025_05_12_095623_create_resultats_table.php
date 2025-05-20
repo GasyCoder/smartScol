@@ -21,11 +21,18 @@ class CreateResultatsTable extends Migration
             $table->unsignedBigInteger('code_anonymat_id')->comment('Code d\'anonymat utilisé');
             $table->unsignedBigInteger('ec_id');
             $table->decimal('note', 5, 2)->comment('Note finale');
+            $table->decimal('moyenne_ue', 5, 2)->nullable();
+            $table->decimal('moyenne_generale', 5, 2)->nullable();
             $table->unsignedBigInteger('genere_par')->comment('Utilisateur ayant généré le résultat');
             $table->unsignedBigInteger('modifie_par')->nullable();
-            $table->enum('statut', ['provisoire', 'valide', 'publie'])->default('provisoire');
+            $table->enum('statut', ['provisoire', 'valide', 'publie', 'annule'])->default('provisoire');
+            $table->json('status_history')->nullable();
             $table->enum('decision', ['admis', 'ajourne', 'rattrapage', 'exclus'])->nullable();
+            $table->timestamp('date_validation')->nullable();
+            $table->timestamp('date_publication')->nullable();
+            $table->string('hash_verification', 64)->nullable();
             $table->unsignedBigInteger('deliberation_id')->nullable();
+            $table->uuid('operation_id')->nullable();
             $table->timestamps();
 
             // Contraintes étrangères
@@ -39,6 +46,8 @@ class CreateResultatsTable extends Migration
 
             // Contrainte d'unicité
             $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_etudiant');
+            // Index pour accélérer les recherches par statut et examen
+            $table->index(['examen_id', 'statut']);
         });
     }
 

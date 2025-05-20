@@ -5,21 +5,8 @@
         <div class="flex items-center justify-between">
             <!-- Titre principal -->
             <h2 class="text-xl font-medium text-slate-700 dark:text-white">Saisie des Notes de Copies</h2>
-
             <!-- Actions globales -->
             <div class="flex items-center space-x-2">
-                @if($examen_id && $ec_id)
-                <button
-                    wire:click="openCopieModal"
-                    class="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded bg-primary-600 text-white hover:bg-primary-700 focus:outline-none dark:bg-primary-700 dark:hover:bg-primary-800">
-                   <em class="mr-1 text-sm icon ni ni-plus-circle"></em>
-                    Ajouter une note
-                </button>
-                @endif
-                <a href="{{ route('copies.index') }}" wire:navigate class="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded border border-cyan-300 bg-cyan text-cyan-700 hover:bg-cyan-50 focus:outline-none dark:bg-cyan-800 dark:border-cyan-700 dark:text-cyan-200 dark:hover:bg-cyan-700">
-                    <em class="mr-1 text-sm icon ni ni-reload-alt"></em>
-                    Actualiser
-                </a>
                 <a href="{{ route('copies.corbeille') }}" class="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700">
                    <em class="mr-1 text-sm icon ni ni-trash-alt"></em>
                     Corbeille
@@ -38,7 +25,7 @@
     @endif
 
     <!-- Barre de filtres et contexte actuel -->
-    @include('livewire.copie.copies-filtre')
+    @include('livewire.copie.partials.copies-filtre')
     <!-- Tableau des copies -->
     @include('livewire.copie.copies-table')
 
@@ -59,7 +46,7 @@
     @endif
 
     <!-- Modal de saisie de note -->
-    @include('livewire.copie.copies-modal')
+    @include('livewire.copie.partials.copies-modal')
 
 
     <!-- Modal de confirmation de suppression -->
@@ -89,11 +76,28 @@
 
     @push('scripts')
     <script>
-        document.addEventListener('livewire:load', function () {
-            window.livewire.on('focus-note-field', function () {
+        document.addEventListener('livewire:init', function() {
+            // Focus automatique sur le champ note
+            Livewire.on('focus-note-field', function() {
                 setTimeout(function() {
-                    document.getElementById('note').focus();
+                    const noteField = document.getElementById('note');
+                    if (noteField) {
+                        noteField.focus();
+                        noteField.select(); // Sélectionne tout le texte
+                    }
                 }, 100);
+            });
+
+            // Soumettre le formulaire avec la touche Entrée
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && document.getElementById('note') === document.activeElement) {
+                    e.preventDefault();
+                    // Trouver le bouton de soumission et le cliquer
+                    const submitButton = document.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.click();
+                    }
+                }
             });
         });
     </script>

@@ -105,6 +105,11 @@ class RolesAndPermissionsSeeder extends Seeder
                 'description' => 'Permet de consulter les résultats des examens'
             ],
             [
+                'name' => 'resultats.verifier',
+                'label' => 'Verifier les résultats',
+                'description' => 'Permet de verifier les résultats des examens'
+            ],
+            [
                 'name' => 'resultats.create',
                 'label' => 'Générer les résultats',
                 'description' => 'Permet de fusionner les copies et manchettes pour générer les résultats'
@@ -120,9 +125,34 @@ class RolesAndPermissionsSeeder extends Seeder
                 'description' => 'Permet de supprimer des résultats du système'
             ],
             [
+                'name' => 'resultats.validation',
+                'label' => 'Valider les résultats',
+                'description' => 'Permet de valider les résultats avant publication'
+            ],
+            [
+                'name' => 'resultats.publication',
+                'label' => 'Publier les résultats',
+                'description' => 'Permet de publier les résultats validés'
+            ],
+            [
+                'name' => 'resultats.impression',
+                'label' => 'Imprimer les résultats',
+                'description' => 'Permet d\'imprimer les résultats générés'
+            ],
+            [
                 'name' => 'resultats.export',
                 'label' => 'Exporter les résultats',
                 'description' => 'Permet d\'exporter les résultats au format PDF, Excel, etc.'
+            ],
+            [
+                'name' => 'resultats.fusion',
+                'label' => 'Fussioner les résultats',
+                'description' => 'Permet de fussioner les résultats manchette et notes'
+            ],
+            [
+                'name' => 'resultats.reset-fusion',
+                'label' => 'Réinitialiser la fusion',
+                'description' => 'Permet de réinitialiser les résultats provisoires et validés d\'un examen'
             ],
 
             // Permissions pour l'administration
@@ -144,8 +174,15 @@ class RolesAndPermissionsSeeder extends Seeder
         ];
 
         foreach ($permissions as $permission) {
-            Permission::create($permission);
+            Permission::updateOrCreate(
+                ['name' => $permission['name']],
+                [
+                    'label' => $permission['label'],
+                    'description' => $permission['description']
+                ]
+            );
         }
+
     }
 
     /**
@@ -154,31 +191,34 @@ class RolesAndPermissionsSeeder extends Seeder
     private function createRoles()
     {
         // Créer le rôle superadmin
-        $superadmin = Role::create(['name' => 'superadmin']);
-        $superadmin->givePermissionTo(Permission::all());
+        $superadmin = Role::firstOrCreate(['name' => 'superadmin']);
+        $superadmin->syncPermissions(Permission::all());
 
         // Créer le rôle enseignant
-        $enseignant = Role::create(['name' => 'enseignant']);
-        $enseignant->givePermissionTo([
+        $enseignant = Role::firstOrCreate(['name' => 'enseignant']);
+        $enseignant->syncPermissions([
             'examens.view',
-            'copies.view',
-            'copies.create',
-            'copies.edit',
-            'resultats.view'
+            'resultats.verifier',
+            'resultats.fusion',
+            'resultats.view',
+            'resultats.reset-fusion',
+            'resultats.validation',   // Ajoutée
+            'resultats.publication'   // Ajoutée
         ]);
 
         // Créer le rôle secrétaire
-        $secretaire = Role::create(['name' => 'secretaire']);
-        $secretaire->givePermissionTo([
+        $secretaire = Role::firstOrCreate(['name' => 'secretaire']);
+        $secretaire->syncPermissions([
             'examens.view',
             'examens.create',
             'examens.edit',
             'manchettes.view',
             'manchettes.create',
             'manchettes.edit',
+            'copies.view',
+            'copies.create',
+            'copies.edit',
             'resultats.view',
-            'resultats.create',
-            'resultats.export'
         ]);
     }
 }

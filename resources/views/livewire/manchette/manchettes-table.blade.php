@@ -1,6 +1,6 @@
 <!-- Tableau des manchettes - Design amélioré -->
 <div class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
-    @include('livewire.manchette.table-header-ma')
+    @include('livewire.manchette.partials.table-header-ma')
     <!-- Corps du tableau amélioré -->
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -183,14 +183,6 @@
             <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Étudiants sans manchette ({{ count($etudiantsSansManchette) }})
             </h4>
-            @can('manchettes.create')
-            <button wire:click="openManchetteModalForAll" class="inline-flex items-center px-2 py-1 text-xs font-medium text-white transition-colors rounded-md bg-primary-600 hover:bg-primary-700 focus:outline-none dark:bg-primary-700 dark:hover:bg-primary-800">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-                </svg>
-                Saisir toutes les manchettes manquantes
-            </button>
-            @endcan
         </div>
 
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -204,9 +196,7 @@
                 <button
                     wire:click="openManchetteModalForEtudiant({{ $etudiant->id }})"
                     class="p-1 transition-colors rounded-md text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/30">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-                    </svg>
+                    <em class="mr-1 icon ni ni-plus-circle"></em>
                 </button>
                 @endcan
             </div>
