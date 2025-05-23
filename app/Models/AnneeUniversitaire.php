@@ -23,10 +23,7 @@ class AnneeUniversitaire extends Model
         'is_active' => 'boolean'
     ];
 
-    public function modelesCodage()
-    {
-        return $this->hasMany(SchemaCodage::class, 'annee_universitaire_id');
-    }
+
 
     /**
      * Relations

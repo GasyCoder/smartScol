@@ -154,7 +154,16 @@ class RolesAndPermissionsSeeder extends Seeder
                 'label' => 'Réinitialiser la fusion',
                 'description' => 'Permet de réinitialiser les résultats provisoires et validés d\'un examen'
             ],
-
+            [
+                'name' => 'resultats.cancel',
+                'label' => 'Annuler les résultats',
+                'description' => 'Permet d\'annuler les résultats d\'un examen'
+            ],
+            [
+                'name' => 'resultats.revert-validation',
+                'label' => 'Annuler la validation',
+                'description' => 'Permet d\'annuler la validation des résultats d\'un examen'
+            ],
             // Permissions pour l'administration
             [
                 'name' => 'users.manage',

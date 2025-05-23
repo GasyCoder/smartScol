@@ -316,4 +316,20 @@ class Examen extends Model
             ? Salle::find($firstEC->pivot->salle_id)
             : null;
     }
+
+    /**
+     * Vérifie si des examens existent pour une combinaison niveau/parcours.
+     *
+     * @param int $niveauId
+     * @param int|null $parcoursId
+     * @return bool
+     */
+    public static function hasExamsForNiveauAndParcours($niveauId, $parcoursId = null)
+    {
+        $query = self::where('niveau_id', $niveauId);
+        if ($parcoursId) {
+            $query->where('parcours_id', $parcoursId);
+        }
+        return $query->exists();
+    }
 }

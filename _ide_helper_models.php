@@ -88,8 +88,8 @@ namespace App\Models{
  * @property numeric $note Note obtenue
  * @property int $saisie_par Utilisateur ayant saisi la note
  * @property string $date_saisie
- * @property string|null $note_corriged Note corrigée
- * @property int $is_checked
+ * @property numeric|null $note_old Note corrigée
+ * @property bool $is_checked
  * @property string|null $commentaire Commentaire sur la note
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
@@ -116,7 +116,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereIsChecked($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNote($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNoteCorriged($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNoteOld($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSaisiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie withTrashed()
@@ -165,28 +165,59 @@ namespace App\Models{
  * @property int $session_id Session d'examen
  * @property int $annee_universitaire_id Année universitaire
  * @property \Illuminate\Support\Carbon $date_deliberation
- * @property int $president_jury Enseignant président du jury
+ * @property string $statut Statut de la délibération
+ * @property numeric $seuil_admission Moyenne minimale pour admission automatique
+ * @property numeric $seuil_rachat Moyenne minimale pour rachat possible
+ * @property int $pourcentage_ue_requises Pourcentage d'UE à valider pour admission
+ * @property bool $appliquer_regles_auto Appliquer automatiquement les règles aux étudiants
+ * @property string|null $observations Observations du jury
+ * @property array<array-key, mixed>|null $decisions_speciales Décisions spéciales prises pendant la délibération
+ * @property int $nombre_admis Nombre d'étudiants admis
+ * @property int $nombre_ajournes Nombre d'étudiants ajournés
+ * @property int $nombre_exclus Nombre d'étudiants exclus
+ * @property int $nombre_rachats Nombre d'étudiants rachetés
+ * @property \Illuminate\Support\Carbon|null $date_finalisation Date de finalisation des décisions
+ * @property \Illuminate\Support\Carbon|null $date_publication Date de publication des résultats
+ * @property int|null $finalise_par Utilisateur ayant finalisé la délibération
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\AnneeUniversitaire $anneeUniversitaire
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Decision> $decisions
  * @property-read int|null $decisions_count
+ * @property-read \App\Models\User|null $finalisePar
+ * @property-read mixed $libelle_statut
  * @property-read \App\Models\Niveau $niveau
- * @property-read \App\Models\User $presidentJury
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Resultat> $resultats
- * @property-read int|null $resultats_count
+ * @property-read \App\Models\User|null $presidentJury
  * @property-read \App\Models\SessionExam $session
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation activeAnnee()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation enAttente()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation niveauxSuperieurs()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation niveauxReguliers()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation rattrapage()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation statut($statut)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation terminees()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereAnneeUniversitaireId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereAppliquerReglesAuto($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDateDeliberation($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDateFinalisation($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDatePublication($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDecisionsSpeciales($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereFinalisePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereNiveauId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation wherePresidentJury($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereNombreAdmis($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereNombreAjournes($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereNombreExclus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereNombreRachats($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereObservations($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation wherePourcentageUeRequises($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereSessionId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereSeuilAdmission($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereSeuilRachat($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereStatut($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereUpdatedAt($value)
  */
 	class Deliberation extends \Eloquent {}
@@ -253,8 +284,6 @@ namespace App\Models{
  * @property-read mixed $full_name
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\Parcour|null $parcours
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Resultat> $resultats
- * @property-read int|null $resultats_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant onlyTrashed()
@@ -310,8 +339,6 @@ namespace App\Models{
  * @property-read int|null $manchettes_count
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\Parcour|null $parcours
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Resultat> $resultats
- * @property-read int|null $resultats_count
  * @property-read \App\Models\SessionExam $session
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen newQuery()
@@ -419,7 +446,6 @@ namespace App\Models{
  * @property-read mixed $matricule_etudiant
  * @property-read mixed $numero
  * @property-read mixed $salle
- * @property-read \App\Models\Resultat|null $resultat
  * @property-read \App\Models\User $utilisateurSaisie
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette newQuery()
@@ -519,9 +545,9 @@ namespace App\Models{
  *
  * @property int $id
  * @property string $name
- * @property string $guard_name
  * @property string|null $label
  * @property string|null $description
+ * @property string $guard_name
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \Spatie\Permission\Models\Permission> $permissions
@@ -552,70 +578,60 @@ namespace App\Models{
 /**
  * 
  *
- * @property int $id
- * @property int $etudiant_id Étudiant concerné
- * @property int $examen_id Examen concerné
- * @property int $code_anonymat_id Code d'anonymat utilisé
- * @property int $ec_id
- * @property numeric $note Note finale
- * @property numeric|null $moyenne_ue
- * @property numeric|null $moyenne_generale
- * @property int $genere_par Utilisateur ayant généré le résultat
- * @property int|null $modifie_par
- * @property string $statut
- * @property array<array-key, mixed>|null $status_history
- * @property string|null $decision
- * @property \Illuminate\Support\Carbon|null $date_validation
- * @property \Illuminate\Support\Carbon|null $date_publication
- * @property string|null $hash_verification
- * @property int|null $deliberation_id
- * @property string|null $operation_id
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\CodeAnonymat $codeAnonymat
+ * @property-read \App\Models\CodeAnonymat|null $codeAnonymat
  * @property-read \App\Models\Deliberation|null $deliberation
- * @property-read \App\Models\EC $ec
- * @property-read \App\Models\Etudiant $etudiant
- * @property-read \App\Models\Examen $examen
+ * @property-read \App\Models\EC|null $ec
+ * @property-read \App\Models\Etudiant|null $etudiant
+ * @property-read \App\Models\Examen|null $examen
  * @property-read mixed $est_modifie
  * @property-read mixed $est_reussie
- * @property-read \App\Models\User $utilisateurGeneration
+ * @property-read mixed $libelle_decision
+ * @property-read mixed $libelle_statut
+ * @property-read \App\Models\ResultatFusion|null $resultatFusion
+ * @property-read \App\Models\User|null $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat admis()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat ajourne()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat annule()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat echoue()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat exclus()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat provisoire()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat publie()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat rattrapage()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat reussi()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat valide()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereCodeAnonymatId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereDatePublication($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereDateValidation($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereDecision($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereDeliberationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereEcId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereEtudiantId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereExamenId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereGenerePar($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereHashVerification($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereModifiePar($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereMoyenneGenerale($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereMoyenneUe($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereNote($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereOperationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereStatusHistory($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereStatut($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Resultat whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal ajourne()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal annule()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal avecDeliberation()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal echoue()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal enAttente()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal exclus()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parAnneeUniversitaire($anneeId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parNiveau($niveauId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parParcours($parcoursId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal premiereSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal publie()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal publieDans($joursRecents)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal rattrapage()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal rattrapageSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal reussi()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sansDeliberation()
  */
-	class Resultat extends \Eloquent {}
+	class ResultatFinal extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * 
+ *
+ * @property-read \App\Models\CodeAnonymat|null $codeAnonymat
+ * @property-read \App\Models\EC|null $ec
+ * @property-read \App\Models\Etudiant|null $etudiant
+ * @property-read \App\Models\Examen|null $examen
+ * @property-read \App\Models\User|null $utilisateurGeneration
+ * @property-read \App\Models\User|null $utilisateurModification
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion premierVerification()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion secondeVerification()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion valide()
+ */
+	class ResultatFusion extends \Eloquent {}
 }
 
 namespace App\Models{

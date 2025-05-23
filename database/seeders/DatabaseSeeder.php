@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Deliberation;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -22,6 +23,7 @@ class DatabaseSeeder extends Seeder
             NiveauxSeeder::class,
             ParcoursSeeder::class,
             SessionExamSeeder::class, // Sessions d'examens (dépend des années universitaires)
+            DeliberationSeeder::class, // Délibérations (dépend des sessions d'examens)
         ]);
 
         // Créer les utilisateurs de test avec leurs rôles

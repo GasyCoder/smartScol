@@ -16,11 +16,16 @@ class Copie extends Model
         'ec_id',
         'code_anonymat_id',
         'note',
-        'saisie_par'
+        'saisie_par',
+        'note_old',
+        'is_checked',
+        'commentaire',
     ];
 
     protected $casts = [
         'note' => 'decimal:2',
+        'note_old' => 'decimal:2',
+        'is_checked' => 'boolean',
     ];
 
     // Relations

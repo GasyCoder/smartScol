@@ -26,10 +26,7 @@ class Niveau extends Model
         'is_active' => 'boolean',
     ];
 
-    public function modelesCodage()
-    {
-        return $this->hasMany(ModeleCodage::class, 'niveau_id');
-    }
+
 
     /**
      * Relations

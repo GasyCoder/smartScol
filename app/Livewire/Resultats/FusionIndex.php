@@ -3,108 +3,97 @@
 namespace App\Livewire\Resultats;
 
 use App\Models\EC;
+use App\Models\Copie;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
+use Livewire\Component;
+use App\Models\Etudiant;
 use App\Models\Resultat;
 use App\Models\SessionExam;
-use App\Models\FusionOperation;
-use App\Services\FusionService;
-use App\Services\FusionProcessStatus;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Livewire\Component;
 use Livewire\WithPagination;
+use App\Services\FusionService;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 /**
+ * @property \Illuminate\Support\Collection $niveaux
  * @property \Illuminate\Support\Collection $parcours
+ * @property \Illuminate\Support\Collection $salles
+ * @property \Illuminate\Support\Collection $ecs
  */
 class FusionIndex extends Component
 {
     use WithPagination;
 
-    // Variables de filtrage
+    // Propriétés de sélection d'examen
     public $niveau_id;
     public $parcours_id;
     public $examen_id;
-
-    // Variables d'état
     public $examen = null;
     public $sessionActive = null;
     public $niveaux = [];
     public $parcours = [];
     public $ecs = [];
     public $estPACES = false;
-    public $statut = 'initial'; // 'initial', 'verification', 'fusion', 'validation', 'publie'
+    public $showResetButton = false;
+
+    // Propriétés de suivi du processus de fusion
+    public $statut = 'initial';
     public $etapeProgress = 0;
-    public $activeTab = 'process'; // 'process', 'rapport', 'stats'
+    public $etapeFusion = 0;
+    public $isProcessing = false;
+    public $showVerificationButton = false;
 
-
-    // Variables de résultats
-    public $rapportCoherence = [];
-    public $resultatsStats = null;
-    public $resultatsParMatiere = [];
-    public $errorCount = 0;
-    public $totalManchettes = 0;
-    public $totalCopies = 0;
-    public $totalResultats = 0;
-    public $confirmingFusion = false;
-    public $confirmingReset = false;
+    // Interface utilisateur
+    public $activeTab = 'process';
     public $messageType = '';
     public $message = '';
 
-    // Variables pour le traitement
-    public $isProcessing = false;
-    public $currentOperationId = null;
-    public $currentOperationType = null;
-    public $etapeFusion = 1;
-
-    // Distribution des notes (pour le graphique)
+    // Données de rapport et statistiques
+    public $rapportCoherence = [];
+    public $resultatsStats = [];
+    public $resultatsParMatiere = [];
     public $distributionNotes = [];
 
+    // ✅ PROPRIÉTÉS POUR LA DÉLIBÉRATION
+    public $showDeliberationInfo = false;
+    public $deliberationData = null;
+    public $requiresDeliberation = false;
+    public $confirmingPublication = false;
+    public $confirmingValidation = false;
+    public $confirmingAnnulation = false;
+    public $confirmingRevenirValidation = false;
+    public $confirmingFusion = false;
+    public $confirmingReset = false;
+    public $confirmingVerification = false;
+    public $contexteExamen = null;
+
+
+    /**
+     * Propriétés calculées pour l'interface
+     */
+    public function getShowVerificationButtonProperty()
+    {
+        return $this->statut === 'fusion' && $this->etapeFusion >= 1;
+    }
+
+    public function getShowPublicationButtonProperty()
+    {
+        return $this->statut === 'fusion' && $this->etapeFusion >= 3;
+    }
+
+    public function getShowResetButtonProperty()
+    {
+        return $this->statut === 'fusion' && $this->etapeFusion > 0;
+    }
+
+    protected $listeners = ['switchTab' => 'switchTab'];
 
     protected $queryString = [
         'niveau_id' => ['except' => ''],
         'parcours_id' => ['except' => '']
     ];
-
-
-    /**
-     * Méthode permettant de générer dynamiquement les listeners en fonction de l'examen actuel
-     *
-     * @return array
-     */
-    public function getListeners()
-    {
-        $listeners = [
-            'switchTab' => 'switchTab',
-            'operationCompleted' => 'onOperationCompleted',
-            'pollOperationStatus' => 'pollOperationStatus'
-        ];
-
-        // Ajouter le listener Echo seulement si un examen est sélectionné
-        if ($this->examen_id) {
-            $listeners["echo:fusion.{$this->examen_id},FusionOperationCompleted"] = 'handleOperationCompleted';
-        }
-
-        return $listeners;
-    }
-
-    /**
-     * Réinitialise les filtres et redirige vers la page de fusion
-     */
-    public function reinitialiserFiltres()
-    {
-        $this->niveau_id = null;
-        $this->parcours_id = null;
-        $this->examen_id = null;
-        $this->examen = null;
-        $this->parcours = collect();
-        $this->resetResults();
-
-        return redirect()->route('resultats.fusion');
-    }
 
     /**
      * Initialisation du composant
@@ -118,6 +107,7 @@ class FusionIndex extends Component
 
         if (!$this->sessionActive) {
             toastr()->error('Aucune session active trouvée. Veuillez configurer une session active dans les paramètres.');
+            return;
         }
 
         $this->niveaux = Niveau::where('is_active', true)
@@ -125,170 +115,313 @@ class FusionIndex extends Component
             ->get();
 
         if ($this->niveau_id) {
-            $this->parcours = Parcour::where('niveau_id', $this->niveau_id)
-                ->where('is_active', true)
-                ->orderBy('id', 'asc')
-                ->get();
-
+            $this->loadParcours();
             if ($this->parcours_id && $this->sessionActive) {
-                $this->examen = Examen::where('niveau_id', $this->niveau_id)
-                    ->where('parcours_id', $this->parcours_id)
-                    ->where('session_id', $this->sessionActive->id)
-                    ->first();
-
-                if ($this->examen) {
-                    $this->examen_id = $this->examen->id;
-                    $this->chargerEcs();
-                    $this->verifierSiPACES();
-                    $this->verifierEtatActuel();
-                }
+                $this->loadExamen();
             }
         }
+
+        $this->verifierEtatActuel();
     }
 
     /**
-     * Change l'onglet actif
-     *
-     * @param string $tab
+     * Charge les parcours disponibles pour le niveau sélectionné
      */
-    public function switchTab($tab)
+    private function loadParcours()
     {
-        if (in_array($tab, ['process', 'rapport', 'stats'])) {
-            $this->activeTab = $tab;
-        }
+        $this->parcours = Parcour::where('niveau_id', $this->niveau_id)
+            ->where('is_active', true)
+            ->orderBy('id', 'asc')
+            ->get();
     }
 
     /**
-     * Confirme la réinitialisation de la fusion
+     * Charge l'examen correspondant au niveau et parcours sélectionnés
      */
-    public function confirmResetFusion()
+    private function loadExamen()
     {
-        $this->confirmingReset = true;
-    }
-
-    /**
-     * Charge un examen spécifique
-     */
-    public function chargerExamen()
-    {
-        if (!$this->examen_id) return;
-
-        $this->examen = Examen::with(['niveau', 'parcours', 'session'])->find($this->examen_id);
+        $this->examen = Examen::where('niveau_id', $this->niveau_id)
+            ->where('parcours_id', $this->parcours_id)
+            ->where('session_id', $this->sessionActive->id)
+            ->first();
 
         if ($this->examen) {
-            $this->niveau_id = $this->examen->niveau_id;
-            $this->parcours_id = $this->examen->parcours_id;
-            $this->parcours = Parcour::where('niveau_id', $this->niveau_id)
-                ->where('is_active', true)
-                ->orderBy('id', 'asc')
-                ->get();
-
+            $this->examen_id = $this->examen->id;
             $this->chargerEcs();
             $this->verifierSiPACES();
             $this->verifierEtatActuel();
-
-            if ($this->resultatsStats && $this->totalResultats > 0) {
-                $this->prepareGraphData();
-            }
+        } else {
+            $this->examen_id = null;
+            $this->examen = null;
+            $this->showVerificationButton = false;
+            Log::warning('Aucun examen trouvé pour les paramètres donnés', [
+                'niveau_id' => $this->niveau_id,
+                'parcours_id' => $this->parcours_id,
+                'session_id' => $this->sessionActive->id,
+            ]);
+            toastr()->error('Aucun examen trouvé. Veuillez vérifier votre sélection de niveau et de parcours.');
         }
     }
 
     /**
-     * Prépare les données pour les graphiques
+     * Réinitialise tous les filtres et données
      */
-    protected function prepareGraphData()
+    public function reinitialiserFiltres()
     {
-        // Distribution des notes par plage
-        $this->distributionNotes = [
-            '0-4' => Resultat::where('examen_id', $this->examen_id)
-                ->whereBetween('note', [0, 4.99])
-                ->count(),
-            '5-9' => Resultat::where('examen_id', $this->examen_id)
-                ->whereBetween('note', [5, 9.99])
-                ->count(),
-            '10-14' => Resultat::where('examen_id', $this->examen_id)
-                ->whereBetween('note', [10, 14.99])
-                ->count(),
-            '15-20' => Resultat::where('examen_id', $this->examen_id)
-                ->whereBetween('note', [15, 20])
-                ->count()
-        ];
+        $this->niveau_id = null;
+        $this->parcours_id = null;
+        $this->examen_id = null;
+        $this->examen = null;
+        $this->parcours = collect();
+        $this->resetResults();
+        return redirect()->route('resultats.fusion');
+    }
 
-        // Statistiques par matière
-        $this->resultatsParMatiere = [];
+    /**
+     * Change l'onglet actif et charge les données correspondantes
+     */
+    public function switchTab($tab)
+    {
+        $this->activeTab = $tab;
 
-        foreach ($this->ecs as $ec) {
-            $resultatsEC = Resultat::where('examen_id', $this->examen_id)
-                ->where('ec_id', $ec->id)
+        if ($tab === 'rapport-stats') {
+            $this->chargerRapportCoherence();
+            $this->chargerStatistiquesSimples();
+        }
+    }
+
+    /**
+     * Charge les statistiques simples des résultats
+     */
+    protected function chargerStatistiquesSimples()
+    {
+        if (!$this->examen_id) {
+            $this->resultatsStats = [
+                'totalMatieres' => 0,
+                'etudiants' => 0,
+                'passRate' => 0,
+            ];
+            return;
+        }
+
+        try {
+            $resultatsExistants = Resultat::where('examen_id', $this->examen_id)
+                ->where('statut', Resultat::STATUT_PROVISOIRE)
+                ->exists();
+
+            $totalMatieres = EC::whereHas('examens', function($query) {
+                $query->where('examens.id', $this->examen_id);
+            })->count();
+
+            $etudiants = Etudiant::where('niveau_id', $this->examen->niveau_id)
+                ->where('parcours_id', $this->examen->parcours_id)
+                ->where('is_active', true)
+                ->count();
+
+            $passRate = 0;
+
+            if ($resultatsExistants) {
+                // Calculer à partir des résultats existants
+                $admis = Resultat::where('examen_id', $this->examen_id)
+                    ->where('note', '>=', 10)
+                    ->distinct('etudiant_id')
+                    ->count('etudiant_id');
+
+                $passRate = $etudiants > 0 ? round(($admis / $etudiants) * 100, 2) : 0;
+            } else {
+                // Calculer à partir des copies valides
+                $copiesValides = Copie::where('examen_id', $this->examen_id)
+                    ->whereNotNull('code_anonymat_id')
+                    ->whereHas('codeAnonymat', function ($query) {
+                        $query->whereNotNull('code_complet')
+                            ->where('code_complet', '!=', '');
+                    })
+                    ->whereNotNull('note')
+                    ->where('note', '>=', 10)
+                    ->count();
+
+                // Chaque étudiant devrait avoir une copie par EC
+                $totalExpectedCopies = $etudiants * $totalMatieres;
+                $passRate = $totalExpectedCopies > 0 ? round(($copiesValides / $totalExpectedCopies) * 100, 2) : 0;
+            }
+
+            $this->resultatsStats = [
+                'totalMatieres' => $totalMatieres,
+                'etudiants' => $etudiants,
+                'passRate' => $passRate,
+            ];
+
+            Log::info('Statistiques simples chargées', [
+                'examen_id' => $this->examen_id,
+                'totalMatieres' => $totalMatieres,
+                'etudiants' => $etudiants,
+                'passRate' => $passRate
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du chargement des statistiques', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->resultatsStats = [
+                'totalMatieres' => 0,
+                'etudiants' => 0,
+                'passRate' => 0,
+            ];
+        }
+    }
+
+    /**
+     * Charge le rapport de cohérence
+     */
+    protected function chargerRapportCoherence()
+    {
+        if (!$this->examen_id) {
+            $this->rapportCoherence = [];
+            return;
+        }
+
+        try {
+            $etudiants = Etudiant::where('niveau_id', $this->examen->niveau_id)
+                ->where('parcours_id', $this->examen->parcours_id)
+                ->where('is_active', true)
                 ->get();
 
-            if ($resultatsEC->count() > 0) {
-                $passCount = $resultatsEC->where('note', '>=', 10)->count();
-                $passRate = $resultatsEC->count() > 0 ? round(($passCount / $resultatsEC->count()) * 100, 1) : 0;
+            $fusionService = new FusionService();
+            $result = $fusionService->verifierCoherence($this->examen_id);
 
-                $this->resultatsParMatiere[$ec->id] = [
-                    'ec_nom' => $ec->nom,
-                    'ec_abr' => $ec->abr,
-                    'moyenne' => round($resultatsEC->avg('note'), 2),
-                    'min' => $resultatsEC->min('note'),
-                    'max' => $resultatsEC->max('note'),
-                    'passRate' => $passRate
-                ];
+            if ($result['success']) {
+                $this->rapportCoherence = $result['data'] ?? [];
+
+                Log::info('Rapport de cohérence chargé', [
+                    'examen_id' => $this->examen_id,
+                    'nombre_ecs' => count($this->rapportCoherence),
+                    'stats' => $result['stats'] ?? []
+                ]);
+            } else {
+                $this->rapportCoherence = [];
+                toastr()->error($result['message'] ?? 'Erreur lors du chargement du rapport de cohérence');
             }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du chargement du rapport de cohérence', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->rapportCoherence = [];
+            toastr()->error('Erreur lors du chargement du rapport: ' . $e->getMessage());
         }
     }
 
     /**
-     * Vérifie l'état actuel de la fusion
+     * ✅ CORRECTION : Vérifie l'état actuel du processus de fusion sans référence à STATUT_VALIDE
      */
     public function verifierEtatActuel()
     {
-        if (!$this->examen_id) return;
+        if (!$this->examen_id) {
+            $this->statut = 'initial';
+            $this->etapeProgress = 0;
+            $this->etapeFusion = 0;
+            $this->showVerificationButton = false;
+            $this->showResetButton = false;
+            return;
+        }
 
         try {
-            $fusionService = new FusionService();
-            $statutActuel = $fusionService->getStatutActuel($this->examen_id);
+            $resultatProvisoire = Resultat::where('examen_id', $this->examen_id)
+                ->where('statut', Resultat::STATUT_PROVISOIRE)
+                ->exists();
 
-            // Si nous sommes en mode fusion, récupérer également l'étape de fusion
-            if ($statutActuel === FusionProcessStatus::FUSION_PROVISOIRE) {
-                $this->etapeFusion = $fusionService->determinerEtapeFusion($this->examen_id);
+            // ✅ CORRECTION : Plus de référence à STATUT_VALIDE
+            $resultatPublie = Resultat::where('examen_id', $this->examen_id)
+                ->where('statut', Resultat::STATUT_PUBLIE)
+                ->exists();
+
+            $resultatAnnule = Resultat::where('examen_id', $this->examen_id)
+                ->where('statut', Resultat::STATUT_ANNULE)
+                ->exists();
+
+            // Logique simplifiée pour le bouton reset
+            $this->showResetButton = Resultat::where('examen_id', $this->examen_id)->exists();
+
+            $this->etapeFusion = Resultat::where('examen_id', $this->examen_id)
+                ->max('etape_fusion') ?? 0;
+
+            $this->showVerificationButton = $this->examen_id && $this->etapeFusion >= 1;
+
+            // ✅ LOGIQUE SIMPLIFIÉE : Plus que 3 états possibles
+            if ($resultatAnnule) {
+                $this->statut = 'annule';
+                $this->etapeProgress = 100;
+            } elseif ($resultatPublie) {
+                // Les résultats publiés sont maintenant validés ET publiés en une seule étape
+                $this->statut = 'publie';
+                $this->etapeProgress = 100;
+            } elseif ($resultatProvisoire) {
+                $this->statut = 'fusion';
+                $this->etapeProgress = match($this->etapeFusion) {
+                    1 => 40,
+                    2 => 55,
+                    3 => 65,
+                    default => 25
+                };
+            } else {
+                $this->statut = 'verification';
+                $this->etapeProgress = 25;
             }
 
-            // Convertir le statut du service en statut UI
-            switch ($statutActuel) {
-                case FusionProcessStatus::INITIAL:
-                    $this->statut = 'initial';
-                    $this->etapeProgress = 0;
-                    break;
-                case FusionProcessStatus::COHERENCE_VERIFIEE:
-                    $this->statut = 'verification';
-                    $this->etapeProgress = 25;
-                    break;
-                case FusionProcessStatus::FUSION_PROVISOIRE:
-                    $this->statut = 'fusion';
-                    $this->etapeProgress = 50;
-                    break;
-                case FusionProcessStatus::VALIDATION:
-                    $this->statut = 'validation';
-                    $this->etapeProgress = 75;
-                    break;
-                case FusionProcessStatus::PUBLICATION:
-                case FusionProcessStatus::DELIBERATION:
-                    $this->statut = 'publie';
-                    $this->etapeProgress = 100;
-                    break;
-                default:
-                    $this->statut = 'initial';
-                    $this->etapeProgress = 0;
+            // Charger les statistiques si des résultats existent
+            if ($resultatProvisoire || $resultatPublie || $resultatAnnule) {
+                $this->chargerStatistiquesSimples();
             }
 
-            // Charger les statistiques si on a déjà des résultats
-            if ($this->statut !== 'initial') {
-                $this->chargerStatistiquesResultats();
-            }
+            Log::info('État actuel vérifié', [
+                'examen_id' => $this->examen_id,
+                'statut' => $this->statut,
+                'etapeFusion' => $this->etapeFusion,
+                'etapeProgress' => $this->etapeProgress,
+                'showVerificationButton' => $this->showVerificationButton,
+                'showResetButton' => $this->showResetButton
+            ]);
+
         } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification de l\'état', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->statut = 'initial';
+            $this->etapeProgress = 0;
+            $this->etapeFusion = 0;
+            $this->showVerificationButton = false;
+            $this->showResetButton = false;
+
             toastr()->error('Erreur lors de la vérification de l\'état: ' . $e->getMessage());
-            Log::error('Erreur verifierEtatActuel', [
+        }
+    }
+
+    /**
+     * Vérifie si l'examen concerne le niveau PACES
+     */
+    protected function verifierSiPACES()
+    {
+        if (!$this->examen) {
+            $this->estPACES = false;
+            return;
+        }
+
+        try {
+            $niveau = Niveau::find($this->examen->niveau_id);
+            $this->estPACES = ($niveau && $niveau->abr == 'PACES' && $niveau->id == 1);
+        } catch (\Exception $e) {
+            $this->estPACES = false;
+            Log::warning('Erreur lors de la vérification PACES', [
+                'examen_id' => $this->examen_id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -296,52 +429,31 @@ class FusionIndex extends Component
     }
 
     /**
-     * Charge les statistiques des résultats
+     * Charge les éléments constitutifs (EC) associés à l'examen
      */
-    public function chargerStatistiquesResultats()
+    protected function chargerEcs()
     {
-        if (!$this->examen_id) return;
-
-        $fusionService = new FusionService();
-        $stats = $fusionService->calculerStatistiques($this->examen_id);
-
-        $this->resultatsStats = $stats;
-        $this->totalResultats = $stats['total'];
-        $this->distributionNotes = $stats['distribution'];
-        $this->etapeFusion = $stats['etape_fusion'];
-
-        $this->prepareGraphData();
-    }
-
-    /**
-     * Vérifie si l'examen concerne PACES
-     */
-    protected function verifierSiPACES()
-    {
-        if (!$this->examen) return;
+        if (!$this->examen_id) {
+            $this->ecs = collect();
+            return;
+        }
 
         try {
-            $niveau = Niveau::find($this->examen->niveau_id);
-            $this->estPACES = ($niveau && $niveau->abr == 'PACES' && $niveau->id == 1);
+            $this->ecs = EC::whereHas('examens', function($query) {
+                $query->where('examens.id', $this->examen_id);
+            })->get();
         } catch (\Exception $e) {
-            $this->estPACES = false;
+            $this->ecs = collect();
+            Log::error('Erreur lors du chargement des EC', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
         }
     }
 
     /**
-     * Charge les ECs associés à l'examen
-     */
-    protected function chargerEcs()
-    {
-        if (!$this->examen_id) return;
-
-        $this->ecs = EC::whereHas('examens', function($query) {
-            $query->where('examens.id', $this->examen_id);
-        })->get();
-    }
-
-    /**
-     * Mise à jour du niveau sélectionné
+     * Gère le changement de niveau sélectionné
      */
     public function updatedNiveauId()
     {
@@ -352,11 +464,7 @@ class FusionIndex extends Component
         $this->resetResults();
 
         if ($this->niveau_id) {
-            $this->parcours = Parcour::where('niveau_id', $this->niveau_id)
-                ->where('is_active', true)
-                ->orderBy('id', 'asc')
-                ->get();
-
+            $this->loadParcours();
             if ($this->parcours->count() == 1) {
                 $this->parcours_id = $this->parcours->first()->id;
                 $this->updatedParcoursId();
@@ -365,7 +473,7 @@ class FusionIndex extends Component
     }
 
     /**
-     * Mise à jour du parcours sélectionné
+     * Gère le changement de parcours sélectionné
      */
     public function updatedParcoursId()
     {
@@ -374,89 +482,57 @@ class FusionIndex extends Component
         $this->resetResults();
 
         if ($this->niveau_id && $this->parcours_id && $this->sessionActive) {
-            $this->examen = Examen::where('niveau_id', $this->niveau_id)
-                ->where('parcours_id', $this->parcours_id)
-                ->where('session_id', $this->sessionActive->id)
-                ->first();
-
-            if ($this->examen) {
-                $this->examen_id = $this->examen->id;
-                $this->chargerEcs();
-                $this->verifierSiPACES();
-                $this->verifierEtatActuel();
-            } else {
-                toastr()->warning('Aucun examen trouvé pour ce niveau, parcours et session active');
-            }
+            $this->loadExamen();
         }
     }
 
     /**
-     * Réinitialise les résultats
+     * Réinitialise les données de résultats
      */
     protected function resetResults()
     {
         $this->rapportCoherence = [];
-        $this->resultatsStats = null;
+        $this->resultatsStats = [];
         $this->resultatsParMatiere = [];
         $this->distributionNotes = [];
-        $this->errorCount = 0;
-        $this->totalManchettes = 0;
-        $this->totalCopies = 0;
-        $this->totalResultats = 0;
         $this->statut = 'initial';
         $this->etapeProgress = 0;
-        $this->currentOperationId = null;
-        $this->currentOperationType = null;
+        $this->etapeFusion = 0;
+        $this->showVerificationButton = false;
+        $this->showResetButton = false;
     }
 
-    /**
-     * Vérifie la cohérence des données
-     */
-    public function verifierCoherence()
+    // Méthodes de confirmation des actions
+    public function confirmResetFusion()
     {
-        if (!$this->examen_id) {
-            toastr()->error('Aucun examen sélectionné');
-            return;
-        }
-
-        // Vérifier les permissions
-        if (!Auth::user()->hasPermissionTo('resultats.verifier')) {
-            toastr()->error('Vous n\'avez pas l\'autorisation de vérifier la cohérence');
-            return;
-        }
-
-        $this->isProcessing = true;
-
-        try {
-            $fusionService = new FusionService();
-            $this->rapportCoherence = $fusionService->verifierCoherence($this->examen_id);
-
-            $complets = collect($this->rapportCoherence)->where('complet', true)->count();
-            $total = count($this->rapportCoherence);
-
-            if ($total > 0) {
-                $completionRate = round(($complets / $total) * 100);
-                toastr()->success("Vérification terminée : $complets/$total matières complètes ($completionRate%)");
-            } else {
-                toastr()->warning('Aucune matière trouvée pour cet examen');
-            }
-
-            $this->statut = 'verification';
-            $this->etapeProgress = 25;
-        } catch (\Exception $e) {
-            toastr()->error('Erreur lors de la vérification: ' . $e->getMessage());
-            Log::error('Erreur verifierCoherence', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-        }
-
-        $this->isProcessing = false;
+        $this->confirmingReset = true;
     }
 
-    /**
-     * Confirme la fusion
-     */
+    public function confirmVerification()
+    {
+        $this->confirmingVerification = true;
+    }
+
+    public function confirmValidation()
+    {
+        $this->confirmingValidation = true;
+    }
+
+    public function confirmPublication()
+    {
+        $this->confirmingPublication = true;
+    }
+
+    public function confirmAnnulation()
+    {
+        $this->confirmingAnnulation = true;
+    }
+
+    public function confirmRevenirValidation()
+    {
+        $this->confirmingRevenirValidation = true;
+    }
+
     public function confirmerFusion()
     {
         if (!$this->examen_id) {
@@ -470,20 +546,68 @@ class FusionIndex extends Component
     }
 
     /**
-     * Lance le processus de fusion
-     *
-     * @param bool $force Forcer la fusion même si les résultats sont déjà validés
+     * Effectue la vérification de cohérence des données
      */
-    public function fusionner($force = false)
+    public function verifierCoherence()
     {
         if (!$this->examen_id) {
             toastr()->error('Aucun examen sélectionné');
             return;
         }
 
-        // Vérifier les permissions
-        if (!Auth::user()->hasPermissionTo('resultats.fusion')) {
+        $this->isProcessing = true;
+        $this->confirmingVerification = false;
+
+        try {
+            $fusionService = new FusionService();
+            $result = $fusionService->verifierCoherence($this->examen_id);
+
+            if ($result['success']) {
+                $this->rapportCoherence = $result['data'] ?? [];
+
+                $stats = $result['stats'] ?? ['total' => 0, 'complets' => 0];
+                $total = $stats['total'];
+                $complets = $stats['complets'];
+
+                if ($total > 0) {
+                    $completionRate = round(($complets / $total) * 100);
+                    toastr()->success("Vérification terminée : $complets/$total matières complètes ($completionRate%)");
+                } else {
+                    toastr()->warning('Aucune matière trouvée pour cet examen. Vérifiez les données des copies et manchettes.');
+                }
+
+                $this->verifierEtatActuel();
+                $this->switchTab('rapport-stats');
+            } else {
+                toastr()->error($result['message'] ?? 'Erreur lors de la vérification');
+                $this->rapportCoherence = [];
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur dans verifierCoherence', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            toastr()->error('Erreur lors de la vérification: ' . $e->getMessage());
+            $this->rapportCoherence = [];
+        }
+
+        $this->isProcessing = false;
+    }
+
+    /**
+     * Lance le processus de fusion
+     */
+    public function fusionner($force = false)
+    {
+        if (!Auth::user()->hasPermissionTo('resultats.create')) {
             toastr()->error('Vous n\'avez pas l\'autorisation de fusionner les données');
+            return;
+        }
+
+        if (!$this->examen_id) {
+            toastr()->error('Aucun examen sélectionné');
             return;
         }
 
@@ -492,300 +616,252 @@ class FusionIndex extends Component
 
         try {
             $fusionService = new FusionService();
-
-            // Vérifier si une fusion est déjà en cours
-            if ($fusionService->estFusionEnCours($this->examen_id)) {
-                toastr()->warning('Une opération de fusion est déjà en cours pour cet examen');
-                $this->isProcessing = false;
-                return;
-            }
-
-            // Log pour le débogage
-            Log::info('Démarrage de la fusion', [
-                'examen_id' => $this->examen_id,
-                'force' => $force
-            ]);
-
             $result = $fusionService->fusionner($this->examen_id, $force);
 
             if ($result['success']) {
-                // Stocker l'ID de l'opération pour le suivi
-                $this->currentOperationId = $result['operation_id'];
-                $this->currentOperationType = 'fusion';
+                $this->etapeFusion = $result['etape'] ?? $this->etapeFusion;
+                $this->verifierEtatActuel();
+                toastr()->success($result['message']);
 
-                // Démarrer le polling pour suivre l'avancement
-                $this->dispatchBrowserEvent('startPolling', ['operationId' => $this->currentOperationId]);
-
-                // Mise à jour optimiste de l'UI
-                if (!$force && ($this->statut === 'initial' || $this->statut === 'verification')) {
-                    $this->statut = 'fusion';
-                    $this->etapeProgress = 50;
+                if (isset($result['statistiques']) && $result['statistiques']['resultats_generes'] > 0) {
+                    $this->switchTab('rapport-stats');
                 }
-
-                toastr()->info($result['message']);
             } else {
-                // Log l'erreur pour investigation
-                Log::error('Échec du lancement de la fusion', [
-                    'examen_id' => $this->examen_id,
-                    'message' => $result['message']
-                ]);
                 toastr()->error($result['message']);
             }
+
         } catch (\Exception $e) {
-            Log::error('Exception lors du lancement de la fusion', [
+            Log::error('Erreur lors de la fusion', [
                 'examen_id' => $this->examen_id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            toastr()->error('Erreur lors du lancement de la fusion: ' . $e->getMessage());
+            toastr()->error('Erreur lors de la fusion: ' . $e->getMessage());
         }
 
         $this->isProcessing = false;
     }
 
     /**
-     * Interroge le statut d'une opération de fusion en cours
+     * Réinitialise le processus de fusion
      */
-    public function pollOperationStatus()
+    public function reinitialiserFusion()
     {
-        if (!$this->currentOperationId) return;
-
-        $operation = FusionOperation::find($this->currentOperationId);
-        if (!$operation) return;
-
-        if ($operation->status === 'completed' || $operation->status === 'failed') {
-            $this->handleOperationCompleted($operation->id);
-        }
-    }
-
-    /**
-     * Méthode de polling pour les mises à jour de fusion
-     * Alias de pollOperationStatus pour la rétrocompatibilité
-     */
-    public function pollFusionStatus()
-    {
-        $this->pollOperationStatus();
-    }
-
-
-    /**
-     * Gère la fin d'une opération de fusion
-     *
-     * @param string $operationId
-     */
-    public function handleOperationCompleted($operationId)
-    {
-        if ($this->currentOperationId !== $operationId) return;
-
-        $operation = FusionOperation::find($operationId);
-        if (!$operation) return;
-
-        // Mettre fin au polling
-        $this->dispatchBrowserEvent('stopPolling');
-
-        // Log pour débogage
-        Log::info('Opération terminée', [
-            'operation_id' => $operationId,
-            'type' => $operation->type,
-            'status' => $operation->status
-        ]);
-
-        // Mettre à jour l'interface en fonction du résultat
-        if ($operation->status === 'completed') {
-            $result = $operation->result ?? [];
-
-            if ($operation->type === 'fusion') {
-                // Récupérer l'étape de fusion
-                $this->etapeFusion = $result['stats']['etape_fusion'] ?? 1;
-
-                // Adapter le message selon l'étape
-                $etapeLabel = "";
-                switch ($this->etapeFusion) {
-                    case 1:
-                        $etapeLabel = "Première fusion";
-                        break;
-                    case 2:
-                        $etapeLabel = "Deuxième fusion avec calcul des moyennes";
-                        break;
-                    case 3:
-                        $etapeLabel = "Fusion finale (consolidation)";
-                        break;
-                }
-
-                toastr()->success($etapeLabel . ' terminée avec succès');
-                $this->statut = 'fusion';
-                $this->etapeProgress = 50;
-            } elseif ($operation->type === 'validation') {
-                toastr()->success('Validation terminée avec succès');
-                $this->statut = 'validation';
-                $this->etapeProgress = 75;
-            } elseif ($operation->type === 'publication') {
-                toastr()->success('Publication terminée avec succès');
-                $this->statut = 'publie';
-                $this->etapeProgress = 100;
-            } elseif ($operation->type === 'reset') {
-                toastr()->success('Réinitialisation terminée avec succès');
-                $this->statut = 'verification';
-                $this->etapeProgress = 25;
-                $this->etapeFusion = 1; // Réinitialiser l'étape de fusion
-            }
-        } else {
-            // Log l'erreur pour investigation
-            Log::error('Erreur lors de l\'opération', [
-                'operation_id' => $operationId,
-                'type' => $operation->type,
-                'error' => $operation->error_message ?? 'Erreur inconnue'
-            ]);
-            toastr()->error('Erreur lors de l\'opération: ' . ($operation->error_message ?? 'Une erreur est survenue'));
-        }
-
-        // Rafraîchir les statistiques
-        $this->verifierEtatActuel();
-        $this->currentOperationId = null;
-        $this->currentOperationType = null;
-        $this->isProcessing = false;
-    }
-
-    /**
-     * Exécute une refusion
-     */
-    public function refusionner()
-    {
-        $this->fusionner(true);
-    }
-
-    /**
-     * Réinitialise la fusion
-     */
-    public function resterFusion()
-    {
-        if (!$this->examen_id) {
-            toastr()->error('Aucun examen sélectionné');
-            return;
-        }
-
-        // Vérifier les permissions
         if (!Auth::user()->hasPermissionTo('resultats.reset-fusion')) {
             toastr()->error('Vous n\'avez pas l\'autorisation de réinitialiser la fusion');
             return;
         }
 
-        $this->isProcessing = true;
-
-        try {
-            $fusionService = new FusionService();
-            $result = $fusionService->reinitialiserFusion($this->examen_id);
-
-            if ($result['success']) {
-                // Stocker l'ID de l'opération pour le suivi
-                $this->currentOperationId = $result['operation_id'];
-                $this->currentOperationType = 'reset';
-
-                toastr()->info($result['message']);
-                // Démarrer le polling pour suivre l'avancement
-                $this->dispatchBrowserEvent('startPolling', ['operationId' => $this->currentOperationId]);
-            } else {
-                toastr()->error($result['message']);
-            }
-        } catch (\Exception $e) {
-            toastr()->error('Erreur lors du lancement de la réinitialisation: ' . $e->getMessage());
-            Log::error('Erreur lancement réinitialisation fusion', [
-                'examen_id' => $this->examen_id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-        }
-
-        $this->isProcessing = false;
-        $this->confirmingReset = false;
-    }
-
-    /**
-     * Valide les résultats
-     */
-    public function validerResultats()
-    {
         if (!$this->examen_id) {
             toastr()->error('Aucun examen sélectionné');
             return;
         }
 
-        // Vérifier les permissions
+        $this->isProcessing = true;
+        $this->confirmingReset = false;
+
+        try {
+            $fusionService = new FusionService();
+            $result = $fusionService->resetExam($this->examen_id);
+
+            if ($result['success']) {
+                // Remettre les états à zéro
+                $this->statut = 'verification';
+                $this->etapeProgress = 25;
+                $this->etapeFusion = 0;
+                $this->showResetButton = false;
+                $this->resetResults();
+
+                toastr()->success($result['message']);
+                $this->verifierEtatActuel();
+                $this->switchTab('rapport-stats');
+            } else {
+                toastr()->error($result['message']);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la réinitialisation', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            toastr()->error('Erreur lors de la réinitialisation: ' . $e->getMessage());
+        }
+
+        $this->isProcessing = false;
+    }
+
+    /**
+     * ✅ CORRECTION : Valide ET publie les résultats en une seule étape
+     */
+    public function validerResultats()
+    {
         if (!Auth::user()->hasPermissionTo('resultats.validation')) {
             toastr()->error('Vous n\'avez pas l\'autorisation de valider les résultats');
             return;
         }
 
-        $this->isProcessing = true;
-
-        try {
-            $fusionService = new FusionService();
-            $validation = $fusionService->validerResultats($this->examen_id);
-
-            if ($validation['success']) {
-                toastr()->success($validation['message']);
-                $this->statut = 'validation';
-                $this->etapeProgress = 75;
-                $this->verifierEtatActuel();
-            } else {
-                toastr()->error($validation['message']);
-            }
-        } catch (\Exception $e) {
-            toastr()->error('Erreur lors de la validation: ' . $e->getMessage());
-            Log::error('Erreur validation résultats', [
-                'examen_id' => $this->examen_id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-        }
-
-        $this->isProcessing = false;
-    }
-
-    /**
-     * Publie les résultats
-     */
-    public function publierResultats()
-    {
         if (!$this->examen_id) {
             toastr()->error('Aucun examen sélectionné');
             return;
         }
 
-        // Vérifier les permissions
-        if (!Auth::user()->hasPermissionTo('resultats.publication')) {
-            toastr()->error('Vous n\'avez pas l\'autorisation de publier les résultats');
-            return;
-        }
-
         $this->isProcessing = true;
+        $this->confirmingValidation = false;
 
         try {
             $fusionService = new FusionService();
-            $publication = $fusionService->publierResultats($this->examen_id, $this->estPACES);
+            // ✅ CORRECTION : validerResultats passe maintenant directement au statut PUBLIE
+            $result = $fusionService->validerResultats($this->examen_id);
 
-            if ($publication['success']) {
-                toastr()->success($publication['message']);
-                $this->statut = 'publie';
-                $this->etapeProgress = 100;
+            if ($result['success']) {
+                toastr()->success($result['message']);
                 $this->verifierEtatActuel();
             } else {
-                toastr()->error($publication['message']);
+                toastr()->error($result['message']);
             }
+
         } catch (\Exception $e) {
-            toastr()->error('Erreur lors de la publication: ' . $e->getMessage());
-            Log::error('Erreur publication résultats', [
+            Log::error('Erreur lors de la validation', [
                 'examen_id' => $this->examen_id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+            toastr()->error('Erreur lors de la validation: ' . $e->getMessage());
         }
 
         $this->isProcessing = false;
     }
 
     /**
-     * Exporte les résultats
+     * ✅ SUPPRESSION : Cette méthode n'est plus nécessaire car validation et publication sont fusionnées
+     * La validation passe directement au statut PUBLIE
+     */
+    public function publierResultats()
+    {
+        // Cette méthode n'est plus utilisée dans la logique simplifiée
+        toastr()->info('La validation publie automatiquement les résultats.');
+    }
+
+
+    /**
+     * Obtient le contexte de l'examen pour déterminer le comportement de délibération
+     */
+    public function getContexteExamenProperty()
+    {
+        if (!$this->examen) {
+            return null;
+        }
+
+        $niveau = $this->examen->niveau;
+        $session = $this->examen->session;
+
+        $requiresDeliberation = false;
+
+        // Une délibération est nécessaire si:
+        // 1. C'est une session de rattrapage
+        // 2. Ce n'est pas un niveau de type concours
+        if ($session && $session->isRattrapage() && $niveau && !$niveau->is_concours) {
+            $requiresDeliberation = true;
+        }
+
+        return [
+            'requires_deliberation' => $requiresDeliberation,
+            'is_concours' => $niveau ? $niveau->is_concours : false,
+            'has_rattrapage' => $niveau ? $niveau->has_rattrapage : false,
+            'session_type' => $session ? $session->type : 'N/A',
+            'niveau' => $niveau,
+            'annee_universitaire' => $session && $session->anneeUniversitaire
+                ? $session->anneeUniversitaire->libelle
+                : 'N/A'
+        ];
+    }
+
+    /**
+     * Annule les résultats publiés
+     */
+    public function annulerResultats()
+    {
+        if (!Auth::user()->hasPermissionTo('resultats.cancel')) {
+            toastr()->error('Vous n\'avez pas l\'autorisation d\'annuler les résultats');
+            return;
+        }
+
+        if (!$this->examen_id) {
+            toastr()->error('Aucun examen sélectionné');
+            return;
+        }
+
+        $this->isProcessing = true;
+        $this->confirmingAnnulation = false;
+
+        try {
+            $fusionService = new FusionService();
+            $result = $fusionService->annulerResultats($this->examen_id);
+
+            if ($result['success']) {
+                toastr()->success($result['message']);
+                $this->verifierEtatActuel();
+            } else {
+                toastr()->error($result['message']);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'annulation', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            toastr()->error('Erreur lors de l\'annulation: ' . $e->getMessage());
+        }
+
+        $this->isProcessing = false;
+    }
+
+    /**
+     * ✅ CORRECTION : Remet les résultats annulés à l'état provisoire ou les republie
+     */
+    public function revenirValidation()
+    {
+        if (!Auth::user()->hasPermissionTo('resultats.revert-validation')) {
+            toastr()->error('Vous n\'avez pas l\'autorisation de revenir à l\'état validé');
+            return;
+        }
+
+        if (!$this->examen_id) {
+            toastr()->error('Aucun examen sélectionné');
+            return;
+        }
+
+        $this->isProcessing = true;
+        $this->confirmingRevenirValidation = false;
+
+        try {
+            $fusionService = new FusionService();
+            // ✅ CORRECTION : Cette méthode va maintenant revenir au statut PROVISOIRE
+            $result = $fusionService->revenirValidation($this->examen_id);
+
+            if ($result['success']) {
+                toastr()->success($result['message']);
+                $this->verifierEtatActuel();
+            } else {
+                toastr()->error($result['message']);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du retour à la validation', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            toastr()->error('Erreur lors du retour à la validation: ' . $e->getMessage());
+        }
+
+        $this->isProcessing = false;
+    }
+
+    /**
+     * Fonction d'export des résultats (en développement)
      */
     public function exporterResultats()
     {
@@ -793,17 +869,89 @@ class FusionIndex extends Component
     }
 
     /**
-     * Rendu de la vue
+     * Réinitialise l'examen
+     */
+    public function resetExam()
+    {
+        if (!$this->examen_id) {
+            toastr()->error('Aucun examen sélectionné');
+            return;
+        }
+
+        $this->isProcessing = true;
+        $this->confirmingReset = false;
+
+        try {
+            $fusionService = new FusionService();
+            $result = $fusionService->resetExam($this->examen_id);
+
+            if ($result['success']) {
+                toastr()->success($result['message']);
+
+                // Remettre l'interface à l'état initial
+                $this->verifierEtatActuel();
+                $this->rapportCoherence = [];
+                $this->resultatsStats = [];
+                $this->resetResults();
+
+                // Recharger la page de rapport pour voir l'état vide
+                $this->switchTab('rapport-stats');
+            } else {
+                toastr()->error($result['message']);
+            }
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la réinitialisation dans FusionIndex', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            toastr()->error('Erreur lors de la réinitialisation: ' . $e->getMessage());
+        }
+
+        $this->isProcessing = false;
+    }
+
+    /**
+     * Confirme la réinitialisation complète
+     */
+    public function confirmResetExam()
+    {
+        $this->confirmingReset = true;
+    }
+
+    /**
+     * Annule la confirmation de reset
+     */
+    public function cancelReset()
+    {
+        $this->confirmingReset = false;
+    }
+
+    /**
+     * Rendu du composant
      */
     public function render()
     {
-        $this->statut = 'verification';
         return view('livewire.resultats.fusion-index', [
-            'niveaux' => $this->niveaux,
-            'parcours' => $this->parcours,
-            'ecs' => $this->ecs,
-            'distributionNotes' => $this->distributionNotes,
-            'activeTab' => $this->activeTab
+            'examen' => $this->examen,
+            'statut' => $this->statut,
+            'etapeFusion' => $this->etapeFusion,
+            'etapeProgress' => $this->etapeProgress,
+            'isProcessing' => $this->isProcessing,
+            'activeTab' => $this->activeTab,
+            'examen_id' => $this->examen_id,
+            'estPACES' => $this->estPACES,
+            'confirmingFusion' => $this->confirmingFusion,
+            'confirmingReset' => $this->confirmingReset,
+            'confirmingVerification' => $this->confirmingVerification,
+            'confirmingValidation' => $this->confirmingValidation,
+            'confirmingPublication' => $this->confirmingPublication,
+            'confirmingAnnulation' => $this->confirmingAnnulation,
+            'confirmingRevenirValidation' => $this->confirmingRevenirValidation,
+            'rapportCoherence' => $this->rapportCoherence,
+            'resultatsStats' => $this->resultatsStats,
+            'showVerificationButton' => $this->showVerificationButton,
+            'showResetButton' => $this->showResetButton,
         ]);
     }
 }
