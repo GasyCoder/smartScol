@@ -62,11 +62,11 @@
                     <div class="px-3 py-2 mt-2 text-sm bg-gray-100 rounded-md dark:bg-gray-700">
                         <div class="font-medium text-gray-700 dark:text-gray-300">
                             @if($etapeFusion === 1)
-                                Étape 1: Première fusion 
+                                Étape 1: Première fusion
                             @elseif($etapeFusion === 2)
-                                Étape 2: Seconde fusion 
+                                Étape 2: Seconde fusion
                             @elseif($etapeFusion === 3)
-                                Étape 3: Fusion finale 
+                                Étape 3: Fusion finale
                             @elseif($etapeFusion === 4)
                                 Étape 4: Validation (VALIDE)
                             @else
@@ -159,8 +159,7 @@
                 <div class="mt-3">
                     <div class="flex flex-wrap gap-2">
                         @if($statut === 'fusion' && $etapeFusion >= 1)
-                            <a href="#"
-                                wire:click="switchTab('rapport-stats')"
+                            <a href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
                                 class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
                             >
                                 <em class="icon ni ni-eye mr-1.5"></em>
@@ -260,7 +259,7 @@
                 @if($statut === 'publie')
                     <div class="mt-6 space-y-4">
                         <!-- Actions principales -->
-                        <div class="flex flex-col sm:flex-row gap-3">
+                        <div class="flex flex-col gap-3 sm:flex-row">
                             <a href="{{ route('resultats.finale') }}"
                                 class="inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-green-600 border border-transparent rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:bg-green-700 dark:hover:bg-green-600 min-w-[200px]"
                             >
@@ -279,7 +278,7 @@
                                 </span>
                             </button>
                         </div>
-                        
+
                         <!-- Message informatif pour les résultats publiés -->
                         <div class="p-4 border border-green-200 rounded-lg bg-green-50 dark:bg-green-900/20 dark:border-green-700">
                             <div class="flex items-start space-x-3">
@@ -302,7 +301,7 @@
                 @if($statut === 'annule')
                     <div class="mt-6 space-y-4">
                         <!-- Action de réactivation -->
-                        <div class="flex flex-col sm:flex-row gap-3">
+                        <div class="flex flex-col gap-3 sm:flex-row">
                             <button
                                 wire:click="$set('confirmingRevenirValidation', true)"
                                 wire:loading.attr="disabled"
@@ -315,7 +314,7 @@
                                 </span>
                             </button>
                         </div>
-                        
+
                         <!-- Message informatif pour les résultats annulés -->
                         <div class="p-4 border rounded-lg bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700">
                             <div class="flex items-start space-x-3">
@@ -349,7 +348,7 @@
                 <em class="text-lg icon ni ni-download-cloud"></em>
             </div>
         </div>
-        
+
         <!-- Contenu principal -->
         <div class="flex-1 min-w-0">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -362,9 +361,9 @@
                         Résultats publiés avec succès. Téléchargez les données dans le format de votre choix.
                     </p>
                 </div>
-                
+
                 <!-- Section des boutons d'action -->
-                <div class="flex flex-col sm:flex-row gap-3 sm:ml-6">
+                <div class="flex flex-col gap-3 sm:flex-row sm:ml-6">
                     <!-- Bouton Export Excel -->
                     <button
                         wire:click="exporterExcel"
@@ -379,7 +378,7 @@
                             <em class="animate-spin icon ni ni-loader"></em>
                         </span>
                     </button>
-                    
+
                     <!-- Bouton Export PDF -->
                     <button
                         wire:click="exporterPDF"
