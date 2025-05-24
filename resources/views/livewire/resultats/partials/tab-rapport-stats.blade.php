@@ -3,7 +3,7 @@
 
     <!-- Statistiques de base -->
     @if($resultatsStats && isset($resultatsStats['totalMatieres']) && $resultatsStats['totalMatieres'] > 0)
-        <div class="grid grid-cols-1 gap-4 mb-6 md:grid-cols-3">
+        <div class="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2">
             <div class="p-4 border rounded-lg bg-primary-50 dark:bg-primary-900/10 dark:border-primary-800">
                 <div class="text-sm font-medium text-primary-800 dark:text-primary-300">Total matières fusionnées</div>
                 <div class="mt-1 text-3xl font-semibold text-primary-600 dark:text-primary-200">{{ $resultatsStats['totalMatieres'] ?? 0 }}</div>
@@ -11,10 +11,6 @@
             <div class="p-4 border rounded-lg bg-green-50 dark:bg-green-900/10 dark:border-green-800">
                 <div class="text-sm font-medium text-green-800 dark:text-green-300">Étudiants</div>
                 <div class="mt-1 text-3xl font-semibold text-green-600 dark:text-green-200">{{ $resultatsStats['etudiants'] ?? 0 }}</div>
-            </div>
-            <div class="p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-900/10 dark:border-yellow-800">
-                <div class="text-sm font-medium text-yellow-800 dark:text-yellow-300">Taux d'admission</div>
-                <div class="mt-1 text-3xl font-semibold text-yellow-600 dark:text-yellow-200">{{ $resultatsStats['passRate'] ?? 0 }}%</div>
             </div>
         </div>
     @else
@@ -270,21 +266,21 @@
                                     </div>
                                 </div>
                             </div>
+                        @endif
 
-                            <!-- Bouton "Voir les résultats à vérifier" -->
-                            @if($showVerificationButton && $examen_id)
-                                <div class="mt-4">
-                                    <a
-                                        href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
-                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                    >
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                        </svg>
-                                        Voir les résultats à vérifier
-                                    </a>
-                                </div>
-                            @endif
+                        <!-- Bouton "Voir les résultats à vérifier" -->
+                        @if($statut === 'fusion' && $etapeFusion >= 1 && $examen_id)
+                            <div class="mt-4">
+                                <a
+                                    href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
+                                    class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                >
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    Voir les résultats à vérifier
+                                </a>
+                            </div>
                         @endif
                     </div>
                 @endif

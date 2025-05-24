@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('niveau_id')->comment('Niveau concerné');
             $table->unsignedBigInteger('session_id')->comment('Session d\'examen');
+            $table->unsignedBigInteger('examen_id')->nullable();
             $table->unsignedBigInteger('annee_universitaire_id')->comment('Année universitaire');
             $table->dateTime('date_deliberation');
 
@@ -59,7 +60,9 @@ return new class extends Migration
 
             $table->timestamps();
 
+
             // Clés étrangères (inchangées)
+            $table->foreign('examen_id')->references('id')->on('examens')->onDelete('set null');
             $table->foreign('niveau_id')->references('id')->on('niveaux')->onDelete('cascade');
             $table->foreign('session_id')->references('id')->on('session_exams')->onDelete('cascade');
             $table->foreign('annee_universitaire_id')->references('id')->on('annees_universitaires')->onDelete('cascade');

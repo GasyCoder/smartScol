@@ -2,255 +2,158 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\Deliberation;
-use App\Models\Niveau;
-use App\Models\SessionExam;
 use App\Models\AnneeUniversitaire;
+use App\Models\Deliberation;
+use App\Models\Etudiant;
+use App\Models\Examen;
+use App\Models\Niveau;
+use App\Models\ResultatFinal;
+use App\Models\SessionExam;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
 
 class DeliberationSeeder extends Seeder
 {
-    /**
-     * Crée automatiquement toutes les délibérations nécessaires selon les règles métier
-     * Version adaptée pour le modèle Deliberation refactorisé
-     */
     public function run()
     {
-        $this->command->info('🎯 Début de la création des délibérations...');
+        $this->command->info('🎯 Création des délibérations...');
 
-        // Récupérer l'année universitaire active
-        $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
-
-        if (!$anneeActive) {
-            $this->command->error('❌ Aucune année universitaire active trouvée. Veuillez d\'abord exécuter AnneeUniversitaireSeeder.');
+        // Récupérer l'utilisateur superadmin créé par DatabaseSeeder
+        $adminUser = User::where('email', 'admin@example.com')->first();
+        if (!$adminUser) {
+            $this->command->error('❌ Utilisateur admin@example.com non trouvé. Vérifiez DatabaseSeeder.');
+            Log::error('DeliberationSeeder: Utilisateur admin@example.com non trouvé.');
             return;
         }
 
-        $this->command->info("📅 Année universitaire active : {$anneeActive->date_start->format('Y')} - {$anneeActive->date_end->format('Y')}");
+        // Vérifier l'année universitaire active
+        $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+        if (!$anneeActive) {
+            $this->command->error('❌ Aucune année universitaire active trouvée.');
+            Log::error('DeliberationSeeder: Aucune année universitaire active.');
+            return;
+        }
 
-        // Récupérer tous les niveaux qui peuvent avoir des délibérations
-        $niveauxAvecDeliberation = Niveau::where('is_active', true)
+        // Récupérer les niveaux avec rattrapage
+        $niveaux = Niveau::where('is_active', true)
             ->where('has_rattrapage', true)
             ->where('is_concours', false)
-            ->with('parcours')
             ->get();
 
-        if ($niveauxAvecDeliberation->isEmpty()) {
-            $this->command->warn('⚠️ Aucun niveau nécessitant des délibérations trouvé.');
-            $this->command->info('💡 Vérifiez que vos niveaux ont has_rattrapage=true et is_concours=false');
+        if ($niveaux->isEmpty()) {
+            $this->command->warn('⚠️ Aucun niveau avec rattrapage trouvé.');
+            Log::warning('DeliberationSeeder: Aucun niveau avec has_rattrapage=true et is_concours=false.');
             return;
         }
 
-        $this->command->info("🎓 Niveaux concernés : " . $niveauxAvecDeliberation->pluck('nom')->join(', '));
-
-        // Récupérer toutes les sessions de rattrapage pour l'année active
+        // Récupérer les sessions de rattrapage
         $sessionsRattrapage = SessionExam::where('annee_universitaire_id', $anneeActive->id)
             ->where('type', 'Rattrapage')
             ->get();
 
         if ($sessionsRattrapage->isEmpty()) {
-            $this->command->error('❌ Aucune session de rattrapage trouvée pour cette année universitaire.');
+            $this->command->error('❌ Aucune session de rattrapage trouvée.');
+            Log::error('DeliberationSeeder: Aucune session de rattrapage.');
             return;
         }
 
-        $this->command->info("📝 Sessions de rattrapage : " . $sessionsRattrapage->count());
-
         $compteurDeliberations = 0;
-        $deliberationsCreees = [];
 
-        // Définir les paramètres par défaut pour les délibérations
-        // Ces valeurs seront remplacées par des configurations d'application à l'avenir
-        $parametresDefaut = $this->obtenirParametresDefaut();
-
-        // Créer les délibérations selon les règles métier
-        foreach ($niveauxAvecDeliberation as $niveau) {
-            // Adapter les paramètres selon le niveau si nécessaire
-            $parametresNiveau = $this->ajusterParametresSelonNiveau($parametresDefaut, $niveau);
-
+        foreach ($niveaux as $niveau) {
             foreach ($sessionsRattrapage as $session) {
-                // Vérifier si la délibération existe déjà
-                $deliberationExistante = Deliberation::where('niveau_id', $niveau->id)
+                // Récupérer les examens pour ce niveau et cette session
+                $examens = Examen::where('niveau_id', $niveau->id)
                     ->where('session_id', $session->id)
-                    ->where('annee_universitaire_id', $anneeActive->id)
-                    ->first();
+                    ->with('ecs')
+                    ->get();
 
-                if ($deliberationExistante) {
-                    $this->command->warn("⚠️ Délibération déjà existante : {$niveau->nom} - Session {$session->type}");
+                if ($examens->isEmpty()) {
+                    $this->command->warn("⚠️ Aucun examen pour {$niveau->nom} dans la session {$session->type}.");
+                    Log::warning("DeliberationSeeder: Aucun examen pour niveau_id={$niveau->id}, session_id={$session->id}.");
                     continue;
                 }
 
-                // Calculer la date de délibération
-                $dateDeliberation = $this->calculerDateDeliberation($session);
+                foreach ($examens as $examen) {
+                    // Vérifier si une délibération existe déjà
+                    if (Deliberation::where('niveau_id', $niveau->id)
+                        ->where('session_id', $session->id)
+                        ->where('examen_id', $examen->id)
+                        ->exists()
+                    ) {
+                        $this->command->info("ℹ️ Délibération déjà existante pour {$niveau->nom} - Examen ID {$examen->id}.");
+                        continue;
+                    }
 
-                // Créer la délibération avec les nouveaux champs
-                $deliberation = Deliberation::create([
-                    'niveau_id' => $niveau->id,
-                    'session_id' => $session->id,
-                    'annee_universitaire_id' => $anneeActive->id,
-                    'date_deliberation' => $dateDeliberation,
-                    'statut' => Deliberation::STATUT_PROGRAMMEE,
-                    'observations' => $this->genererObservationsParDefaut($niveau, $session, $parametresNiveau),
+                    // Appliquer les paramètres par défaut du modèle
+                    $params = Deliberation::getDefaultParamsForNiveau($niveau);
 
-                    // Paramètres de délibération
-                    'seuil_admission' => $parametresNiveau['seuil_admission'],
-                    'seuil_rachat' => $parametresNiveau['seuil_rachat'],
-                    'pourcentage_ue_requises' => $parametresNiveau['pourcentage_ue_requises'],
-                    'appliquer_regles_auto' => $parametresNiveau['appliquer_regles_auto'],
+                    // Créer la délibération
+                    $deliberation = Deliberation::create([
+                        'niveau_id' => $niveau->id,
+                        'session_id' => $session->id,
+                        'examen_id' => $examen->id,
+                        'annee_universitaire_id' => $anneeActive->id,
+                        'date_deliberation' => Carbon::parse($session->date_end)->addDays(3)->startOfDay()->addHours(14),
+                        'statut' => Deliberation::STATUT_PROGRAMMEE,
+                        'seuil_admission' => $params['seuil_admission'],
+                        'seuil_rachat' => $params['seuil_rachat'],
+                        'pourcentage_ue_requises' => $params['pourcentage_ue_requises'],
+                        'appliquer_regles_auto' => $params['appliquer_regles_auto'],
+                        'observations' => "Délibération pour {$niveau->nom} - Session {$session->type} - Examen: " . $examen->ecs->pluck('nom')->join(', '),
+                    ]);
 
-                    // Statistiques initialisées
-                    'nombre_admis' => 0,
-                    'nombre_ajournes' => 0,
-                    'nombre_exclus' => 0,
-                    'nombre_rachats' => 0
+                    // Créer des données de test
+                    $this->creerDonneesTest($deliberation, $examen, $adminUser->id);
+
+                    $compteurDeliberations++;
+                    $this->command->info("✅ Délibération créée : {$niveau->nom} - Examen ID {$examen->id} - {$session->type}");
+                }
+            }
+        }
+
+        $this->command->info("📊 Résultat : {$compteurDeliberations} délibérations créées.");
+    }
+
+    private function creerDonneesTest($deliberation, $examen, $userId)
+    {
+        // Récupérer jusqu'à 5 étudiants actifs pour ce niveau
+        $etudiants = Etudiant::where('niveau_id', $deliberation->niveau_id)
+            ->where('is_active', true)
+            ->take(5)
+            ->get();
+
+        if ($etudiants->isEmpty()) {
+            $this->command->warn("⚠️ Aucun étudiant actif pour {$deliberation->niveau->nom}.");
+            Log::warning("DeliberationSeeder: Aucun étudiant pour niveau_id={$deliberation->niveau_id}.");
+            return;
+        }
+
+        // Récupérer les ECs de l'examen
+        $ecs = $examen->ecs;
+
+        if ($ecs->isEmpty()) {
+            $this->command->warn("⚠️ Aucun EC pour l'examen ID {$examen->id}.");
+            Log::warning("DeliberationSeeder: Aucun EC pour examen_id={$examen->id}.");
+            return;
+        }
+
+        foreach ($etudiants as $etudiant) {
+            foreach ($ecs as $ec) {
+                // Créer un résultat final pour chaque étudiant et EC
+                ResultatFinal::create([
+                    'deliberation_id' => $deliberation->id,
+                    'examen_id' => $examen->id,
+                    'etudiant_id' => $etudiant->id,
+                    'ec_id' => $ec->id,
+                    'note' => rand(0, 2000) / 100, // Note aléatoire entre 0 et 20
+                    'statut' => ResultatFinal::STATUT_EN_ATTENTE,
+                    'genere_par' => $userId,
                 ]);
-
-                $deliberationsCreees[] = [
-                    'niveau' => $niveau->nom,
-                    'session' => $session->type,
-                    'date' => $dateDeliberation->format('d/m/Y H:i'),
-                    'seuil_admission' => $parametresNiveau['seuil_admission'],
-                    'seuil_rachat' => $parametresNiveau['seuil_rachat']
-                ];
-
-                $compteurDeliberations++;
-
-                $this->command->info("✅ Délibération créée : {$niveau->nom} - {$session->type} - {$dateDeliberation->format('d/m/Y')}");
             }
         }
 
-        // Rapport final et suggestions
-        $this->afficherRapportFinal($compteurDeliberations, $deliberationsCreees, $anneeActive);
-        $this->afficherSuggestions();
-    }
-
-    /**
-     * Obtient les paramètres par défaut pour les délibérations
-     * Ces paramètres seront ultérieurement configurables dans l'application
-     */
-    private function obtenirParametresDefaut()
-    {
-        return [
-            'seuil_admission' => 10.00,      // Moyenne minimale pour admission directe
-            'seuil_rachat' => 9.75,          // Moyenne minimale pour rachat (admission conditionnelle)
-            'pourcentage_ue_requises' => 80,  // % d'UE à valider pour être admis
-            'appliquer_regles_auto' => true   // Appliquer automatiquement les règles
-        ];
-    }
-
-    /**
-     * Ajuste les paramètres selon le niveau d'études
-     * Permet une personnalisation des règles par niveau
-     */
-    private function ajusterParametresSelonNiveau($parametresDefaut, $niveau)
-    {
-        $parametres = $parametresDefaut;
-
-        // Exemples d'ajustements spécifiques par niveau
-        switch ($niveau->abr) {
-            case 'L2':
-                // Plus flexible pour le niveau L2
-                $parametres['seuil_rachat'] = 9.50;
-                break;
-            case 'M2':
-                // Plus strict pour le niveau M2
-                $parametres['seuil_admission'] = 10.50;
-                $parametres['pourcentage_ue_requises'] = 90;
-                break;
-            case 'D1':
-                // Très strict pour le doctorat
-                $parametres['seuil_admission'] = 12.00;
-                $parametres['seuil_rachat'] = 11.00;
-                $parametres['pourcentage_ue_requises'] = 100;
-                break;
-        }
-
-        return $parametres;
-    }
-
-    /**
-     * Calcule la date de délibération en fonction de la session
-     */
-    private function calculerDateDeliberation($session)
-    {
-        // Commencer 3 jours après la fin de session pour laisser le temps aux corrections
-        $dateBase = Carbon::parse($session->date_end)->addDays(3);
-
-        // Ajuster pour éviter les week-ends
-        while ($dateBase->isWeekend()) {
-            $dateBase->addDay();
-        }
-
-        // Programmer à 14h00 par défaut
-        $dateBase->setTime(14, 0, 0);
-
-        return $dateBase;
-    }
-
-    /**
-     * Génère des observations par défaut avec informations sur les critères
-     */
-    private function genererObservationsParDefaut($niveau, $session, $parametres)
-    {
-        $observations = "Délibération programmée automatiquement pour le niveau {$niveau->nom} - Session {$session->type}.\n";
-
-        if ($niveau->has_parcours) {
-            $observations .= "Niveau avec parcours multiples - Attention aux spécificités de chaque parcours.\n";
-        }
-
-        // Inclure les critères spécifiques de la délibération
-        $observations .= "Critères de validation :\n";
-        $observations .= "- Moyenne minimale pour admission directe : {$parametres['seuil_admission']}\n";
-        $observations .= "- Moyenne minimale pour rachat possible : {$parametres['seuil_rachat']}\n";
-        $observations .= "- Pourcentage d'UE requises : {$parametres['pourcentage_ue_requises']}%\n";
-
-        $observations .= "\nDécisions possibles : Admis, Admis conditionnellement, Ajourné, Exclu.\n";
-
-        return $observations;
-    }
-
-    /**
-     * Affiche le rapport de création des délibérations
-     */
-    private function afficherRapportFinal($compteur, $deliberations, $anneeActive)
-    {
-        $this->command->info('');
-        $this->command->info('📊 ===== RAPPORT DE CRÉATION DES DÉLIBÉRATIONS =====');
-        $this->command->info("🎓 Année universitaire : {$anneeActive->date_start->format('Y')} - {$anneeActive->date_end->format('Y')}");
-        $this->command->info("📝 Nombre de délibérations créées : {$compteur}");
-        $this->command->info('');
-
-        if (!empty($deliberations)) {
-            $this->command->info('📋 Détail des délibérations créées :');
-            foreach ($deliberations as $delib) {
-                $this->command->info(
-                    "   • {$delib['niveau']} - {$delib['session']} - {$delib['date']} " .
-                    "(Seuils: {$delib['seuil_admission']}/{$delib['seuil_rachat']})"
-                );
-            }
-        }
-
-        $this->command->info('');
-        $this->command->info('✅ Toutes les délibérations ont été créées avec succès !');
-    }
-
-    /**
-     * Affiche des suggestions pour l'utilisation des délibérations
-     */
-    private function afficherSuggestions()
-    {
-        $this->command->info('');
-        $this->command->info('💡 ===== SUGGESTIONS POUR LA SUITE =====');
-        $this->command->info('🔧 Vous pouvez maintenant :');
-        $this->command->info('   1. Modifier les dates de délibération via l\'interface d\'administration');
-        $this->command->info('   2. Ajuster les seuils d\'admission et de rachat pour chaque délibération');
-        $this->command->info('   3. Personnaliser le pourcentage d\'UE requises selon les niveaux');
-        $this->command->info('   4. Planifier les membres du jury de délibération');
-        $this->command->info('');
-        $this->command->info('📝 Note: Les paramètres de délibération sont actuellement définis par niveau.');
-        $this->command->info('   À l\'avenir, ils seront configurables dans les paramètres de l\'application.');
-        $this->command->info('');
+        $this->command->info("✅ Données de test créées pour la délibération ID {$deliberation->id}.");
     }
 }

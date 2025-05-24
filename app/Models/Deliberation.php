@@ -6,17 +6,16 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\CalculAcademiqueService;
 
 class Deliberation extends Model
 {
     use HasFactory;
 
-    /**
-     * Les attributs assignables en masse.
-     */
     protected $fillable = [
         'niveau_id',
         'session_id',
+        'examen_id',
         'annee_universitaire_id',
         'date_deliberation',
         'statut',
@@ -35,9 +34,6 @@ class Deliberation extends Model
         'finalise_par'
     ];
 
-    /**
-     * Les attributs à convertir.
-     */
     protected $casts = [
         'date_deliberation' => 'datetime',
         'date_finalisation' => 'datetime',
@@ -53,22 +49,22 @@ class Deliberation extends Model
         'nombre_rachats' => 'integer'
     ];
 
-    // Constantes pour les statuts de délibération
-    const STATUT_PROGRAMMEE = 'programmee';    // Délibération programmée mais pas encore tenue
-    const STATUT_EN_COURS = 'en_cours';        // Délibération en cours de déroulement
-    const STATUT_TERMINEE = 'terminee';        // Délibération terminée, décisions prises
-    const STATUT_VALIDEE = 'validee';          // Délibération validée et résultats publiés
-    const STATUT_ANNULEE = 'annulee';          // Délibération annulée
+    // Constantes de statut
+    const STATUT_PROGRAMMEE = 'programmee';
+    const STATUT_EN_COURS = 'en_cours';
+    const STATUT_TERMINEE = 'terminee';
+    const STATUT_VALIDEE = 'validee';
+    const STATUT_ANNULEE = 'annulee';
 
-    // Constantes pour les décisions
-    const DECISION_ADMIS = 'admis';
-    const DECISION_AJOURNE = 'ajourne';
-    const DECISION_ADMIS_CONDITIONNELLEMENT = 'admis_conditionnellement';
-    const DECISION_EXCLUS = 'exclus';
+    // Constantes des règles métier
+    const CREDITS_TOTAL_ANNEE = 60;
+    const CREDITS_PAR_UE = 5;
+    const CREDITS_ADMISSION_SESSION_1 = 60;
+    const CREDITS_ADMISSION_CONDITIONNELLE_SESSION_2 = 40;
+    const NOTE_VALIDATION_UE = 10.00;
+    const NOTE_ELIMINATOIRE = 0;
 
-    /**
-     * Relations avec d'autres modèles.
-     */
+    // Relations
     public function niveau()
     {
         return $this->belongsTo(Niveau::class);
@@ -77,6 +73,11 @@ class Deliberation extends Model
     public function session()
     {
         return $this->belongsTo(SessionExam::class, 'session_id');
+    }
+
+    public function examen()
+    {
+        return $this->belongsTo(Examen::class);
     }
 
     public function anneeUniversitaire()
@@ -94,25 +95,12 @@ class Deliberation extends Model
         return $this->belongsTo(User::class, 'finalise_par');
     }
 
-    /**
-     * Relation avec les résultats concernés par cette délibération.
-     */
-    public function resultats()
+    public function resultatsFinaux()
     {
-        return $this->hasMany(Resultat::class);
+        return $this->hasMany(ResultatFinal::class);
     }
 
-    /**
-     * Relation avec les décisions prises lors de cette délibération.
-     */
-    public function decisions()
-    {
-        return $this->hasMany(Decision::class);
-    }
-
-    /**
-     * Retourne les libellés des statuts.
-     */
+    // Accesseurs et méthodes statiques
     public static function getLibellesStatuts()
     {
         return [
@@ -124,49 +112,36 @@ class Deliberation extends Model
         ];
     }
 
-    /**
-     * Retourne les libellés des décisions.
-     */
     public static function getLibellesDecisions()
     {
-        return [
-            self::DECISION_ADMIS => 'Admis',
-            self::DECISION_AJOURNE => 'Ajourné',
-            self::DECISION_ADMIS_CONDITIONNELLEMENT => 'Admis conditionnellement',
-            self::DECISION_EXCLUS => 'Exclu'
-        ];
+        return ResultatFinal::getLibellesDecisions();
     }
 
-    /**
-     * Accesseur pour le libellé du statut.
-     */
     public function getLibelleStatutAttribute()
     {
         $libelles = self::getLibellesStatuts();
         return $libelles[$this->statut] ?? 'Statut inconnu';
     }
 
-    /**
-     * Vérifie si la délibération peut être démarrée.
-     */
+    // Vérifications et prérequis
     public function verifierPrerequisDeliberation()
     {
         $errors = [];
 
-        // 1. Vérifier que c'est bien une session de rattrapage
         if (!$this->session || !$this->session->isRattrapage()) {
             $errors[] = "La délibération ne peut avoir lieu que pour une session de rattrapage";
         }
 
-        // 2. Vérifier que ce n'est pas PACES (niveau concours)
         if ($this->niveau && $this->niveau->is_concours) {
             $errors[] = "Aucune délibération n'est prévue pour les niveaux de concours";
         }
 
+        if (!$this->examen_id) {
+            $errors[] = "Aucun examen spécifié pour cette délibération";
+        }
 
-        // 4. Vérifier que tous les résultats sont saisis
-        if (!$this->tousResultatsSaisis()) {
-            $errors[] = "Tous les résultats doivent être saisis avant la délibération";
+        if (!$this->tousResultatsFinauxSaisis()) {
+            $errors[] = "Tous les résultats finaux doivent être saisis (statut 'en_attente') avant la délibération";
         }
 
         return [
@@ -175,56 +150,37 @@ class Deliberation extends Model
         ];
     }
 
-    /**
-     * Vérifie si tous les résultats nécessaires sont saisis.
-     */
-    public function tousResultatsSaisis()
+    public function tousResultatsFinauxSaisis()
     {
-        // Récupérer tous les examens concernés par cette délibération
-        $examens = Examen::where('niveau_id', $this->niveau_id)
-            ->where('session_id', $this->session_id)
-            ->get();
-
-        if ($examens->isEmpty()) {
+        if (!$this->examen_id) {
             return false;
         }
 
-        // Récupérer les étudiants concernés
         $etudiants = $this->getEtudiantsConcernes();
 
-        // Pour chaque examen et chaque étudiant, vérifier que les résultats existent
-        foreach ($examens as $examen) {
-            foreach ($etudiants as $etudiantId) {
-                $resultatsCount = Resultat::where('examen_id', $examen->id)
-                    ->where('etudiant_id', $etudiantId)
-                    ->where('statut', Resultat::STATUT_PROVISOIRE)
-                    ->count();
+        foreach ($etudiants as $etudiantId) {
+            $resultatCount = ResultatFinal::where('examen_id', $this->examen_id)
+                ->where('etudiant_id', $etudiantId)
+                ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+                ->count();
 
-                if ($resultatsCount === 0) {
-                    return false;
-                }
+            if ($resultatCount === 0) {
+                return false;
             }
         }
 
         return true;
     }
 
-    /**
-     * Retourne les IDs des étudiants concernés par cette délibération.
-     */
     public function getEtudiantsConcernes()
     {
-        // Récupérer les étudiants du niveau concerné
         $etudiantsQuery = Etudiant::where('niveau_id', $this->niveau_id)
             ->where('is_active', true);
 
-        // Si le niveau a des parcours, filtrer par parcours
         if ($this->niveau->has_parcours && isset($this->parcours_id)) {
             $etudiantsQuery->where('parcours_id', $this->parcours_id);
         }
 
-        // Pour les délibérations de rattrapage, filtrer les étudiants qui ont eu
-        // la décision "rattrapage" en première session
         if ($this->session && $this->session->isRattrapage()) {
             $etudiantsEnRattrapage = $this->getEtudiantsEnRattrapage();
             $etudiantsQuery->whereIn('id', $etudiantsEnRattrapage);
@@ -233,12 +189,8 @@ class Deliberation extends Model
         return $etudiantsQuery->pluck('id')->toArray();
     }
 
-    /**
-     * Récupère les IDs des étudiants qui doivent passer le rattrapage.
-     */
     private function getEtudiantsEnRattrapage()
     {
-        // Trouver la session normale correspondante
         $sessionNormale = SessionExam::where('annee_universitaire_id', $this->annee_universitaire_id)
             ->where('type', 'Normale')
             ->first();
@@ -247,52 +199,49 @@ class Deliberation extends Model
             return [];
         }
 
-        // Récupérer les résultats de la session normale avec décision "rattrapage"
-        return Resultat::whereHas('examen', function($query) use ($sessionNormale) {
-                $query->where('niveau_id', $this->niveau_id)
-                      ->where('session_id', $sessionNormale->id);
-            })
-            ->where('decision', Resultat::DECISION_RATTRAPAGE)
-            ->distinct()
-            ->pluck('etudiant_id')
-            ->toArray();
+        $deliberationsNormale = Deliberation::where('session_id', $sessionNormale->id)
+            ->where('niveau_id', $this->niveau_id)
+            ->pluck('id');
+
+        $etudiantsAjournés = [];
+        foreach ($deliberationsNormale as $delibId) {
+            $decisions = Deliberation::find($delibId)->decisions_speciales ?? [];
+            foreach ($decisions as $etudiantId => $decisionData) {
+                if ($decisionData['decision'] === ResultatFinal::DECISION_ADMIS ||
+                    $decisionData['decision'] === ResultatFinal::DECISION_RATTRAPAGE) {
+                    $etudiantsAjournés[] = $etudiantId;
+                }
+            }
+        }
+
+        return array_unique($etudiantsAjournés);
     }
 
-    /**
-     * Démarre la délibération.
-     */
+    // Processus de délibération
     public function demarrer($userId)
     {
-        // Vérifier les prérequis
         $verification = $this->verifierPrerequisDeliberation();
         if (!$verification['valide']) {
             throw new \Exception('Impossible de démarrer la délibération : ' . implode(', ', $verification['erreurs']));
         }
 
         DB::beginTransaction();
-
         try {
-            // Changer le statut
             $this->statut = self::STATUT_EN_COURS;
             $this->save();
 
-            // Associer les résultats provisoires
-            $this->associerResultatsProvisoires();
-
-            // Si règles automatiques activées, les appliquer
             if ($this->appliquer_regles_auto) {
                 $this->appliquerReglesAutomatiques();
             }
 
             DB::commit();
-
             Log::info('Délibération démarrée', [
                 'deliberation_id' => $this->id,
                 'niveau' => $this->niveau->nom,
+                'examen' => $this->examen->nom,
                 'session' => $this->session->type,
                 'demarre_par' => $userId
             ]);
-
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
@@ -304,32 +253,6 @@ class Deliberation extends Model
         }
     }
 
-    /**
-     * Associe les résultats provisoires à cette délibération.
-     */
-    public function associerResultatsProvisoires()
-    {
-        $examens = Examen::where('niveau_id', $this->niveau_id)
-            ->where('session_id', $this->session_id)
-            ->get();
-
-        $count = 0;
-
-        foreach ($examens as $examen) {
-            $updated = Resultat::where('examen_id', $examen->id)
-                ->where('statut', Resultat::STATUT_PROVISOIRE)
-                ->whereNull('deliberation_id')
-                ->update(['deliberation_id' => $this->id]);
-
-            $count += $updated;
-        }
-
-        return $count;
-    }
-
-    /**
-     * Applique les règles automatiques de délibération.
-     */
     public function appliquerReglesAutomatiques()
     {
         if ($this->statut !== self::STATUT_EN_COURS) {
@@ -337,218 +260,289 @@ class Deliberation extends Model
         }
 
         $etudiants = $this->getEtudiantsConcernes();
+        $decisions = [];
+        $statistiques = [
+            'admis' => 0,
+            'admis_conditionnellement' => 0,
+            'ajournes' => 0,
+            'redoublants' => 0,
+            'elimines' => 0
+        ];
 
-        $admis = 0;
-        $ajournes = 0;
-        $rachats = 0;
-        $exclus = 0;
+        $isSessionRattrapage = $this->session->isRattrapage();
 
         foreach ($etudiants as $etudiantId) {
+            // Calculer les crédits validés et vérifier les notes éliminatoires
+            $resultatsCredits = $this->calculerCreditsValidesEtudiant($etudiantId);
+            $creditsValides = $resultatsCredits['total_credits_valides'];
+
+            // Vérifier s'il y a des notes éliminatoires
+            $hasNoteEliminatoire = $this->verifierNoteEliminatoire($etudiantId);
+
             // Calculer la moyenne générale
-            $moyenne = $this->calculerMoyenneEtudiant($etudiantId);
+            $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiantId);
 
-            // Calculer le pourcentage d'UE validées
-            $pourcentageUE = $this->calculerPourcentageUEValidees($etudiantId);
+            // Déterminer la décision selon les règles métier
+            $decision = $this->determinerDecisionAutomatique($creditsValides, $hasNoteEliminatoire, $isSessionRattrapage);
 
-            // Déterminer la décision automatique
-            $decision = $this->determinerDecisionAutomatique($moyenne, $pourcentageUE);
+            // Convertir la décision en format attendu par le système
+            $decisionFinale = $this->convertirDecision($decision, $isSessionRattrapage);
 
-            // Créer ou mettre à jour la décision
-            $this->enregistrerDecision($etudiantId, $decision, $moyenne);
+            // Enregistrer la décision avec tous les détails
+            $decisions[$etudiantId] = [
+                'decision' => $decisionFinale,
+                'decision_brute' => $decision,
+                'moyenne_generale' => $moyenneGenerale,
+                'credits_valides' => $creditsValides,
+                'credits_requis' => self::CREDITS_TOTAL_ANNEE,
+                'pourcentage_credits' => $resultatsCredits['pourcentage_credits'],
+                'has_note_eliminatoire' => $hasNoteEliminatoire,
+                'details_ue' => $resultatsCredits['details_ue'],
+                'observations' => $this->genererObservationsEtudiant($decision, $creditsValides, $hasNoteEliminatoire),
+                'points_jury' => 0,
+                'date_deliberation' => now()
+            ];
 
-            // Comptabiliser
-            switch ($decision) {
-                case self::DECISION_ADMIS:
-                    $admis++;
-                    break;
-                case self::DECISION_ADMIS_CONDITIONNELLEMENT:
-                    $rachats++;
-                    break;
-                case self::DECISION_AJOURNE:
-                    $ajournes++;
-                    break;
-                case self::DECISION_EXCLUS:
-                    $exclus++;
-                    break;
-            }
+            // Mettre à jour le résultat final
+            $this->mettreAJourResultatFinal($etudiantId, $decisionFinale, $decisions[$etudiantId]);
+
+            // Mettre à jour les statistiques
+            $this->mettreAJourStatistiquesDecision($statistiques, $decision);
         }
 
-        // Mettre à jour les statistiques
-        $this->nombre_admis = $admis;
-        $this->nombre_ajournes = $ajournes;
-        $this->nombre_exclus = $exclus;
-        $this->nombre_rachats = $rachats;
+        // Sauvegarder toutes les décisions et statistiques
+        $this->decisions_speciales = $decisions;
+        $this->nombre_admis = $statistiques['admis'];
+        $this->nombre_ajournes = $statistiques['ajournes'] + $statistiques['redoublants'];
+        $this->nombre_rachats = $statistiques['admis_conditionnellement'];
+        $this->nombre_exclus = $statistiques['elimines'];
         $this->save();
+
+        Log::info('Délibération automatique appliquée', [
+            'deliberation_id' => $this->id,
+            'session_type' => $isSessionRattrapage ? 'Rattrapage' : 'Normale',
+            'nombre_etudiants' => count($etudiants),
+            'statistiques' => $statistiques
+        ]);
 
         return true;
     }
 
-    /**
-     * Calcule la moyenne générale d'un étudiant pour cette délibération.
-     */
-    public function calculerMoyenneEtudiant($etudiantId)
+    // Calculs académiques
+    public function calculerCreditsValidesEtudiant($etudiantId)
     {
-        // Récupérer tous les résultats de l'étudiant pour cette délibération
-        $resultats = Resultat::whereHas('examen', function($query) {
-                $query->where('niveau_id', $this->niveau_id)
-                      ->where('session_id', $this->session_id);
-            })
-            ->where('etudiant_id', $etudiantId)
-            ->with('ec')
+        $ues = UE::where('niveau_id', $this->niveau_id)
+            ->with(['ecs' => function($query) use ($etudiantId) {
+                $query->with(['resultatsFinaux' => function($q) use ($etudiantId) {
+                    $q->where('etudiant_id', $etudiantId)
+                      ->where('examen_id', $this->examen_id);
+                }]);
+            }])
             ->get();
 
-        if ($resultats->isEmpty()) {
-            return 0;
-        }
+        $totalCreditsValides = 0;
+        $detailsUE = [];
 
-        // Grouper par UE et calculer les moyennes d'UE
-        $resultatsParUE = $resultats->groupBy('ec.ue_id');
-        $moyennesUE = [];
+        foreach ($ues as $ue) {
+            $notesEC = [];
+            $hasNoteZero = false;
 
-        foreach ($resultatsParUE as $ueId => $resultatsUE) {
-            $ue = $resultatsUE->first()->ec->ue;
+            foreach ($ue->ecs as $ec) {
+                $resultat = $ec->resultatsFinaux->first();
+                if ($resultat) {
+                    $note = $resultat->note;
+                    $notesEC[] = $note;
 
-            // Calculer la moyenne pondérée par les coefficients
-            $totalPoints = 0;
-            $totalCoefficients = 0;
-
-            foreach ($resultatsUE as $resultat) {
-                $coef = $resultat->ec->coefficient ?? 1;
-                $totalPoints += $resultat->note * $coef;
-                $totalCoefficients += $coef;
+                    if ($note == self::NOTE_ELIMINATOIRE) {
+                        $hasNoteZero = true;
+                    }
+                }
             }
 
-            $moyenneUE = $totalCoefficients > 0 ? $totalPoints / $totalCoefficients : 0;
-            $moyennesUE[$ueId] = [
-                'moyenne' => $moyenneUE,
-                'credits' => $ue->credits ?? 1
+            $moyenneUE = 0;
+            $creditsUE = 0;
+
+            if ($hasNoteZero) {
+                $moyenneUE = 0;
+                $creditsUE = 0;
+            } elseif (count($notesEC) > 0) {
+                $moyenneUE = array_sum($notesEC) / count($notesEC);
+
+                if ($moyenneUE >= self::NOTE_VALIDATION_UE) {
+                    $creditsUE = $ue->credits;
+                    $totalCreditsValides += $creditsUE;
+                }
+            }
+
+            $detailsUE[] = [
+                'ue_id' => $ue->id,
+                'ue_nom' => $ue->nom,
+                'moyenne' => round($moyenneUE, 2),
+                'credits_obtenus' => $creditsUE,
+                'credits_ue' => $ue->credits,
+                'validee' => $creditsUE > 0,
+                'eliminee' => $hasNoteZero
             ];
         }
 
-        // Calculer la moyenne générale pondérée par les crédits
-        $totalPoints = 0;
-        $totalCredits = 0;
-
-        foreach ($moyennesUE as $ueData) {
-            $totalPoints += $ueData['moyenne'] * $ueData['credits'];
-            $totalCredits += $ueData['credits'];
-        }
-
-        return $totalCredits > 0 ? round($totalPoints / $totalCredits, 2) : 0;
+        return [
+            'total_credits_valides' => $totalCreditsValides,
+            'total_credits_requis' => self::CREDITS_TOTAL_ANNEE,
+            'details_ue' => $detailsUE,
+            'pourcentage_credits' => round(($totalCreditsValides / self::CREDITS_TOTAL_ANNEE) * 100, 2)
+        ];
     }
 
-    /**
-     * Calcule le pourcentage d'UE validées par un étudiant.
-     */
-    public function calculerPourcentageUEValidees($etudiantId)
+    public function calculerMoyenneGeneraleEtudiant($etudiantId)
     {
-        // Récupérer toutes les UE du niveau
-        $ues = UE::where('niveau_id', $this->niveau_id)->get();
+        $resultatsCredits = $this->calculerCreditsValidesEtudiant($etudiantId);
+        $moyennesUE = [];
 
-        if ($ues->isEmpty()) {
-            return 0;
-        }
-
-        $totalUE = $ues->count();
-        $ueValidees = 0;
-
-        foreach ($ues as $ue) {
-            if ($this->etudiantValideUE($etudiantId, $ue->id)) {
-                $ueValidees++;
+        foreach ($resultatsCredits['details_ue'] as $ue) {
+            if (!$ue['eliminee'] && $ue['moyenne'] > 0) {
+                $moyennesUE[] = $ue['moyenne'];
             }
         }
 
-        return $totalUE > 0 ? round(($ueValidees / $totalUE) * 100, 2) : 0;
+        $moyenneGenerale = count($moyennesUE) > 0
+            ? array_sum($moyennesUE) / count($moyennesUE)
+            : 0;
+
+        return round($moyenneGenerale, 2);
     }
 
-    /**
-     * Vérifie si un étudiant valide une UE.
-     */
-    public function etudiantValideUE($etudiantId, $ueId)
+    private function verifierNoteEliminatoire($etudiantId)
     {
-        // Calculer la moyenne de l'UE
-        $resultats = Resultat::whereHas('examen', function($query) {
-                $query->where('session_id', $this->session_id);
-            })
-            ->whereHas('ec', function($query) use ($ueId) {
-                $query->where('ue_id', $ueId);
-            })
+        return ResultatFinal::where('examen_id', $this->examen_id)
             ->where('etudiant_id', $etudiantId)
-            ->with('ec')
-            ->get();
-
-        if ($resultats->isEmpty()) {
-            return false;
-        }
-
-        // Calculer la moyenne pondérée
-        $totalPoints = 0;
-        $totalCoefficients = 0;
-
-        foreach ($resultats as $resultat) {
-            $coef = $resultat->ec->coefficient ?? 1;
-            $totalPoints += $resultat->note * $coef;
-            $totalCoefficients += $coef;
-        }
-
-        $moyenne = $totalCoefficients > 0 ? $totalPoints / $totalCoefficients : 0;
-
-        // UE validée si moyenne >= 10
-        return $moyenne >= 10;
+            ->where('note', self::NOTE_ELIMINATOIRE)
+            ->exists();
     }
 
-    /**
-     * Détermine la décision automatique en fonction des performances.
-     */
-    public function determinerDecisionAutomatique($moyenne, $pourcentageUE)
+    public function determinerDecisionAutomatique($creditsValides, $hasNoteEliminatoire, $isSessionRattrapage)
     {
-        // Règles de décision
-        if ($moyenne >= $this->seuil_admission && $pourcentageUE >= $this->pourcentage_ue_requises) {
-            return self::DECISION_ADMIS;
-        } elseif ($moyenne >= $this->seuil_rachat) {
-            return self::DECISION_ADMIS_CONDITIONNELLEMENT;
-        } elseif ($moyenne < 5) {
-            return self::DECISION_EXCLUS;
+        if ($isSessionRattrapage) {
+            // Session 2 (Rattrapage)
+            if ($hasNoteEliminatoire) {
+                return 'REDOUBLANT'; // Note 0 = redoublement obligatoire
+            }
+
+            if ($creditsValides >= self::CREDITS_ADMISSION_CONDITIONNELLE_SESSION_2) {
+                return 'ADMIS_CONDITIONNELLEMENT';
+            } else {
+                return 'REDOUBLANT';
+            }
         } else {
-            return self::DECISION_AJOURNE;
+            // Session 1 (Normale)
+            if ($creditsValides >= self::CREDITS_ADMISSION_SESSION_1) {
+                return 'ADMIS';
+            } else {
+                return 'AJOURNE'; // Passe en session 2
+            }
         }
     }
 
-    /**
-     * Enregistre une décision pour un étudiant.
-     */
+    private function convertirDecision($decision, $isSessionRattrapage)
+    {
+        $mapping = [
+            'ADMIS' => ResultatFinal::DECISION_ADMIS,
+            'RATTRAPAGE' => ResultatFinal::DECISION_RATTRAPAGE,
+            'REDOUBLANT' => ResultatFinal::DECISION_REDOUBLANT,
+            'EXCLUS' => ResultatFinal::DECISION_EXCLUS
+        ];
+
+        return $mapping[$decision] ?? ResultatFinal::DECISION_RATTRAPAGE;
+    }
+
+    private function genererObservationsEtudiant($decision, $creditsValides, $hasNoteEliminatoire)
+    {
+        $observations = [];
+
+        if ($hasNoteEliminatoire) {
+            $observations[] = "⚠️ L'étudiant a au moins une note éliminatoire (0)";
+        }
+
+        $observations[] = "Crédits validés : {$creditsValides}/" . self::CREDITS_TOTAL_ANNEE;
+        $observations[] = $this->getLibelleDecisionDetaille($decision, $creditsValides);
+
+        return implode("\n", $observations);
+    }
+
+    private function getLibelleDecisionDetaille($decision, $creditsValides)
+    {
+        $libelles = [
+            'ADMIS' => "Admis - L'étudiant a validé tous les 60 crédits",
+            'ADMIS_CONDITIONNELLEMENT' => "Admis conditionnellement - L'étudiant a validé {$creditsValides}/60 crédits (minimum 40 requis)",
+            'AJOURNE' => "Ajourné - L'étudiant doit passer en session de rattrapage ({$creditsValides}/60 crédits)",
+            'REDOUBLANT' => "Redoublant - L'étudiant a validé moins de 40 crédits ({$creditsValides}/60)",
+            'ELIMINE' => "Éliminé - L'étudiant a au moins une note éliminatoire (0)"
+        ];
+
+        return $libelles[$decision] ?? $decision;
+    }
+
+    private function mettreAJourResultatFinal($etudiantId, $decision, $details)
+    {
+        ResultatFinal::where('examen_id', $this->examen_id)
+            ->where('etudiant_id', $etudiantId)
+            ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+            ->update([
+                'decision' => $decision,
+                'moyenne_generale' => $details['moyenne_generale'] ?? null,
+                'credits_valides' => $details['credits_valides'] ?? null,
+                'observations' => $details['observations'] ?? null
+            ]);
+    }
+
+    private function mettreAJourStatistiquesDecision(&$statistiques, $decision)
+    {
+        switch ($decision) {
+            case 'ADMIS':
+                $statistiques['admis']++;
+                break;
+            case 'ADMIS_CONDITIONNELLEMENT':
+                $statistiques['admis_conditionnellement']++;
+                break;
+            case 'AJOURNE':
+                $statistiques['ajournes']++;
+                break;
+            case 'REDOUBLANT':
+                $statistiques['redoublants']++;
+                break;
+            case 'ELIMINE':
+                $statistiques['elimines']++;
+                break;
+        }
+    }
+
     public function enregistrerDecision($etudiantId, $decision, $moyenne, $pointsJury = 0, $observations = null)
     {
-        // Vérifier si une décision existe déjà
-        $decisionExistante = Decision::where('deliberation_id', $this->id)
-            ->where('etudiant_id', $etudiantId)
-            ->first();
+        $decisions = $this->decisions_speciales ?? [];
+        $resultatsCredits = $this->calculerCreditsValidesEtudiant($etudiantId);
 
-        if ($decisionExistante) {
-            // Mettre à jour la décision existante
-            $decisionExistante->update([
-                'moyenne' => $moyenne,
-                'decision' => $decision,
-                'points_jury' => $pointsJury,
-                'observations' => $observations
-            ]);
-            return $decisionExistante;
-        } else {
-            // Créer une nouvelle décision
-            return Decision::create([
-                'deliberation_id' => $this->id,
-                'etudiant_id' => $etudiantId,
-                'moyenne' => $moyenne,
-                'decision' => $decision,
-                'points_jury' => $pointsJury,
-                'observations' => $observations
-            ]);
-        }
+        $decisions[$etudiantId] = [
+            'moyenne' => $moyenne,
+            'moyenne_generale' => $this->calculerMoyenneGeneraleEtudiant($etudiantId),
+            'credits_valides' => $resultatsCredits['total_credits_valides'],
+            'pourcentage_credits' => $resultatsCredits['pourcentage_credits'],
+            'decision' => $decision,
+            'points_jury' => $pointsJury,
+            'observations' => $observations,
+            'details_ue' => $resultatsCredits['details_ue']
+        ];
+
+        $this->decisions_speciales = $decisions;
+
+        ResultatFinal::where('examen_id', $this->examen_id)
+            ->where('etudiant_id', $etudiantId)
+            ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+            ->update(['decision' => $decision]);
+
+        $this->save();
+        return $decisions[$etudiantId];
     }
 
-    /**
-     * Finalise la délibération.
-     */
+    // Finalisation et publication
     public function finaliser($userId)
     {
         if ($this->statut !== self::STATUT_EN_COURS) {
@@ -556,19 +550,14 @@ class Deliberation extends Model
         }
 
         DB::beginTransaction();
-
         try {
-            // Mettre à jour le statut
             $this->statut = self::STATUT_TERMINEE;
             $this->date_finalisation = now();
             $this->finalise_par = $userId;
+            $this->mettreAJourStatistiques();
             $this->save();
 
-            // Calculer les statistiques finales
-            $this->mettreAJourStatistiques();
-
             DB::commit();
-
             Log::info('Délibération finalisée', [
                 'deliberation_id' => $this->id,
                 'finalise_par' => $userId,
@@ -577,7 +566,6 @@ class Deliberation extends Model
                 'exclus' => $this->nombre_exclus,
                 'rachats' => $this->nombre_rachats
             ]);
-
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
@@ -589,27 +577,37 @@ class Deliberation extends Model
         }
     }
 
-    /**
-     * Met à jour les statistiques de la délibération.
-     */
     public function mettreAJourStatistiques()
     {
-        $stats = $this->decisions()
-            ->selectRaw('decision, COUNT(*) as total')
-            ->groupBy('decision')
-            ->pluck('total', 'decision')
-            ->toArray();
+        $decisions = $this->decisions_speciales ?? [];
+        $admis = 0;
+        $ajournes = 0;
+        $exclus = 0;
+        $rachats = 0;
 
-        $this->nombre_admis = $stats[self::DECISION_ADMIS] ?? 0;
-        $this->nombre_ajournes = $stats[self::DECISION_AJOURNE] ?? 0;
-        $this->nombre_exclus = $stats[self::DECISION_EXCLUS] ?? 0;
-        $this->nombre_rachats = $stats[self::DECISION_ADMIS_CONDITIONNELLEMENT] ?? 0;
-        $this->save();
+        foreach ($decisions as $decision) {
+            switch ($decision['decision']) {
+                case ResultatFinal::DECISION_ADMIS:
+                    $admis++;
+                    break;
+                case ResultatFinal::DECISION_RATTRAPAGE:
+                    $ajournes++;
+                    break;
+                case ResultatFinal::DECISION_EXCLUS:
+                    $exclus++;
+                    break;
+                case ResultatFinal::DECISION_REDOUBLANT:
+                    $rachats++;
+                    break;
+            }
+        }
+
+        $this->nombre_admis = $admis;
+        $this->nombre_ajournes = $ajournes;
+        $this->nombre_exclus = $exclus;
+        $this->nombre_rachats = $rachats;
     }
 
-    /**
-     * Valide et publie les résultats de la délibération.
-     */
     public function publier($userId)
     {
         if ($this->statut !== self::STATUT_TERMINEE) {
@@ -617,23 +615,22 @@ class Deliberation extends Model
         }
 
         DB::beginTransaction();
-
         try {
-            // Mettre à jour les résultats associés
-            $this->publierResultats($userId);
+            ResultatFinal::where('deliberation_id', $this->id)
+                ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+                ->each(function ($resultat) use ($userId) {
+                    $resultat->changerStatut(ResultatFinal::STATUT_PUBLIE, $userId, true);
+                });
 
-            // Mettre à jour le statut de la délibération
             $this->statut = self::STATUT_VALIDEE;
             $this->date_publication = now();
             $this->save();
 
             DB::commit();
-
             Log::info('Délibération publiée', [
                 'deliberation_id' => $this->id,
                 'publie_par' => $userId
             ]);
-
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
@@ -645,34 +642,6 @@ class Deliberation extends Model
         }
     }
 
-    /**
-     * Publie les résultats associés à cette délibération.
-     */
-    private function publierResultats($userId)
-    {
-        // Récupérer toutes les décisions
-        $decisions = $this->decisions()->with('etudiant')->get();
-
-        foreach ($decisions as $decision) {
-            // Mettre à jour tous les résultats de cet étudiant
-            $resultats = Resultat::where('etudiant_id', $decision->etudiant_id)
-                ->where('deliberation_id', $this->id)
-                ->get();
-
-            foreach ($resultats as $resultat) {
-                $resultat->decision = $decision->decision;
-                $resultat->statut = Resultat::STATUT_PUBLIE;
-                $resultat->date_validation = $this->date_finalisation;
-                $resultat->date_publication = now();
-                $resultat->modifie_par = $userId;
-                $resultat->save();
-            }
-        }
-    }
-
-    /**
-     * Annule la délibération.
-     */
     public function annuler($userId, $raison = null)
     {
         if ($this->statut === self::STATUT_VALIDEE) {
@@ -680,16 +649,14 @@ class Deliberation extends Model
         }
 
         DB::beginTransaction();
-
         try {
-            // Dissocier les résultats
-            Resultat::where('deliberation_id', $this->id)
-                ->update(['deliberation_id' => null]);
+            ResultatFinal::where('deliberation_id', $this->id)
+                ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+                ->each(function ($resultat) use ($userId, $raison) {
+                    $resultat->changerStatut(ResultatFinal::STATUT_ANNULE, $userId, false, null);
+                });
 
-            // Supprimer les décisions
-            $this->decisions()->delete();
-
-            // Mettre à jour le statut
+            $this->decisions_speciales = [];
             $this->statut = self::STATUT_ANNULEE;
             $this->observations = $this->observations . "\n\nAnnulée le " . now()->format('d/m/Y H:i') .
                                 " par " . User::find($userId)->name .
@@ -697,13 +664,11 @@ class Deliberation extends Model
             $this->save();
 
             DB::commit();
-
             Log::info('Délibération annulée', [
                 'deliberation_id' => $this->id,
                 'annule_par' => $userId,
                 'raison' => $raison
             ]);
-
             return true;
         } catch (\Exception $e) {
             DB::rollBack();
@@ -715,9 +680,339 @@ class Deliberation extends Model
         }
     }
 
-    /**
-     * Méthodes d'état pour vérifier le statut actuel.
-     */
+    // Rapports et analyses
+    public function genererRapportComplet()
+    {
+        $rapport = [
+            'informations_generales' => $this->getInformationsGenerales(),
+            'statistiques_globales' => $this->getStatistiquesGlobales(),
+            'details_par_etudiant' => $this->getDetailsParEtudiant(),
+            'cas_speciaux' => $this->identifierCasSpeciaux(),
+            'synthese_ue' => $this->getSyntheseParUE(),
+            'recommandations' => $this->genererRecommandations()
+        ];
+
+        return $rapport;
+    }
+
+    private function getInformationsGenerales()
+    {
+        return [
+            'niveau' => $this->niveau->nom,
+            'session' => $this->session->type,
+            'annee_universitaire' => $this->anneeUniversitaire->libelle,
+            'date_deliberation' => $this->date_deliberation->format('d/m/Y H:i'),
+            'statut' => $this->libelle_statut,
+            'nombre_etudiants' => count($this->getEtudiantsConcernes()),
+            'seuils' => [
+                'admission' => $this->seuil_admission,
+                'rachat' => $this->seuil_rachat,
+                'credits_requis_session_1' => self::CREDITS_ADMISSION_SESSION_1,
+                'credits_requis_session_2' => self::CREDITS_ADMISSION_CONDITIONNELLE_SESSION_2
+            ]
+        ];
+    }
+
+    private function getStatistiquesGlobales()
+    {
+        $decisions = $this->decisions_speciales ?? [];
+        $totalEtudiants = count($decisions);
+
+        $moyennes = array_column($decisions, 'moyenne_generale');
+        $credits = array_column($decisions, 'credits_valides');
+
+        $statistiques = [
+            'total_etudiants' => $totalEtudiants,
+            'decisions' => [
+                'admis' => $this->nombre_admis,
+                'admis_conditionnellement' => $this->nombre_rachats,
+                'ajournes' => $this->nombre_ajournes,
+                'exclus' => $this->nombre_exclus,
+                'redoublants' => $this->compterRedoublants()
+            ],
+            'moyennes' => [
+                'moyenne_generale_promo' => $totalEtudiants > 0 ? round(array_sum($moyennes) / $totalEtudiants, 2) : 0,
+                'moyenne_min' => $totalEtudiants > 0 ? min($moyennes) : 0,
+                'moyenne_max' => $totalEtudiants > 0 ? max($moyennes) : 0,
+                'ecart_type' => $this->calculerEcartType($moyennes)
+            ],
+            'credits' => [
+                'moyenne_credits_valides' => $totalEtudiants > 0 ? round(array_sum($credits) / $totalEtudiants, 2) : 0,
+                'etudiants_60_credits' => $this->compterEtudiantsAvecCredits(60),
+                'etudiants_40_59_credits' => $this->compterEtudiantsAvecCredits(40, 59),
+                'etudiants_moins_40_credits' => $this->compterEtudiantsAvecCredits(0, 39)
+            ],
+            'taux_reussite' => $totalEtudiants > 0 ? round((($this->nombre_admis + $this->nombre_rachats) / $totalEtudiants) * 100, 2) : 0
+        ];
+
+        return $statistiques;
+    }
+
+    private function getDetailsParEtudiant()
+    {
+        $details = [];
+        $decisions = $this->decisions_speciales ?? [];
+
+        foreach ($decisions as $etudiantId => $decision) {
+            $etudiant = Etudiant::find($etudiantId);
+            if (!$etudiant) continue;
+
+            $detailsUE = $decision['details_ue'] ?? [];
+
+            $details[] = [
+                'etudiant' => [
+                    'id' => $etudiant->id,
+                    'nom' => $etudiant->nom,
+                    'prenom' => $etudiant->prenom,
+                    'matricule' => $etudiant->matricule
+                ],
+                'resultats' => [
+                    'moyenne_generale' => $decision['moyenne_generale'] ?? 0,
+                    'credits_valides' => $decision['credits_valides'] ?? 0,
+                    'pourcentage_credits' => $decision['pourcentage_credits'] ?? 0,
+                    'has_note_eliminatoire' => $decision['has_note_eliminatoire'] ?? false
+                ],
+                'decision' => [
+                    'code' => $decision['decision'],
+                    'libelle' => ResultatFinal::getLibelleDecision($decision['decision']),
+                    'observations' => $decision['observations']
+                ],
+                'ue_details' => $detailsUE,
+                'points_jury' => $decision['points_jury'] ?? 0,
+                'rang' => $this->calculerRangEtudiant($etudiantId, $decisions)
+            ];
+        }
+
+        usort($details, function($a, $b) {
+            return $a['rang'] <=> $b['rang'];
+        });
+
+        return $details;
+    }
+
+    private function identifierCasSpeciaux()
+    {
+        $casSpeciaux = [];
+        $decisions = $this->decisions_speciales ?? [];
+
+        foreach ($decisions as $etudiantId => $decision) {
+            $etudiant = Etudiant::find($etudiantId);
+            if (!$etudiant) continue;
+
+            // Cas 1: Étudiants avec note éliminatoire
+            if ($decision['has_note_eliminatoire'] ?? false) {
+                $casSpeciaux['notes_eliminatoires'][] = [
+                    'etudiant' => $etudiant->nom . ' ' . $etudiant->prenom,
+                    'matricule' => $etudiant->matricule
+                ];
+            }
+
+            // Cas 2: Étudiants à la limite (proche des seuils)
+            if ($this->estEtudiantLimite($decision)) {
+                $casSpeciaux['cas_limites'][] = [
+                    'etudiant' => $etudiant->nom . ' ' . $etudiant->prenom,
+                    'matricule' => $etudiant->matricule,
+                    'moyenne' => $decision['moyenne_generale'] ?? 0,
+                    'credits' => $decision['credits_valides'] ?? 0
+                ];
+            }
+        }
+
+        return $casSpeciaux;
+    }
+
+    private function getSyntheseParUE()
+    {
+        $ues = UE::where('niveau_id', $this->niveau_id)->get();
+        $synthese = [];
+
+        foreach ($ues as $ue) {
+            $resultatsUE = $this->analyserResultatsUE($ue->id);
+
+            $synthese[] = [
+                'ue' => [
+                    'id' => $ue->id,
+                    'nom' => $ue->nom,
+                    'code' => $ue->code,
+                    'credits' => $ue->credits
+                ],
+                'statistiques' => [
+                    'moyenne_ue' => $resultatsUE['moyenne'],
+                    'taux_validation' => $resultatsUE['taux_validation'],
+                    'nombre_elimines' => $resultatsUE['nombre_elimines'],
+                    'ecart_type' => $resultatsUE['ecart_type']
+                ],
+                'alerte' => $resultatsUE['taux_validation'] < 50
+            ];
+        }
+
+        return $synthese;
+    }
+
+    private function genererRecommandations()
+    {
+        $recommandations = [];
+        $statistiques = $this->getStatistiquesGlobales();
+        $casSpeciaux = $this->identifierCasSpeciaux();
+
+        // Recommandation 1: Sur le taux de réussite global
+        if ($statistiques['taux_reussite'] < 50) {
+            $recommandations[] = [
+                'type' => 'alerte',
+                'titre' => 'Taux de réussite faible',
+                'description' => "Le taux de réussite global est de {$statistiques['taux_reussite']}%. Une analyse approfondie des méthodes pédagogiques est recommandée.",
+                'actions' => [
+                    'Identifier les UE avec les plus faibles taux de validation',
+                    'Organiser des sessions de soutien pour les étudiants en difficulté',
+                    'Revoir les modalités d\'évaluation'
+                ]
+            ];
+        }
+
+        // Recommandation 2: Sur les cas limites
+        if (!empty($casSpeciaux['cas_limites'])) {
+            $nombreCasLimites = count($casSpeciaux['cas_limites']);
+            $recommandations[] = [
+                'type' => 'attention',
+                'titre' => 'Étudiants en situation limite',
+                'description' => "{$nombreCasLimites} étudiants sont très proches des seuils de validation.",
+                'actions' => [
+                    'Examiner attentivement ces dossiers en jury',
+                    'Considérer l\'évolution de ces étudiants sur l\'année',
+                    'Vérifier la cohérence des notations'
+                ]
+            ];
+        }
+
+        // Recommandation 3: Sur les notes éliminatoires
+        if (!empty($casSpeciaux['notes_eliminatoires'])) {
+            $nombreElimines = count($casSpeciaux['notes_eliminatoires']);
+            $recommandations[] = [
+                'type' => 'important',
+                'titre' => 'Notes éliminatoires détectées',
+                'description' => "{$nombreElimines} étudiants ont au moins une note éliminatoire (0).",
+                'actions' => [
+                    'Vérifier les raisons des absences (justifiées ou non)',
+                    'Proposer des sessions de rattrapage exceptionnelles si justifié',
+                    'Mettre en place un suivi individualisé pour ces étudiants'
+                ]
+            ];
+        }
+
+        return $recommandations;
+    }
+
+    // Méthodes utilitaires et calculs
+    private function calculerEcartType($valeurs)
+    {
+        $n = count($valeurs);
+        if ($n <= 1) return 0;
+
+        $moyenne = array_sum($valeurs) / $n;
+        $variance = 0;
+
+        foreach ($valeurs as $valeur) {
+            $variance += pow($valeur - $moyenne, 2);
+        }
+
+        return round(sqrt($variance / ($n - 1)), 2);
+    }
+
+    private function estEtudiantLimite($decision)
+    {
+        $isSessionRattrapage = $this->session->isRattrapage();
+        $credits = $decision['credits_valides'] ?? 0;
+
+        if ($isSessionRattrapage) {
+            return $credits >= 35 && $credits < 40;
+        } else {
+            return $credits >= 50 && $credits < 60;
+        }
+    }
+
+    private function calculerRangEtudiant($etudiantId, $decisions)
+    {
+        $moyennes = [];
+        foreach ($decisions as $id => $decision) {
+            $moyennes[$id] = $decision['moyenne_generale'] ?? 0;
+        }
+
+        arsort($moyennes);
+        $rang = 1;
+
+        foreach ($moyennes as $id => $moyenne) {
+            if ($id == $etudiantId) {
+                return $rang;
+            }
+            $rang++;
+        }
+
+        return 0;
+    }
+
+    private function compterRedoublants()
+    {
+        $decisions = $this->decisions_speciales ?? [];
+        $count = 0;
+
+        foreach ($decisions as $decision) {
+            if (isset($decision['decision_brute']) && $decision['decision_brute'] === 'REDOUBLANT') {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    private function compterEtudiantsAvecCredits($min, $max = null)
+    {
+        $decisions = $this->decisions_speciales ?? [];
+        $count = 0;
+
+        foreach ($decisions as $decision) {
+            $credits = $decision['credits_valides'] ?? 0;
+            if ($max === null) {
+                if ($credits >= $min) $count++;
+            } else {
+                if ($credits >= $min && $credits <= $max) $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    private function analyserResultatsUE($ueId)
+    {
+        $resultats = [];
+        $totalValidations = 0;
+        $totalEliminés = 0;
+        $moyennes = [];
+
+        $decisions = $this->decisions_speciales ?? [];
+
+        foreach ($decisions as $decision) {
+            $detailsUE = $decision['details_ue'] ?? [];
+            foreach ($detailsUE as $ue) {
+                if ($ue['ue_id'] == $ueId) {
+                    $moyennes[] = $ue['moyenne'];
+                    if ($ue['validee']) $totalValidations++;
+                    if ($ue['eliminee']) $totalEliminés++;
+                    break;
+                }
+            }
+        }
+
+        $totalEtudiants = count($moyennes);
+
+        return [
+            'moyenne' => $totalEtudiants > 0 ? round(array_sum($moyennes) / $totalEtudiants, 2) : 0,
+            'taux_validation' => $totalEtudiants > 0 ? round(($totalValidations / $totalEtudiants) * 100, 2) : 0,
+            'nombre_elimines' => $totalEliminés,
+            'ecart_type' => $this->calculerEcartType($moyennes)
+        ];
+    }
+
+    // Méthodes de statut
     public function isProgrammee()
     {
         return $this->statut === self::STATUT_PROGRAMMEE;
@@ -743,9 +1038,7 @@ class Deliberation extends Model
         return $this->statut === self::STATUT_ANNULEE;
     }
 
-    /**
-     * Scopes pour les requêtes.
-     */
+    // Scopes
     public function scopeStatut($query, $statut)
     {
         return $query->where('statut', $statut);
@@ -788,15 +1081,9 @@ class Deliberation extends Model
         ]);
     }
 
-    /**
-     * Récupère les paramètres par défaut pour un niveau
-     *
-     * @param Niveau|int|string $niveau Objet Niveau, ID du niveau ou code du niveau
-     * @return array
-     */
+    // Paramètres par défaut
     public static function getDefaultParamsForNiveau($niveau)
     {
-        // Valeurs par défaut de base pour tous les niveaux
         $defaultParams = [
             'seuil_admission' => 10.00,
             'seuil_rachat' => 9.75,
@@ -804,24 +1091,19 @@ class Deliberation extends Model
             'appliquer_regles_auto' => true
         ];
 
-        // Récupérer le code du niveau selon le type de paramètre reçu
         $niveauCode = null;
 
         if ($niveau instanceof Niveau) {
-            // Si on a reçu directement un objet Niveau
             $niveauCode = $niveau->abr;
         } elseif (is_numeric($niveau)) {
-            // Si on a reçu un ID de niveau, on récupère l'objet
             $niveauObj = Niveau::find($niveau);
             if ($niveauObj) {
                 $niveauCode = $niveauObj->abr;
             }
         } else {
-            // Si on a reçu directement un code de niveau (L1, L2, etc.)
             $niveauCode = (string) $niveau;
         }
 
-        // Si aucun code de niveau valide n'a été trouvé, retourner les valeurs par défaut
         if (!$niveauCode) {
             Log::warning('Impossible de déterminer le code du niveau pour les paramètres de délibération', [
                 'niveau_input' => $niveau
@@ -829,17 +1111,14 @@ class Deliberation extends Model
             return $defaultParams;
         }
 
-        // Ajuster selon le niveau
         $niveauCode = strtoupper($niveauCode);
         switch ($niveauCode) {
             case 'L1':
-                // Paramètres standards pour L1
                 break;
             case 'L2':
                 $defaultParams['seuil_rachat'] = 9.50;
                 break;
             case 'L3':
-                // Paramètres standards pour L3
                 break;
             case 'M1':
                 $defaultParams['pourcentage_ue_requises'] = 85;
@@ -848,29 +1127,21 @@ class Deliberation extends Model
                 $defaultParams['seuil_admission'] = 10.50;
                 $defaultParams['pourcentage_ue_requises'] = 90;
                 break;
-            case 'D':
+            case 'D1':
                 $defaultParams['seuil_admission'] = 12.00;
                 $defaultParams['seuil_rachat'] = 11.50;
                 $defaultParams['pourcentage_ue_requises'] = 95;
                 break;
             default:
-                // Utiliser les valeurs par défaut pour les autres niveaux
                 Log::info('Utilisation des paramètres par défaut pour le niveau', [
                     'niveau_code' => $niveauCode
                 ]);
                 break;
         }
 
-        // Remarque : Dans une évolution future, ces valeurs pourraient être stockées
-        // dans une table dédiée pour permettre la configuration via l'interface admin
-
         return $defaultParams;
     }
 
-    /**
-     * Applique les paramètres par défaut à cette délibération
-     * basés sur le niveau associé
-     */
     public function applyDefaultParams()
     {
         if (!$this->niveau) {

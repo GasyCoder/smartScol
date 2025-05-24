@@ -130,39 +130,9 @@ namespace App\Models{
  * 
  *
  * @property int $id
- * @property int $deliberation_id Délibération concernée
- * @property int $etudiant_id Étudiant concerné
- * @property numeric $moyenne Moyenne générale
- * @property string $decision
- * @property numeric $points_jury Points ajoutés par le jury
- * @property string|null $observations
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Deliberation $deliberation
- * @property-read \App\Models\Etudiant $etudiant
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereDecision($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereDeliberationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereEtudiantId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereMoyenne($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereObservations($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision wherePointsJury($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Decision whereUpdatedAt($value)
- */
-	class Decision extends \Eloquent {}
-}
-
-namespace App\Models{
-/**
- * 
- *
- * @property int $id
  * @property int $niveau_id Niveau concerné
  * @property int $session_id Session d'examen
+ * @property int|null $examen_id
  * @property int $annee_universitaire_id Année universitaire
  * @property \Illuminate\Support\Carbon $date_deliberation
  * @property string $statut Statut de la délibération
@@ -182,12 +152,13 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\AnneeUniversitaire $anneeUniversitaire
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Decision> $decisions
- * @property-read int|null $decisions_count
+ * @property-read \App\Models\Examen|null $examen
  * @property-read \App\Models\User|null $finalisePar
  * @property-read mixed $libelle_statut
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\User|null $presidentJury
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFinal> $resultatsFinaux
+ * @property-read int|null $resultats_finaux_count
  * @property-read \App\Models\SessionExam $session
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation activeAnnee()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation enAttente()
@@ -205,6 +176,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDateFinalisation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDatePublication($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereDecisionsSpeciales($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereFinalisePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Deliberation whereNiveauId($value)
@@ -279,8 +251,6 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Decision> $decisions
- * @property-read int|null $decisions_count
  * @property-read mixed $full_name
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\Parcour|null $parcours
@@ -578,23 +548,42 @@ namespace App\Models{
 /**
  * 
  *
- * @property-read \App\Models\CodeAnonymat|null $codeAnonymat
+ * @property int $id
+ * @property int $etudiant_id Étudiant concerné
+ * @property int $examen_id Examen concerné
+ * @property int $code_anonymat_id Code d'anonymat utilisé
+ * @property int $ec_id
+ * @property numeric $note Note finale
+ * @property int $genere_par Utilisateur ayant généré le résultat
+ * @property int|null $modifie_par
+ * @property string $statut
+ * @property array $status_history
+ * @property string|null $decision
+ * @property \Illuminate\Support\Carbon|null $date_publication
+ * @property string|null $hash_verification
+ * @property int|null $deliberation_id
+ * @property int|null $fusion_id ID du résultat fusion source
+ * @property \Illuminate\Support\Carbon|null $date_fusion Date du transfert depuis fusion
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\CodeAnonymat $codeAnonymat
  * @property-read \App\Models\Deliberation|null $deliberation
- * @property-read \App\Models\EC|null $ec
- * @property-read \App\Models\Etudiant|null $etudiant
- * @property-read \App\Models\Examen|null $examen
+ * @property-read \App\Models\EC $ec
+ * @property-read \App\Models\Etudiant $etudiant
+ * @property-read \App\Models\Examen $examen
+ * @property-read mixed $est_eliminatoire
  * @property-read mixed $est_modifie
  * @property-read mixed $est_reussie
  * @property-read mixed $libelle_decision
  * @property-read mixed $libelle_statut
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
- * @property-read \App\Models\User|null $utilisateurGeneration
+ * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal ajourne()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal annule()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal avecDeliberation()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal echoue()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal eliminatoire()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal enAttente()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal exclus()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newModelQuery()
@@ -608,8 +597,27 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal rattrapage()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal rattrapageSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal redoublant()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sansDeliberation()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCodeAnonymatId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateFusion($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDatePublication($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDecision($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDeliberationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEcId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEtudiantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereExamenId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereFusionId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereGenerePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereHashVerification($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereModifiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereNote($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatusHistory($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatut($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereUpdatedAt($value)
  */
 	class ResultatFinal extends \Eloquent {}
 }
@@ -618,18 +626,53 @@ namespace App\Models{
 /**
  * 
  *
- * @property-read \App\Models\CodeAnonymat|null $codeAnonymat
- * @property-read \App\Models\EC|null $ec
- * @property-read \App\Models\Etudiant|null $etudiant
- * @property-read \App\Models\Examen|null $examen
- * @property-read \App\Models\User|null $utilisateurGeneration
+ * @property int $id
+ * @property int $etudiant_id Étudiant concerné
+ * @property int $examen_id Examen concerné
+ * @property int $code_anonymat_id Code d'anonymat utilisé
+ * @property int $ec_id
+ * @property numeric $note Note à vérifier
+ * @property int $genere_par Utilisateur ayant généré le résultat
+ * @property int|null $modifie_par
+ * @property int $etape_fusion Compteur de fusion pour éviter les doublons
+ * @property string $statut
+ * @property array<array-key, mixed>|null $status_history
+ * @property \Illuminate\Support\Carbon|null $date_validation
+ * @property string|null $operation_id
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\CodeAnonymat $codeAnonymat
+ * @property-read \App\Models\EC $ec
+ * @property-read \App\Models\Etudiant $etudiant
+ * @property-read \App\Models\Examen $examen
+ * @property-read mixed $est_eliminatoire
+ * @property-read mixed $est_reussie
+ * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion echoue()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion eliminatoire()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion premierVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion secondeVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion valide()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereCodeAnonymatId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereDateValidation($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereEcId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereEtapeFusion($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereEtudiantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereExamenId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereGenerePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereModifiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereNote($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereOperationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereStatusHistory($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereStatut($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereUpdatedAt($value)
  */
 	class ResultatFusion extends \Eloquent {}
 }

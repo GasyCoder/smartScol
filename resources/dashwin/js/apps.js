@@ -1,7 +1,11 @@
 import { config, today, yesterday, currentMonth } from "./function";
 import Message, { info_break } from "./app/messages";
 import Calendar from "./app/calendar";
+import Alpine from 'alpinejs';
 
+window.Alpine = Alpine;
+
+Alpine.start();
 
 
 document.addEventListener('DOMContentLoaded',

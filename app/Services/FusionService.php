@@ -3,20 +3,23 @@
 namespace App\Services;
 
 use App\Models\EC;
+use App\Models\UE;
 use Carbon\Carbon;
 use App\Models\Copie;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Etudiant;
-use App\Models\Resultat;
 use App\Models\Manchette;
 use App\Models\SessionExam;
 use App\Models\CodeAnonymat;
 use App\Models\Deliberation;
+use App\Models\ResultatFusion;
+use App\Models\ResultatFinal;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Services\CalculAcademiqueService;
 
 class FusionService
 {
@@ -29,7 +32,7 @@ class FusionService
     public function verifierCoherence($examenId)
     {
         try {
-            $examen = Examen::findOrFail($examenId);
+            $examen = Examen::with(['niveau', 'parcours'])->findOrFail($examenId);
 
             // Valider les données
             $validation = $this->validateData($examenId);
@@ -52,9 +55,7 @@ class FusionService
                 ->get();
 
             $totalEtudiants = $etudiants->count();
-            $resultatsExistants = Resultat::where('examen_id', $examenId)
-                ->where('statut', Resultat::STATUT_PROVISOIRE)
-                ->exists();
+            $resultatsExistants = ResultatFusion::where('examen_id', $examenId)->exists();
 
             $rapport = [];
             $stats = ['total' => 0, 'complets' => 0, 'incomplets' => 0];
@@ -62,7 +63,7 @@ class FusionService
             if ($resultatsExistants) {
                 $rapport = $this->analyserResultatsExistants($examenId, $totalEtudiants);
             } else {
-                $rapport = $this->analyserDonneesPrefusionReel($examenId, $totalEtudiants, $etudiants);
+                $rapport = $this->analyserDonneesPrefusion($examenId, $totalEtudiants, $etudiants);
             }
 
             foreach ($rapport as $item) {
@@ -74,18 +75,6 @@ class FusionService
                 'examen_id' => $examenId,
                 'stats' => $stats,
                 'total_etudiants' => $totalEtudiants,
-                'rapport' => $rapport,
-                'debug' => [
-                    'manchette_ids' => Manchette::where('examen_id', $examenId)
-                        ->pluck('id')
-                        ->toArray(),
-                    'code_anonymat_ids' => CodeAnonymat::where('examen_id', $examenId)
-                        ->pluck('id')
-                        ->toArray(),
-                    'copie_ids' => Copie::where('examen_id', $examenId)
-                        ->pluck('id')
-                        ->toArray(),
-                ],
             ]);
 
             return [
@@ -110,7 +99,7 @@ class FusionService
     }
 
     /**
-     * Analyse les résultats existants après fusion
+     * Analyse les résultats existants dans resultats_fusion
      *
      * @param int $examenId
      * @param int $totalEtudiants
@@ -118,7 +107,7 @@ class FusionService
      */
     private function analyserResultatsExistants($examenId, $totalEtudiants)
     {
-        $resultats = Resultat::where('examen_id', $examenId)
+        $resultats = ResultatFusion::where('examen_id', $examenId)
             ->select('id', 'etudiant_id', 'ec_id', 'note', 'statut')
             ->with(['etudiant', 'ec'])
             ->get();
@@ -150,19 +139,9 @@ class FusionService
                 'codes_count' => $etudiantsAvecResult,
                 'complet' => $complet,
                 'etudiants_sans_manchette' => $totalEtudiants - $etudiantsAvecResult,
-                'codes_sans_manchettes' => [
-                    'count' => 0,
-                    'codes' => [],
-                ],
-                'codes_sans_copies' => [
-                    'count' => 0,
-                    'codes' => [],
-                ],
+                'codes_sans_manchettes' => ['count' => 0, 'codes' => []],
+                'codes_sans_copies' => ['count' => 0, 'codes' => []],
                 'issues' => [],
-                'debug' => [
-                    'resultat_ids' => $resultatsEc->pluck('id')->toArray(),
-                    'etudiant_ids' => $resultatsEc->pluck('etudiant_id')->unique()->toArray(),
-                ],
             ];
         }
 
@@ -177,14 +156,11 @@ class FusionService
      * @param Collection $etudiants
      * @return array
      */
-    private function analyserDonneesPrefusionReel($examenId, $totalEtudiants, Collection $etudiants)
+    private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection $etudiants)
     {
         $copies = Copie::where('examen_id', $examenId)
             ->whereNotNull('code_anonymat_id')
-            ->with(['ec', 'codeAnonymat' => function ($query) {
-                $query->whereNotNull('code_complet')
-                    ->where('code_complet', '!=', '');
-            }])
+            ->with(['ec', 'codeAnonymat'])
             ->get();
 
         $ecs = EC::whereHas('examens', function ($query) use ($examenId) {
@@ -197,29 +173,28 @@ class FusionService
             $copiesEc = $copies->where('ec_id', $ec->id);
             $copiesAvecNote = $copiesEc->whereNotNull('note');
             $codesEnCopies = $copiesEc->filter(function ($copie) {
-                return $copie->codeAnonymat && !is_null($copie->codeAnonymat->code_complet);
+                return $copie->codeAnonymat && $copie->codeAnonymat->code_complet;
             })->map(function ($copie) {
                 return $copie->codeAnonymat->code_complet;
-            })->filter()->unique();
+            })->unique();
 
             $manchettes = Manchette::where('examen_id', $examenId)
                 ->whereNotNull('code_anonymat_id')
                 ->whereHas('codeAnonymat', function ($query) use ($ec) {
                     $query->where('ec_id', $ec->id)
-                        ->whereNotNull('code_complet')
-                        ->where('code_complet', '!=', '');
+                          ->whereNotNull('code_complet')
+                          ->where('code_complet', '!=', '');
                 })
                 ->with(['etudiant', 'codeAnonymat'])
                 ->get();
 
             $manchettesAvecCodes = $manchettes->filter(function ($manchette) {
-                return $manchette->codeAnonymat && !is_null($manchette->codeAnonymat->code_complet) && $manchette->codeAnonymat->code_complet !== '';
+                return $manchette->codeAnonymat && $manchette->codeAnonymat->code_complet;
             });
 
-            // ✅ CORRECTION : Utilisation de $manchettesAvecCodes au lieu de $manchettesAvec_codes
             $codesEnManchettes = $manchettesAvecCodes->map(function ($manchette) {
                 return $manchette->codeAnonymat->code_complet;
-            })->filter()->unique();
+            })->unique();
 
             $manchettesCorrespondantes = $manchettesAvecCodes->filter(function ($manchette) use ($codesEnCopies) {
                 return $codesEnCopies->contains($manchette->codeAnonymat->code_complet);
@@ -232,15 +207,15 @@ class FusionService
             $etudiantsSansManchette = $etudiants->whereNotIn('id', $etudiantsAvecManchette)->count();
 
             $complet = ($totalEtudiants > 0) &&
-                ($copiesEc->count() === $totalEtudiants) &&
-                ($copiesEc->count() === $copiesAvecNote->count()) &&
-                ($copiesEc->count() === $manchettesCorrespondantes->count()) &&
-                ($codesSansManchettes->isEmpty()) &&
-                ($codesSansCopies->isEmpty());
+                       ($copiesEc->count() === $totalEtudiants) &&
+                       ($copiesEc->count() === $copiesAvecNote->count()) &&
+                       ($copiesEc->count() === $manchettesCorrespondantes->count()) &&
+                       ($codesSansManchettes->isEmpty()) &&
+                       ($codesSansCopies->isEmpty());
 
             $issues = [];
             if ($manchettesAvecCodes->isEmpty()) {
-                $issues[] = "Aucune manchette valide trouvée pour EC {$ec->id}";
+                $issues[] = "Aucune manchette valide pour EC {$ec->id}";
             }
             if ($codesEnCopies->isEmpty() && $copiesEc->count() > 0) {
                 $issues[] = "Les copies n'ont pas de codes d'anonymat valides pour EC {$ec->id}";
@@ -272,27 +247,7 @@ class FusionService
                     'codes' => $codesSansCopies->take(5)->toArray(),
                 ],
                 'issues' => $issues,
-                'debug' => [
-                    'manchette_ids' => $manchettesCorrespondantes->pluck('id')->toArray(),
-                    'copie_ids' => $copiesEc->pluck('id')->toArray(),
-                    'code_anonymat_ids' => $codesEnCopies->keys()->toArray(),
-                    'total_copies' => $copiesEc->count(),
-                    'copies_avec_note' => $copiesAvecNote->count(),
-                    'total_manchettes' => $manchettesCorrespondantes->count(),
-                    'codes_en_copies' => $codesEnCopies->count(),
-                    'codes_en_manchettes' => $codesEnManchettes->count(),
-                    'invalid_copies' => $copiesEc->whereNull('codeAnonymat')->count(),
-                ],
             ];
-
-            if (!empty($issues)) {
-                Log::warning('Problèmes détectés pour EC lors de l\'analyse pré-fusion', [
-                    'examen_id' => $examenId,
-                    'ec_id' => $ec->id,
-                    'issues' => $issues,
-                    'debug' => $rapport[count($rapport) - 1]['debug'],
-                ]);
-            }
         }
 
         return $rapport;
@@ -302,16 +257,16 @@ class FusionService
      * Effectue la fusion des manchettes et copies
      *
      * @param int $examenId
-     * @param bool $force
+     * @param bool $force Forcer la refusion
      * @return array
      */
     public function fusionner($examenId, $force = false)
     {
         try {
             $examen = Examen::findOrFail($examenId);
-            $currentEtape = Resultat::where('examen_id', $examenId)->max('etape_fusion') ?? 0;
+            $currentEtape = ResultatFusion::where('examen_id', $examenId)->max('etape_fusion') ?? 0;
 
-            if ($currentEtape >= 3 && !$force) {
+            if ($currentEtape >= 4 && !$force) {
                 Log::warning('Fusion bloquée : déjà terminée', [
                     'examen_id' => $examenId,
                     'etape_actuelle' => $currentEtape,
@@ -327,7 +282,7 @@ class FusionService
 
             switch ($nextEtape) {
                 case 1:
-                    $result = $this->executerEtape1Corrigee($examenId);
+                    $result = $this->executerEtape1($examenId);
                     break;
                 case 2:
                     $result = $this->executerEtape2($examenId);
@@ -350,8 +305,8 @@ class FusionService
             }
 
             $statistiques = [
-                'resultats_generes' => Resultat::where('examen_id', $examenId)
-                    ->where('statut', Resultat::STATUT_PROVISOIRE)
+                'resultats_generes' => ResultatFusion::where('examen_id', $examenId)
+                    ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2, ResultatFusion::STATUT_VERIFY_3])
                     ->count(),
                 'etape' => $nextEtape,
             ];
@@ -391,20 +346,17 @@ class FusionService
      * @param int $examenId
      * @return array
      */
-    private function executerEtape1Corrigee($examenId)
+    private function executerEtape1($examenId)
     {
         $manchettes = Manchette::where('examen_id', $examenId)
             ->whereHas('codeAnonymat', function ($query) {
-                $query->whereNotNull('code_complet')
-                    ->where('code_complet', '!=', '');
+                $query->whereNotNull('code_complet')->where('code_complet', '!=', '');
             })
             ->with(['etudiant', 'codeAnonymat'])
             ->get();
 
         if ($manchettes->isEmpty()) {
-            Log::warning('Aucune manchette valide pour la fusion', [
-                'examen_id' => $examenId,
-            ]);
+            Log::warning('Aucune manchette valide pour la fusion', ['examen_id' => $examenId]);
             return [
                 'success' => false,
                 'message' => 'Aucune manchette valide trouvée pour cet examen.',
@@ -414,17 +366,14 @@ class FusionService
         $copies = Copie::where('examen_id', $examenId)
             ->whereNotNull('code_anonymat_id')
             ->whereHas('codeAnonymat', function ($query) {
-                $query->whereNotNull('code_complet')
-                    ->where('code_complet', '!=', '');
+                $query->whereNotNull('code_complet')->where('code_complet', '!=', '');
             })
             ->whereNotNull('ec_id')
             ->with(['ec', 'codeAnonymat'])
             ->get();
 
         if ($copies->isEmpty()) {
-            Log::warning('Aucune copie valide pour la fusion', [
-                'examen_id' => $examenId,
-            ]);
+            Log::warning('Aucune copie valide pour la fusion', ['examen_id' => $examenId]);
             return [
                 'success' => false,
                 'message' => 'Aucune copie valide trouvée pour cet examen.',
@@ -447,7 +396,7 @@ class FusionService
             $copiesCorrespondantes = $copies->where('codeAnonymat.code_complet', $codeAnonymat);
 
             if ($copiesCorrespondantes->isEmpty()) {
-                Log::warning('Aucune copie trouvée pour le code d\'anonymat', [
+                Log::warning('Aucune copie pour le code d\'anonymat', [
                     'examen_id' => $examenId,
                     'code_anonymat' => $codeAnonymat,
                     'etudiant_id' => $manchette->etudiant_id,
@@ -457,7 +406,7 @@ class FusionService
             }
 
             foreach ($copiesCorrespondantes as $copie) {
-                $resultatExiste = Resultat::where('examen_id', $examenId)
+                $resultatExiste = ResultatFusion::where('examen_id', $examenId)
                     ->where('etudiant_id', $manchette->etudiant_id)
                     ->where('ec_id', $copie->ec_id)
                     ->exists();
@@ -479,14 +428,14 @@ class FusionService
                     ]
                 );
 
-                Resultat::create([
+                ResultatFusion::create([
                     'etudiant_id' => $manchette->etudiant_id,
                     'examen_id' => $examenId,
                     'code_anonymat_id' => $codeAnonymatRecord->id,
                     'ec_id' => $copie->ec_id,
                     'note' => $copie->note,
                     'genere_par' => Auth::id(),
-                    'statut' => Resultat::STATUT_PROVISOIRE,
+                    'statut' => ResultatFusion::STATUT_VERIFY_1,
                     'etape_fusion' => 1,
                 ]);
 
@@ -537,15 +486,13 @@ class FusionService
      */
     private function executerEtape2($examenId)
     {
-        $resultats = Resultat::where('examen_id', $examenId)
-            ->where('statut', Resultat::STATUT_PROVISOIRE)
+        $resultats = ResultatFusion::where('examen_id', $examenId)
+            ->where('statut', ResultatFusion::STATUT_VERIFY_1)
             ->where('etape_fusion', 1)
             ->get();
 
         if ($resultats->isEmpty()) {
-            Log::warning('Aucun résultat à valider pour l\'étape 2', [
-                'examen_id' => $examenId,
-            ]);
+            Log::warning('Aucun résultat à valider pour l\'étape 2', ['examen_id' => $examenId]);
             return [
                 'success' => false,
                 'message' => 'Aucun résultat à valider à l\'étape 1.',
@@ -555,6 +502,7 @@ class FusionService
         $resultatsValides = 0;
         foreach ($resultats as $resultat) {
             if ($this->validerResultat($resultat)) {
+                $resultat->changerStatut(ResultatFusion::STATUT_VERIFY_2, Auth::id());
                 $resultat->etape_fusion = 2;
                 $resultat->save();
                 $resultatsValides++;
@@ -573,51 +521,93 @@ class FusionService
     }
 
     /**
-     * Étape 3 : Finalisation des résultats
+     * Étape 3 : Troisième vérification avant finalisation
      *
      * @param int $examenId
      * @return array
      */
     private function executerEtape3($examenId)
     {
-        $resultats = Resultat::where('examen_id', $examenId)
-            ->where('statut', Resultat::STATUT_PROVISOIRE)
+        $resultats = ResultatFusion::where('examen_id', $examenId)
+            ->where('statut', ResultatFusion::STATUT_VERIFY_2)
             ->where('etape_fusion', 2)
             ->get();
 
         if ($resultats->isEmpty()) {
-            Log::warning('Aucun résultat à finaliser pour l\'étape 3', [
-                'examen_id' => $examenId,
-            ]);
+            Log::warning('Aucun résultat à traiter pour l\'étape 3', ['examen_id' => $examenId]);
             return [
                 'success' => false,
-                'message' => 'Aucun résultat à finaliser à l\'étape 2.',
+                'message' => 'Aucun résultat à traiter à l\'étape 2.',
             ];
         }
 
+        $resultatsFinalises = 0;
         foreach ($resultats as $resultat) {
-            $resultat->etape_fusion = 3;
-            $resultat->save();
+            // Effectuer ici les vérifications supplémentaires pour l'étape 3
+            if ($this->verifierResultatEtape3($resultat)) {
+                $resultat->changerStatut(ResultatFusion::STATUT_VERIFY_3, Auth::id());
+                $resultat->etape_fusion = 3;
+                $resultat->save();
+                $resultatsFinalises++;
+            }
         }
 
         Log::info('Étape 3 de fusion terminée', [
             'examen_id' => $examenId,
-            'resultats_finalises' => $resultats->count(),
+            'resultats_traites' => $resultatsFinalises,
         ]);
 
         return [
             'success' => true,
-            'resultats_finalises' => $resultats->count(),
+            'resultats_traites' => $resultatsFinalises,
         ];
+    }
+
+    /**
+     * Effectue des vérifications supplémentaires pour l'étape 3
+     *
+     * @param ResultatFusion $resultat
+     * @return bool
+     */
+    private function verifierResultatEtape3(ResultatFusion $resultat)
+    {
+        // Vérifications additionnelles pour l'étape 3
+        // Par exemple: vérifier la cohérence avec d'autres résultats, 
+        // contrôler les moyennes par groupe, etc.
+        
+        // Vérifier que la note est valide et dans la plage autorisée
+        if ($resultat->note !== null && ($resultat->note < 0 || $resultat->note > 20)) {
+            Log::warning('Résultat invalide pour étape 3 : note hors plage', [
+                'resultat_id' => $resultat->id,
+                'examen_id' => $resultat->examen_id,
+                'note' => $resultat->note,
+            ]);
+            return false;
+        }
+        
+        // Vérifier que l'étudiant existe et est actif
+        $etudiantActif = Etudiant::where('id', $resultat->etudiant_id)
+            ->where('is_active', true)
+            ->exists();
+            
+        if (!$etudiantActif) {
+            Log::warning('Résultat invalide pour étape 3 : étudiant inactif', [
+                'resultat_id' => $resultat->id,
+                'etudiant_id' => $resultat->etudiant_id,
+            ]);
+            return false;
+        }
+        
+        return true;
     }
 
     /**
      * Valide un résultat
      *
-     * @param Resultat $resultat
+     * @param ResultatFusion $resultat
      * @return bool
      */
-    private function validerResultat(Resultat $resultat)
+    private function validerResultat(ResultatFusion $resultat)
     {
         if (!$resultat->etudiant_id || !$resultat->ec_id || !$resultat->examen_id) {
             Log::warning('Résultat invalide : champs manquants', [
@@ -642,10 +632,9 @@ class FusionService
     }
 
     /**
-     * Valide ET publie les résultats en une seule action
-     * Intègre la logique de délibération si nécessaire
+     * Valide et publie les résultats finals après fusion
      *
-     * @param int $examenId ID de l'examen
+     * @param int $examenId ID de l'examen concerné
      * @return array Résultat de l'opération
      */
     public function validerResultats($examenId)
@@ -653,8 +642,7 @@ class FusionService
         try {
             DB::beginTransaction();
 
-            // Récupérer l'examen et ses données contextuelles
-            $examen = Examen::findOrFail($examenId);
+            $examen = Examen::with(['niveau', 'session'])->findOrFail($examenId);
             $niveau = $examen->niveau;
             $session = $examen->session;
 
@@ -666,208 +654,263 @@ class FusionService
                 ];
             }
 
-            // Récupérer les résultats à valider
-            $resultats = Resultat::where('examen_id', $examenId)
-                ->where('statut', Resultat::STATUT_PROVISOIRE)
-                ->where('etape_fusion', 3)
+            $resultats = ResultatFusion::where('examen_id', $examenId)
+                ->where('statut', ResultatFusion::STATUT_VERIFY_3)  // ← CORRECT
+                ->where('etape_fusion', 3)                          // ← CORRECT  
                 ->get();
 
             if ($resultats->isEmpty()) {
                 DB::rollBack();
                 return [
                     'success' => false,
-                    'message' => 'Aucun résultat à valider à l\'étape 3. Assurez-vous que la fusion est terminée.'
+                    'message' => 'Aucun résultat validé à l\'étape 3 (VERIFY_3).'  // ← CORRECT
                 ];
             }
 
-            // Vérifier si une délibération est nécessaire
-            $requiresDeliberation = false;
+            // Finalisation des résultats fusionnés
+            $resultatsFinalises = 0;
+            foreach ($resultats as $resultat) {
+                $resultat->changerStatut(ResultatFusion::STATUT_VALIDE, Auth::id());
+                $resultat->etape_fusion = 2; // Rester à l'étape 2, mais marqué comme validé
+                $resultat->save();
+                $resultatsFinalises++;
+            }
+
+            $requiresDeliberation = $session->isRattrapage() && !$niveau->is_concours;
             $deliberation = null;
 
-            // Une délibération est nécessaire si:
-            // 1. C'est une session de rattrapage
-            // 2. Ce n'est pas un niveau de type concours (comme PACES)
-            if ($session && $session->isRattrapage() && $niveau && !$niveau->is_concours) {
-                $requiresDeliberation = true;
-
-                // Rechercher une délibération existante pour cette session/niveau
-                $deliberation = Deliberation::where('niveau_id', $niveau->id)
-                    ->where('session_id', $session->id)
-                    ->where('annee_universitaire_id', $session->annee_universitaire_id)
-                    ->whereIn('statut', [
-                        Deliberation::STATUT_PROGRAMMEE,
-                        Deliberation::STATUT_EN_COURS
-                    ])
-                    ->first();
-
-                // Si aucune délibération n'existe, on en crée une automatiquement
-                if (!$deliberation) {
-                    $deliberation = $this->creerDeliberationAutomatique(
-                        $niveau->id,
-                        $session->id,
-                        $session->annee_universitaire_id
-                    );
-
-                    if (!$deliberation) {
-                        Log::warning('Impossible de créer une délibération automatique', [
-                            'examen_id' => $examenId,
-                            'niveau_id' => $niveau->id,
-                            'session_id' => $session->id
-                        ]);
-                        // On continue sans délibération
-                        $requiresDeliberation = false;
-                    }
-                }
-            }
-
-            // Obtenir la liste des étudiants concernés
-            $etudiants = $resultats->pluck('etudiant_id')->unique();
-            $decisions = [];
-
-            // Si une délibération est requise et existe, la démarrer
-            if ($requiresDeliberation && $deliberation && $deliberation->isProgrammee()) {
-                try {
-                    // Démarrer la délibération (passe en statut EN_COURS)
-                    $deliberation->demarrer(Auth::id());
-
-                    Log::info('Délibération démarrée automatiquement lors de la validation des résultats', [
-                        'deliberation_id' => $deliberation->id,
-                        'examen_id' => $examenId
-                    ]);
-                } catch (\Exception $e) {
-                    Log::error('Erreur lors du démarrage automatique de la délibération', [
-                        'deliberation_id' => $deliberation->id,
-                        'examen_id' => $examenId,
-                        'error' => $e->getMessage()
-                    ]);
-
-                    // On continue sans délibération si erreur
-                    $requiresDeliberation = false;
-                    $deliberation = null;
-                }
-            }
-
-            // Déterminer les décisions pour chaque étudiant
-            foreach ($etudiants as $etudiantId) {
-                if ($requiresDeliberation && $deliberation) {
-                    // Cas de la délibération: utiliser la logique du modèle Deliberation
-                    $moyenne = $deliberation->calculerMoyenneEtudiant($etudiantId);
-                    $pourcentageUE = $deliberation->calculerPourcentageUEValidees($etudiantId);
-                    $decision = $deliberation->determinerDecisionAutomatique($moyenne, $pourcentageUE);
-
-                    // Enregistrer la décision dans la délibération
-                    $deliberation->enregistrerDecision($etudiantId, $decision, $moyenne);
-
-                    $decisions[$etudiantId] = $decision;
-                } else {
-                    // Cas sans délibération (1ère session, concours, etc.)
-                    // Utiliser la logique du modèle Resultat
-                    $decision = Resultat::determinerDecisionPremiereSession($etudiantId, $session->id);
-                    $decisions[$etudiantId] = $decision;
-                }
-            }
-
-            // Mettre à jour les résultats avec les décisions et publier
-            foreach ($resultats as $resultat) {
-                $decision = $decisions[$resultat->etudiant_id] ?? null;
-
-                // Associer le résultat à la délibération si elle existe
-                if ($deliberation) {
-                    $resultat->deliberation_id = $deliberation->id;
-                    $resultat->save(); // Sauvegarder avant de changer le statut
-                }
-
-                // Changer le statut avec la décision
-                $resultat->changerStatut(
-                    Resultat::STATUT_PUBLIE,
-                    Auth::id(),
-                    $requiresDeliberation,
-                    $decision
+            if ($requiresDeliberation) {
+                $deliberation = $this->creerDeliberationAutomatique(
+                    $niveau->id,
+                    $session->id,
+                    $session->annee_universitaire_id
                 );
             }
 
-            // Si une délibération a été utilisée, finaliser et publier ses résultats
-            if ($deliberation && $deliberation->isEnCours()) {
-                try {
-                    // Mettre à jour les statistiques de la délibération
-                    $deliberation->mettreAJourStatistiques();
+            // Initialiser les statistiques par étudiant
+            $statsEtudiants = [
+                'total' => 0,
+                'admis' => 0,
+                'rattrapage' => 0
+            ];
 
-                    // Si configuré pour appliquer automatiquement les règles, on finalise
-                    if ($deliberation->appliquer_regles_auto) {
-                        // Finaliser la délibération (passe en statut TERMINEE)
-                        $deliberation->finaliser(Auth::id());
+            $calculService = new CalculAcademiqueService();
 
-                        // Puis publier les résultats de la délibération (passe en statut VALIDEE)
-                        $deliberation->publier(Auth::id());
+            // Transférer vers ResultatFinal
+            foreach ($resultats->groupBy('etudiant_id') as $etudiantId => $etudiantResultats) {
+                $statsEtudiants['total']++;
 
-                        Log::info('Délibération automatiquement finalisée et publiée', [
-                            'deliberation_id' => $deliberation->id,
-                            'examen_id' => $examenId
-                        ]);
+                $moyenneUE = 0;
+                $totalECs = 0;
+
+                foreach ($etudiantResultats as $resultat) {
+                    $moyenneUE += $resultat->note;
+                    $totalECs++;
+                }
+
+                $moyenneGenerale = $totalECs > 0 ? round($moyenneUE / $totalECs, 2) : 0;
+                $decision = $moyenneGenerale >= 10 ? 'admis' : 'rattrapage';
+
+                if ($decision === 'admis') {
+                    $statsEtudiants['admis']++;
+                } else {
+                    $statsEtudiants['rattrapage']++;
+                }
+
+                foreach ($etudiantResultats as $resultat) {
+                    $exists = ResultatFinal::where('etudiant_id', $resultat->etudiant_id)
+                        ->where('examen_id', $resultat->examen_id)
+                        ->where('ec_id', $resultat->ec_id)
+                        ->exists();
+
+                    if ($exists) {
+                        continue;
                     }
-                } catch (\Exception $e) {
-                    Log::error('Erreur lors de la finalisation/publication automatique de la délibération', [
-                        'deliberation_id' => $deliberation->id,
-                        'examen_id' => $examenId,
-                        'error' => $e->getMessage()
-                    ]);
 
-                    // On continue car les résultats ont déjà été publiés
+                    ResultatFinal::create([
+                        'etudiant_id' => $resultat->etudiant_id,
+                        'examen_id' => $resultat->examen_id,
+                        'code_anonymat_id' => $resultat->code_anonymat_id,
+                        'ec_id' => $resultat->ec_id,
+                        'note' => $resultat->note,
+                        'genere_par' => Auth::id(),
+                        'statut' => $requiresDeliberation ? 'en_attente' : 'publie',
+                        'status_history' => [[
+                            'de' => 'en_attente',
+                            'vers' => $requiresDeliberation ? 'en_attente' : 'publie',
+                            'user_id' => Auth::id(),
+                            'date' => now()->toDateTimeString(),
+                            'avec_deliberation' => $requiresDeliberation,
+                            'decision' => $decision
+                        ]],
+                        'decision' => $decision,
+                        'date_publication' => $requiresDeliberation ? null : now(),
+                        'hash_verification' => hash('sha256', $resultat->id . $resultat->note . time()),
+                        'fusion_id' => $resultat->id,
+                        'date_fusion' => now(),
+                        'deliberation_id' => $deliberation ? $deliberation->id : null
+                    ]);
                 }
             }
 
             DB::commit();
 
-            Log::info('Résultats validés et publiés avec succès', [
+            Log::info('Validation des résultats terminée', [
                 'examen_id' => $examenId,
-                'resultats_traites' => $resultats->count(),
+                'total_etudiants' => $statsEtudiants['total'],
+                'admis' => $statsEtudiants['admis'],
+                'rattrapage' => $statsEtudiants['rattrapage'],
                 'avec_deliberation' => $requiresDeliberation,
                 'deliberation_id' => $deliberation ? $deliberation->id : null
             ]);
 
             return [
                 'success' => true,
-                'message' => $requiresDeliberation
-                    ? 'Résultats validés, délibérés et publiés avec succès.'
-                    : 'Résultats validés et publiés avec succès.',
-                'avec_deliberation' => $requiresDeliberation,
-                'deliberation_id' => $deliberation ? $deliberation->id : null
+                'message' => sprintf(
+                    'Résultats validés avec succès. Total étudiants: %d, Admis: %d, Rattrapage: %d',
+                    $statsEtudiants['total'],
+                    $statsEtudiants['admis'],
+                    $statsEtudiants['rattrapage']
+                )
             ];
+
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erreur lors de la validation et publication des résultats', [
+            Log::error('Erreur lors de la validation des résultats', [
                 'examen_id' => $examenId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Erreur lors de la validation : ' . $e->getMessage()
+            ];
+        }
+    }
+
+
+
+    /**
+     * Transfère les résultats de resultats_fusion vers resultats_finaux
+     *
+     * @param array $resultatFusionIds
+     * @param int $generePar
+     * @param bool $avecDeliberation
+     * @return array
+     */
+    public function transfererResultats(array $resultatFusionIds, int $generePar, bool $avecDeliberation = false)
+    {
+        try {
+            DB::beginTransaction();
+
+            $resultatsFusion = ResultatFusion::whereIn('id', $resultatFusionIds)
+                ->where('statut', ResultatFusion::STATUT_VALIDE)
+                ->get();
+
+            if ($resultatsFusion->isEmpty()) {
+                return [
+                    'success' => false,
+                    'message' => 'Aucun résultat valide à transférer.',
+                    'resultats_transférés' => 0,
+                ];
+            }
+
+            $resultatsTransférés = 0;
+            $etudiantsTraites = [];
+            $examenId = $resultatsFusion->first()->examen_id;
+            $examen = Examen::with('session')->findOrFail($examenId);
+            $session = $examen->session;
+
+            // Créer une instance de CalculAcademiqueService
+            $calculService = new CalculAcademiqueService();
+
+            foreach ($resultatsFusion as $resultatFusion) {
+                $exists = ResultatFinal::where('etudiant_id', $resultatFusion->etudiant_id)
+                    ->where('examen_id', $resultatFusion->examen_id)
+                    ->where('ec_id', $resultatFusion->ec_id)
+                    ->exists();
+
+                if ($exists) {
+                    continue;
+                }
+
+                // Créer le résultat final (initialement sans décision)
+                $resultatFinal = ResultatFinal::create([
+                    'etudiant_id' => $resultatFusion->etudiant_id,
+                    'examen_id' => $resultatFusion->examen_id,
+                    'code_anonymat_id' => $resultatFusion->code_anonymat_id,
+                    'ec_id' => $resultatFusion->ec_id,
+                    'note' => $resultatFusion->note,
+                    'genere_par' => $generePar,
+                    'modifie_par' => null,
+                    'statut' => 'en_attente',
+                    'status_history' => [[
+                        'de' => 'en_attente',
+                        'vers' => 'en_attente',
+                        'user_id' => $generePar,
+                        'date' => now()->toDateTimeString(),
+                        'avec_deliberation' => $avecDeliberation,
+                        'decision' => null,
+                    ]],
+                    'decision' => null, // La décision sera mise à jour plus tard
+                    'date_publication' => null,
+                    'hash_verification' => hash('sha256', $resultatFusion->id . $resultatFusion->note . time()),
+                    'fusion_id' => $resultatFusion->id,
+                    'date_fusion' => now(),
+                ]);
+
+                $resultatsTransférés++;
+                $etudiantsTraites[$resultatFusion->etudiant_id] = true;
+            }
+
+            // Une fois tous les résultats transférés, calculer et mettre à jour les décisions
+            foreach (array_keys($etudiantsTraites) as $etudiantId) {
+                // Calculer les résultats complets pour l'étudiant
+                $resultatsEtudiant = $calculService->calculerResultatsComplets($etudiantId, $session->id, true);
+
+                // Déterminer la décision en fonction de la moyenne
+                $moyenneUE = $resultatsEtudiant['synthese']['moyenne_generale'];
+                $decision = $moyenneUE >= 10 ? 'admis' : 'rattrapage';
+
+                // Mettre à jour tous les résultats de l'étudiant avec la nouvelle décision
+                ResultatFinal::where('etudiant_id', $etudiantId)
+                    ->where('examen_id', $examenId)
+                    ->update([
+                        'decision' => $decision,
+                        'statut' => 'publie',
+                        'date_publication' => now()
+                    ]);
+
+                Log::info("Décision calculée et appliquée", [
+                    'etudiant_id' => $etudiantId,
+                    'moyenne_ue' => $moyenneUE,
+                    'decision' => $decision
+                ]);
+            }
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'message' => "Transfert effectué avec succès. $resultatsTransférés résultat(s) transféré(s).",
+                'resultats_transférés' => $resultatsTransférés,
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors du transfert des résultats', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
             return [
                 'success' => false,
-                'message' => 'Erreur lors de la validation : ' . $e->getMessage(),
+                'message' => 'Erreur lors du transfert : ' . $e->getMessage(),
+                'resultats_transférés' => 0,
             ];
         }
     }
 
-    /**
-     * ✅ SUPPRESSION : Cette méthode n'est plus nécessaire car la publication est intégrée à validerResultats()
-     * Conservée pour compatibilité descendante mais redirige vers validerResultats()
-     *
-     * @param int $examenId
-     * @param bool $estPACES
-     * @return array
-     */
-    public function publierResultats($examenId, $estPACES = false)
-    {
-        Log::info('Appel obsolète de publierResultats - redirection vers validerResultats', [
-            'examen_id' => $examenId,
-            'est_paces' => $estPACES
-        ]);
-
-        // ✅ REDIRECTION : Dans la nouvelle logique, la validation publie automatiquement
-        return [
-            'success' => false,
-            'message' => 'Cette méthode est obsolète. La validation publie automatiquement les résultats.',
-        ];
-    }
 
     /**
      * Annule les résultats publiés
@@ -880,8 +923,8 @@ class FusionService
         try {
             DB::beginTransaction();
 
-            $resultats = Resultat::where('examen_id', $examenId)
-                ->where('statut', Resultat::STATUT_PUBLIE)
+            $resultats = ResultatFinal::where('examen_id', $examenId)
+                ->where('statut', ResultatFinal::STATUT_PUBLIE)
                 ->get();
 
             if ($resultats->isEmpty()) {
@@ -892,37 +935,26 @@ class FusionService
                 ];
             }
 
-            // Vérifier si ces résultats sont liés à une délibération
             $deliberationId = $resultats->first()->deliberation_id;
-            $deliberation = null;
-
-            if ($deliberationId) {
-                $deliberation = Deliberation::find($deliberationId);
-            }
+            $deliberation = $deliberationId ? Deliberation::find($deliberationId) : null;
 
             foreach ($resultats as $resultat) {
-                $resultat->changerStatut(Resultat::STATUT_ANNULE, Auth::id());
-                // Ne pas effacer la référence à la délibération
+                $resultat->changerStatut(ResultatFinal::STATUT_ANNULE, Auth::id());
             }
 
-            // Si une délibération est associée, mettre à jour son statut
             if ($deliberation && $deliberation->isValidee()) {
                 $deliberation->statut = Deliberation::STATUT_ANNULEE;
-                $deliberation->observations = $deliberation->observations . "\n\nAnnulée le " . now()->format('d/m/Y H:i') .
-                                            " suite à l'annulation des résultats.";
+                $deliberation->observations .= "\nAnnulée le " . now()->format('d/m/Y H:i') . " suite à l'annulation des résultats.";
                 $deliberation->save();
-
-                Log::info('Délibération associée annulée', [
-                    'deliberation_id' => $deliberation->id
-                ]);
+                Log::info('Délibération annulée', ['deliberation_id' => $deliberationId]);
             }
 
             DB::commit();
 
-            Log::info('Résultats annulés avec succès', [
+            Log::info('Résultats annulés', [
                 'examen_id' => $examenId,
                 'resultats_annules' => $resultats->count(),
-                'deliberation_id' => $deliberationId
+                'deliberation_id' => $deliberationId,
             ]);
 
             return [
@@ -931,7 +963,7 @@ class FusionService
             ];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erreur lors de l\'annulation des résultats', [
+            Log::error('Erreur lors de l\'annulation', [
                 'examen_id' => $examenId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -944,8 +976,7 @@ class FusionService
     }
 
     /**
-     * ✅ CORRECTION : Remet les résultats annulés à l'état provisoire
-     * Dans la nouvelle logique, il n'y a plus d'état "validé" intermédiaire
+     * Restaure les résultats annulés à l'état en attente
      *
      * @param int $examenId
      * @return array
@@ -955,8 +986,8 @@ class FusionService
         try {
             DB::beginTransaction();
 
-            $resultats = Resultat::where('examen_id', $examenId)
-                ->where('statut', Resultat::STATUT_ANNULE)
+            $resultats = ResultatFinal::where('examen_id', $examenId)
+                ->where('statut', ResultatFinal::STATUT_ANNULE)
                 ->get();
 
             if ($resultats->isEmpty()) {
@@ -967,46 +998,35 @@ class FusionService
                 ];
             }
 
-            // Vérifier si ces résultats sont liés à une délibération
             $deliberationId = $resultats->first()->deliberation_id;
-            $deliberation = null;
-
-            if ($deliberationId) {
-                $deliberation = Deliberation::find($deliberationId);
-            }
+            $deliberation = $deliberationId ? Deliberation::find($deliberationId) : null;
 
             foreach ($resultats as $resultat) {
-                $resultat->changerStatut(Resultat::STATUT_PROVISOIRE, Auth::id());
-                // Ne pas effacer la référence à la délibération
+                $resultat->changerStatut(ResultatFinal::STATUT_EN_ATTENTE, Auth::id());
             }
 
-            // Si une délibération est associée, restaurer son statut
             if ($deliberation && $deliberation->isAnnulee()) {
                 $deliberation->statut = Deliberation::STATUT_TERMINEE;
-                $deliberation->observations = $deliberation->observations . "\n\nRéactivée le " . now()->format('d/m/Y H:i') .
-                                            " suite à la réactivation des résultats.";
+                $deliberation->observations .= "\nRéactivée le " . now()->format('d/m/Y H:i') . " suite à la réactivation des résultats.";
                 $deliberation->save();
-
-                Log::info('Délibération associée réactivée', [
-                    'deliberation_id' => $deliberation->id
-                ]);
+                Log::info('Délibération réactivée', ['deliberation_id' => $deliberationId]);
             }
 
             DB::commit();
 
-            Log::info('Retour à l\'étape provisoire effectué', [
+            Log::info('Retour à l\'état en attente effectué', [
                 'examen_id' => $examenId,
                 'resultats_restaures' => $resultats->count(),
-                'deliberation_id' => $deliberationId
+                'deliberation_id' => $deliberationId,
             ]);
 
             return [
                 'success' => true,
-                'message' => 'Retour à l\'étape provisoire effectué. Vous pouvez maintenant revalider les résultats.',
+                'message' => 'Retour à l\'état en attente effectué.',
             ];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erreur lors du retour à l\'état provisoire', [
+            Log::error('Erreur lors du retour à l\'état en attente', [
                 'examen_id' => $examenId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -1015,6 +1035,152 @@ class FusionService
                 'success' => false,
                 'message' => 'Erreur lors du retour : ' . $e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Réinitialise tous les résultats de l'examen
+     *
+     * @param int $examenId
+     * @return array
+     */
+    public function resetExam($examenId)
+    {
+        try {
+            DB::beginTransaction();
+
+            $totalFusion = ResultatFusion::where('examen_id', $examenId)->count();
+            $totalFinal = ResultatFinal::where('examen_id', $examenId)->count();
+
+            if ($totalFusion === 0 && $totalFinal === 0) {
+                DB::rollBack();
+                return [
+                    'success' => false,
+                    'message' => 'Aucun résultat à supprimer pour cet examen.',
+                ];
+            }
+
+            $deliberationIds = ResultatFinal::where('examen_id', $examenId)
+                ->whereNotNull('deliberation_id')
+                ->pluck('deliberation_id')
+                ->unique()
+                ->toArray();
+
+            $deletedFusion = ResultatFusion::where('examen_id', $examenId)->delete();
+            $deletedFinal = ResultatFinal::where('examen_id', $examenId)->delete();
+
+            foreach ($deliberationIds as $deliberationId) {
+                $autresResultats = ResultatFinal::where('deliberation_id', $deliberationId)->exists();
+                if (!$autresResultats) {
+                    $deliberation = Deliberation::find($deliberationId);
+                    if ($deliberation && !$deliberation->isValidee()) {
+                        $deliberation->statut = Deliberation::STATUT_ANNULEE;
+                        $deliberation->observations .= "\nAnnulée le " . now()->format('d/m/Y H:i') . " suite à la réinitialisation.";
+                        $deliberation->save();
+                        Log::info('Délibération annulée', ['deliberation_id' => $deliberationId]);
+                    }
+                }
+            }
+
+            DB::commit();
+
+            Log::info('Examen réinitialisé', [
+                'examen_id' => $examenId,
+                'resultats_fusion_supprimes' => $deletedFusion,
+                'resultats_finaux_supprimes' => $deletedFinal,
+                'deliberations_traitees' => count($deliberationIds),
+            ]);
+
+            return [
+                'success' => true,
+                'message' => "$deletedFusion résultat(s) fusion et $deletedFinal résultat(s) final supprimé(s).",
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors de la réinitialisation', [
+                'examen_id' => $examenId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'Erreur lors de la réinitialisation : ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Crée une délibération automatique pour la session de rattrapage
+     *
+     * @param int $niveauId
+     * @param int $sessionId
+     * @param int $anneeUniversitaireId
+     * @return Deliberation|null
+     */
+    private function creerDeliberationAutomatique($niveauId, $sessionId, $anneeUniversitaireId)
+    {
+        try {
+            $session = SessionExam::find($sessionId);
+            if (!$session || !$session->isRattrapage()) {
+                Log::warning('Pas une session de rattrapage', ['session_id' => $sessionId]);
+                return null;
+            }
+
+            $niveau = Niveau::find($niveauId);
+            if (!$niveau) {
+                Log::warning('Niveau non trouvé', ['niveau_id' => $niveauId]);
+                return null;
+            }
+
+            if ($niveau->is_concours) {
+                Log::warning('Niveau concours non éligible', [
+                    'niveau_id' => $niveauId,
+                    'niveau_abr' => $niveau->abr,
+                ]);
+                return null;
+            }
+
+            $dateDeliberation = $session->date_end
+                ? Carbon::parse($session->date_end)->addDays(3)->startOfHour()->setTime(14, 0)
+                : now()->startOfHour()->setTime(14, 0);
+
+            while ($dateDeliberation->isWeekend()) {
+                $dateDeliberation->addDay();
+            }
+
+            $parametresDefaut = Deliberation::getDefaultParamsForNiveau($niveau);
+
+            $deliberation = Deliberation::create([
+                'niveau_id' => $niveauId,
+                'session_id' => $sessionId,
+                'annee_universitaire_id' => $anneeUniversitaireId,
+                'date_deliberation' => $dateDeliberation,
+                'statut' => Deliberation::STATUT_PROGRAMMEE,
+                'seuil_admission' => $parametresDefaut['seuil_admission'],
+                'seuil_rachat' => $parametresDefaut['seuil_rachat'],
+                'pourcentage_ue_requises' => $parametresDefaut['pourcentage_ue_requises'],
+                'appliquer_regles_auto' => $parametresDefaut['appliquer_regles_auto'],
+                'observations' => "Délibération automatique pour {$niveau->nom} ({$niveau->abr}).\n" .
+                                 "Seuil admission: {$parametresDefaut['seuil_admission']}\n" .
+                                 "Seuil rachat: {$parametresDefaut['seuil_rachat']}\n" .
+                                 "UE requises: {$parametresDefaut['pourcentage_ue_requises']}%",
+            ]);
+
+            Log::info('Délibération créée', [
+                'deliberation_id' => $deliberation->id,
+                'niveau_id' => $niveauId,
+                'session_id' => $sessionId,
+                'date_deliberation' => $dateDeliberation->format('Y-m-d H:i'),
+            ]);
+
+            return $deliberation;
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la création de la délibération', [
+                'niveau_id' => $niveauId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
         }
     }
 
@@ -1028,14 +1194,13 @@ class FusionService
     {
         $issues = [];
 
-        // Vérifier les copies invalides
         $invalidCopies = Copie::where('examen_id', $examenId)
             ->where(function ($query) {
                 $query->whereNull('code_anonymat_id')
-                    ->orWhereNull('ec_id')
-                    ->orWhereHas('codeAnonymat', function ($q) {
-                        $q->whereNull('code_complet')->orWhere('code_complet', '');
-                    });
+                      ->orWhereNull('ec_id')
+                      ->orWhereHas('codeAnonymat', function ($q) {
+                          $q->whereNull('code_complet')->orWhere('code_complet', '');
+                      });
             })
             ->count();
 
@@ -1043,13 +1208,12 @@ class FusionService
             $issues[] = "$invalidCopies copie(s) avec code_anonymat_id ou ec_id invalide(s)";
         }
 
-        // Vérifier les manchettes invalides
         $invalidManchettes = Manchette::where('examen_id', $examenId)
             ->where(function ($query) {
                 $query->whereNull('code_anonymat_id')
-                    ->orWhereHas('codeAnonymat', function ($q) {
-                        $q->whereNull('code_complet')->orWhere('code_complet', '');
-                    });
+                      ->orWhereHas('codeAnonymat', function ($q) {
+                          $q->whereNull('code_complet')->orWhere('code_complet', '');
+                      });
             })
             ->count();
 
@@ -1057,13 +1221,11 @@ class FusionService
             $issues[] = "$invalidManchettes manchette(s) avec code_anonymat_id ou code_complet invalide(s)";
         }
 
-        // Vérifier l'absence de manchettes
         $manchettesExist = Manchette::where('examen_id', $examenId)->exists();
         if (!$manchettesExist) {
             $issues[] = "Aucune manchette trouvée pour l'examen";
         }
 
-        // Vérifier l'absence de codes d'anonymat
         $codesExist = CodeAnonymat::where('examen_id', $examenId)->exists();
         if (!$codesExist) {
             $issues[] = "Aucun code d'anonymat trouvé pour l'examen";
@@ -1073,198 +1235,10 @@ class FusionService
             Log::warning('Validation des données échouée', [
                 'examen_id' => $examenId,
                 'issues' => $issues,
-                'debug' => [
-                    'invalid_copies' => $invalidCopies,
-                    'invalid_manchettes' => $invalidManchettes,
-                    'manchettes_exist' => $manchettesExist,
-                    'codes_exist' => $codesExist,
-                ],
             ]);
-            return [
-                'valid' => false,
-                'issues' => $issues,
-            ];
+            return ['valid' => false, 'issues' => $issues];
         }
 
         return ['valid' => true];
-    }
-
-    /**
-     * Réinitialise simplement tous les résultats de l'examen
-     * Supprime tous les enregistrements de la table resultats pour cet examen
-     *
-     * @param int $examenId
-     * @return array
-     */
-    public function resetExam($examenId)
-    {
-        try {
-            DB::beginTransaction();
-
-            // Compter les résultats avant suppression
-            $totalResultats = Resultat::where('examen_id', $examenId)->count();
-
-            if ($totalResultats === 0) {
-                DB::rollBack();
-                return [
-                    'success' => false,
-                    'message' => 'Aucun résultat à supprimer pour cet examen.',
-                ];
-            }
-
-            // Vérifier si ces résultats sont liés à une délibération
-            $deliberationIds = Resultat::where('examen_id', $examenId)
-                ->whereNotNull('deliberation_id')
-                ->pluck('deliberation_id')
-                ->unique()
-                ->toArray();
-
-            // Supprimer TOUS les résultats de cet examen
-            $deletedCount = Resultat::where('examen_id', $examenId)->delete();
-
-            // Nettoyer les délibérations liées si elles sont vides
-            if (!empty($deliberationIds)) {
-                foreach ($deliberationIds as $deliberationId) {
-                    // Vérifier si d'autres résultats utilisent cette délibération
-                    $autresResultats = Resultat::where('deliberation_id', $deliberationId)->exists();
-
-                    if (!$autresResultats) {
-                        // Aucun autre résultat, on peut annuler la délibération
-                        $deliberation = Deliberation::find($deliberationId);
-                        if ($deliberation && !$deliberation->isValidee()) {
-                            $deliberation->statut = Deliberation::STATUT_ANNULEE;
-                            $deliberation->observations = $deliberation->observations . "\n\nAnnulée automatiquement le " .
-                                                        now()->format('d/m/Y H:i') . " suite à la réinitialisation des résultats.";
-                            $deliberation->save();
-
-                            Log::info('Délibération annulée suite à reset', [
-                                'deliberation_id' => $deliberationId
-                            ]);
-                        }
-                    }
-                }
-            }
-
-            DB::commit();
-
-            Log::info('Examen réinitialisé - Résultats supprimés', [
-                'examen_id' => $examenId,
-                'resultats_supprimes' => $deletedCount,
-                'deliberations_traitees' => count($deliberationIds)
-            ]);
-
-            return [
-                'success' => true,
-                'message' => "Examen réinitialisé avec succès. {$deletedCount} résultat(s) supprimé(s).",
-            ];
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('Erreur lors de la réinitialisation', [
-                'examen_id' => $examenId,
-                'error' => $e->getMessage()
-            ]);
-
-            return [
-                'success' => false,
-                'message' => 'Erreur lors de la réinitialisation : ' . $e->getMessage(),
-            ];
-        }
-    }
-
-
-    /**
-     * Crée automatiquement une délibération pour une session de rattrapage
-     *
-     * @param int $niveauId ID du niveau
-     * @param int $sessionId ID de la session
-     * @param int $anneeUniversitaireId ID de l'année universitaire
-     * @return Deliberation|null
-     */
-    private function creerDeliberationAutomatique($niveauId, $sessionId, $anneeUniversitaireId)
-    {
-        try {
-            // Vérifier que c'est bien une session de rattrapage
-            $session = SessionExam::find($sessionId);
-            if (!$session || !$session->isRattrapage()) {
-                Log::warning('Impossible de créer une délibération automatique: pas une session de rattrapage', [
-                    'session_id' => $sessionId
-                ]);
-                return null;
-            }
-
-            // Récupérer l'objet niveau complet
-            $niveau = Niveau::find($niveauId);
-            if (!$niveau) {
-                Log::warning('Impossible de créer une délibération automatique: niveau non trouvé', [
-                    'niveau_id' => $niveauId
-                ]);
-                return null;
-            }
-
-            // Vérifier que ce n'est pas un niveau concours
-            if ($niveau->is_concours) {
-                Log::warning('Impossible de créer une délibération automatique: niveau concours non éligible', [
-                    'niveau_id' => $niveauId,
-                    'niveau_abr' => $niveau->abr
-                ]);
-                return null;
-            }
-
-            // Calculer la date de délibération (3 jours après fin de session)
-            $dateDeliberation = now();
-            if ($session->date_end) {
-                $dateDeliberation = Carbon::parse($session->date_end)->addDays(3);
-                // Éviter les weekends
-                while ($dateDeliberation->isWeekend()) {
-                    $dateDeliberation->addDay();
-                }
-            }
-            $dateDeliberation->setTime(14, 0, 0); // 14h00
-
-            // Récupérer les paramètres par défaut pour ce niveau
-            $parametresDefaut = Deliberation::getDefaultParamsForNiveau($niveau);
-
-            // Créer la délibération avec ces paramètres
-            $deliberation = Deliberation::create([
-                'niveau_id' => $niveauId,
-                'session_id' => $sessionId,
-                'annee_universitaire_id' => $anneeUniversitaireId,
-                'date_deliberation' => $dateDeliberation,
-                'statut' => Deliberation::STATUT_PROGRAMMEE,
-                'seuil_admission' => $parametresDefaut['seuil_admission'],
-                'seuil_rachat' => $parametresDefaut['seuil_rachat'],
-                'pourcentage_ue_requises' => $parametresDefaut['pourcentage_ue_requises'],
-                'appliquer_regles_auto' => $parametresDefaut['appliquer_regles_auto'],
-                'observations' => "Délibération créée automatiquement lors de la validation des résultats.\n" .
-                                "Critères appliqués pour niveau {$niveau->nom} ({$niveau->abr}) :\n" .
-                                "- Seuil d'admission : {$parametresDefaut['seuil_admission']}\n" .
-                                "- Seuil de rachat : {$parametresDefaut['seuil_rachat']}\n" .
-                                "- Pourcentage d'UE requises : {$parametresDefaut['pourcentage_ue_requises']}%"
-            ]);
-
-            Log::info('Délibération créée automatiquement', [
-                'deliberation_id' => $deliberation->id,
-                'niveau_id' => $niveauId,
-                'niveau_nom' => $niveau->nom,
-                'niveau_abr' => $niveau->abr,
-                'session_id' => $sessionId,
-                'annee_universitaire_id' => $anneeUniversitaireId,
-                'date_deliberation' => $dateDeliberation->format('Y-m-d H:i:s'),
-                'parametres' => $parametresDefaut
-            ]);
-
-            return $deliberation;
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de la création automatique de délibération', [
-                'niveau_id' => $niveauId,
-                'session_id' => $sessionId,
-                'annee_universitaire_id' => $anneeUniversitaireId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return null;
-        }
     }
 }

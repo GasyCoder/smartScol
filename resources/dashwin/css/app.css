@@ -20,6 +20,10 @@
 @import "./custom/keyframes.css";
 @import "./custom/font-faces.css";
 
+[x-cloak] {
+    display: none !important;
+}
+
 .stripe {
     background-image: linear-gradient(
         45deg,

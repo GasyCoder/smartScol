@@ -22,7 +22,12 @@ return new class extends Migration
             $table->unsignedBigInteger('modifie_par')->nullable();
             $table->enum('statut', ['en_attente', 'publie', 'annule'])->default('en_attente');
             $table->json('status_history')->nullable();
-            $table->enum('decision', ['admis', 'ajourne', 'rattrapage', 'exclus'])->nullable();
+            $table->text('motif_annulation')->nullable();
+            $table->timestamp('date_annulation')->nullable();
+            $table->unsignedBigInteger('annule_par')->nullable();
+            $table->timestamp('date_reactivation')->nullable();
+            $table->unsignedBigInteger('reactive_par')->nullable();
+            $table->enum('decision', ['admis', 'rattrapage', 'redoublant', 'exclus'])->nullable();
             $table->timestamp('date_publication')->nullable();
             $table->string('hash_verification', 64)->nullable();
             $table->unsignedBigInteger('deliberation_id')->nullable();
@@ -39,11 +44,18 @@ return new class extends Migration
             $table->foreign('modifie_par')->references('id')->on('users')->onDelete('set null');
             $table->foreign('deliberation_id')->references('id')->on('deliberations')->onDelete('set null');
             $table->foreign('fusion_id')->references('id')->on('resultats_fusion')->onDelete('set null');
-
+            $table->foreign('annule_par')->references('id')->on('users')
+                ->onDelete('set null')
+                ->name('fk_resultats_finaux_annule_par');
+            $table->foreign('reactive_par')->references('id')->on('users')
+                ->onDelete('set null')
+                ->name('fk_resultats_finaux_reactive_par');
             // Contrainte d'unicité
             $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_final_etudiant');
 
             // Index pour optimisation
+            $table->index(['statut', 'date_reactivation'], 'idx_statut_reactivation');
+            $table->index(['date_annulation'], 'idx_date_annulation');
             $table->index(['examen_id', 'statut'], 'idx_final_examen_statut');
             $table->index(['etudiant_id', 'statut'], 'idx_final_etudiant_statut');
             $table->index(['deliberation_id'], 'idx_final_deliberation');

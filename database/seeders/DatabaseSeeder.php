@@ -2,32 +2,18 @@
 
 namespace Database\Seeders;
 
-use App\Models\Deliberation;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
         // Appeler d'abord le seeder des rôles et permissions
         $this->call(RolesAndPermissionsSeeder::class);
 
-        // Créer les structures de base pour les entités académiques
-        $this->call([
-            AnneeUniversitaireSeeder::class,
-            NiveauxSeeder::class,
-            ParcoursSeeder::class,
-            SessionExamSeeder::class, // Sessions d'examens (dépend des années universitaires)
-            DeliberationSeeder::class, // Délibérations (dépend des sessions d'examens)
-        ]);
-
         // Créer les utilisateurs de test avec leurs rôles
-
         // Superadmin
         $superadmin = User::create([
             'name' => 'Admin Super',
@@ -54,5 +40,14 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('password'),
         ]);
         $secretaire->assignRole('secretaire');
+
+        // Créer les structures de base pour les entités académiques
+        $this->call([
+            AnneeUniversitaireSeeder::class,
+            NiveauxSeeder::class,
+            ParcoursSeeder::class,
+            SessionExamSeeder::class,
+            DeliberationSeeder::class,
+        ]);
     }
 }
