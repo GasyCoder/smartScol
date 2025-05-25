@@ -572,9 +572,9 @@ class FusionService
     private function verifierResultatEtape3(ResultatFusion $resultat)
     {
         // Vérifications additionnelles pour l'étape 3
-        // Par exemple: vérifier la cohérence avec d'autres résultats, 
+        // Par exemple: vérifier la cohérence avec d'autres résultats,
         // contrôler les moyennes par groupe, etc.
-        
+
         // Vérifier que la note est valide et dans la plage autorisée
         if ($resultat->note !== null && ($resultat->note < 0 || $resultat->note > 20)) {
             Log::warning('Résultat invalide pour étape 3 : note hors plage', [
@@ -584,12 +584,12 @@ class FusionService
             ]);
             return false;
         }
-        
+
         // Vérifier que l'étudiant existe et est actif
         $etudiantActif = Etudiant::where('id', $resultat->etudiant_id)
             ->where('is_active', true)
             ->exists();
-            
+
         if (!$etudiantActif) {
             Log::warning('Résultat invalide pour étape 3 : étudiant inactif', [
                 'resultat_id' => $resultat->id,
@@ -597,7 +597,7 @@ class FusionService
             ]);
             return false;
         }
-        
+
         return true;
     }
 
@@ -656,7 +656,7 @@ class FusionService
 
             $resultats = ResultatFusion::where('examen_id', $examenId)
                 ->where('statut', ResultatFusion::STATUT_VERIFY_3)  // ← CORRECT
-                ->where('etape_fusion', 3)                          // ← CORRECT  
+                ->where('etape_fusion', 3)                          // ← CORRECT
                 ->get();
 
             if ($resultats->isEmpty()) {

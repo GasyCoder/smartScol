@@ -20,13 +20,10 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Composant de gestion du processus de fusion des résultats d'examen
- * 
- * NOUVELLE LOGIQUE DES ÉTAPES :
- * Étape 1: Vérification de cohérence (statut = 'verification')
- * Étape 2: Fusion des données (statut = 'fusion', etapeFusion = 1,2)
- * Étape 3: Vérification et Validation (statut = 'fusion', etapeFusion = 3)
- * Étape 4: Publication/Transfert (statut = 'valide' puis 'publie')
+ * @property \Illuminate\Support\Collection $niveaux
+ * @property \Illuminate\Support\Collection $parcours
+ * @property \Illuminate\Support\Collection $salles
+ * @property \Illuminate\Support\Collection $ecs
  */
 class FusionIndex extends Component
 {
@@ -75,14 +72,24 @@ class FusionIndex extends Component
     public $confirmingAnnulation = false;      // Annulation
     public $confirmingRevenirValidation = false; // Réactivation
     public $confirmingResetFusion = false;     // Reset
-    public $confirmingExport = false; 
+    public $confirmingExport = false;
     public string $motifAnnulation = '';         // Export
 
     // Données pour la délibération
     public $showDeliberationInfo = false;
     public $deliberationData = null;
     public $requiresDeliberation = false;
-
+        // Méthodes de confirmation
+    public function confirmVerification() { $this->confirmingVerification = true; }
+    public function confirmFusion() { $this->confirmingFusion = true; }
+    public function confirmVerify2() { $this->confirmingVerify2 = true; }
+    public function confirmVerify3() { $this->confirmingVerify3 = true; }
+    public function confirmValidation() { $this->confirmingValidation = true; }
+    public function confirmPublication() { $this->confirmingPublication = true; }
+    public function confirmResetFusion() { $this->confirmingResetFusion = true; }
+    public function confirmAnnulation() { $this->confirmingAnnulation = true; }
+    public function confirmRevenirValidation() { $this->confirmingRevenirValidation = true; }
+    public function confirmExport() { $this->confirmingExport = true; }
     protected $listeners = ['switchTab' => 'switchTab'];
 
     protected $queryString = [
@@ -175,7 +182,7 @@ class FusionIndex extends Component
 
         try {
             // === PHASE 1 : Collecte d'informations sans effets de bord ===
-            
+
             // Vérifier les résultats finaux
             $resultatFinalPublie = ResultatFinal::where('examen_id', $this->examen_id)
                 ->where('statut', ResultatFinal::STATUT_PUBLIE)
@@ -199,11 +206,11 @@ class FusionIndex extends Component
                 $coherenceVerifiee = false;
             }
             // === PHASE 2 : Détection de scénarios spéciaux ===
-            $repriseApresAnnulation = $resultatFinalAnnule && 
-                                    !$resultatFinalPublie && 
+            $repriseApresAnnulation = $resultatFinalAnnule &&
+                                    !$resultatFinalPublie &&
                                     !$resultatFinalEnAttente;
 
-            $fusionAbandonnee = $resultatsFusion->isNotEmpty() && 
+            $fusionAbandonnee = $resultatsFusion->isNotEmpty() &&
                             !$statutsFusion->contains(ResultatFusion::STATUT_VALIDE) &&
                             !$resultatFinalEnAttente &&
                             !$resultatFinalPublie;
@@ -215,7 +222,7 @@ class FusionIndex extends Component
                 $this->etapeProgress = 100;
                 $this->etapeFusion = 4;
                 $this->resetInterface();
-                
+
             } elseif ($resultatFinalEnAttente && !$resultatFinalAnnule) {
                 // CAS QUASI-FINAL : Résultats validés en attente de publication
                 $this->statut = 'valide';
@@ -224,14 +231,14 @@ class FusionIndex extends Component
                 $this->showResetButton = true;
                 $this->showVerificationButton = false;
                 $this->showFusionButton = false;
-                
+
             } elseif ($resultatFinalAnnule && ($resultatFinalPublie || $resultatFinalEnAttente)) {
                 // CAS SPÉCIAL : Annulation avec autres versions
                 $this->statut = 'annule';
                 $this->etapeProgress = 100;
                 $this->etapeFusion = 4;
                 $this->resetInterface();
-                
+
             } elseif ($repriseApresAnnulation && $coherenceVerifiee && $resultatsFusion->isEmpty()) {
                 // CAS DE REPRISE : Résultats annulés, cohérence déjà vérifiée
                 $this->statut = 'verification';
@@ -240,7 +247,7 @@ class FusionIndex extends Component
                 $this->showVerificationButton = false;
                 $this->showFusionButton = true;
                 $this->showResetButton = true;
-                
+
             } elseif ($repriseApresAnnulation && !$coherenceVerifiee) {
                 // CAS DE REPRISE COMPLÈTE : Résultats annulés, cohérence pas faite
                 $this->statut = 'initial';
@@ -249,7 +256,7 @@ class FusionIndex extends Component
                 $this->showVerificationButton = true;  // ✅ Doit vérifier cohérence
                 $this->showFusionButton = false;
                 $this->showResetButton = false;
-                
+
             } elseif ($statutsFusion->contains(ResultatFusion::STATUT_VALIDE)) {
                 // ÉTAPE 4 : Fusions validées, prêt pour publication
                 $this->statut = 'valide';
@@ -258,7 +265,7 @@ class FusionIndex extends Component
                 $this->showResetButton = true;
                 $this->showVerificationButton = false;
                 $this->showFusionButton = false;
-                
+
             } elseif ($statutsFusion->contains(ResultatFusion::STATUT_VERIFY_3)) {
                 // ÉTAPE 3 : Troisième fusion en cours
                 $this->statut = 'fusion';
@@ -267,7 +274,7 @@ class FusionIndex extends Component
                 $this->showResetButton = true;
                 $this->showVerificationButton = false;
                 $this->showFusionButton = false;
-                
+
             } elseif ($statutsFusion->contains(ResultatFusion::STATUT_VERIFY_2)) {
                 // ÉTAPE 2 : Seconde fusion en cours
                 $this->statut = 'fusion';
@@ -276,7 +283,7 @@ class FusionIndex extends Component
                 $this->showResetButton = true;
                 $this->showVerificationButton = false;
                 $this->showFusionButton = false;
-                
+
             } elseif ($statutsFusion->contains(ResultatFusion::STATUT_VERIFY_1)) {
                 // ÉTAPE 1 : Première fusion en cours
                 $this->statut = 'fusion';
@@ -285,7 +292,7 @@ class FusionIndex extends Component
                 $this->showResetButton = true;
                 $this->showVerificationButton = false;
                 $this->showFusionButton = false;
-                
+
             } elseif ($coherenceVerifiee && !$fusionAbandonnee) {
                 // FLUX NORMAL : Cohérence déjà vérifiée → Prêt pour fusion
                 $this->statut = 'verification';
@@ -294,7 +301,7 @@ class FusionIndex extends Component
                 $this->showVerificationButton = false;  // Cohérence déjà faite
                 $this->showFusionButton = true;         // Peut commencer fusion
                 $this->showResetButton = true;
-                
+
             } else {
                 // 🎯 ÉTAT INITIAL : Ce qui devrait s'afficher pour un nouvel examen
                 $this->statut = 'initial';
@@ -329,7 +336,7 @@ class FusionIndex extends Component
                 'examen_id' => $this->examen_id,
                 'error' => $e->getMessage()
             ]);
-            
+
             // En cas d'erreur, retour à l'état initial sûr
             $this->statut = 'initial';
             $this->etapeProgress = 0;
@@ -337,7 +344,7 @@ class FusionIndex extends Component
             $this->showVerificationButton = true;
             $this->showFusionButton = false;
             $this->showResetButton = false;
-            
+
             toastr()->error('Erreur lors de la vérification de l\'état: ' . $e->getMessage());
         }
     }
@@ -379,7 +386,7 @@ class FusionIndex extends Component
                 if ($total > 0) {
                     $completionRate = round(($complets / $total) * 100);
                     toastr()->success("Vérification terminée : $complets/$total matières complètes ($completionRate%)");
-                    
+
                     // Passer à l'étape suivante
                     $this->statut = 'verification';
                     $this->etapeProgress = 15;
@@ -413,7 +420,7 @@ class FusionIndex extends Component
     public function lancerFusion()
     {
         $this->confirmingFusion = false;
-        
+
         try {
             if ($this->statut !== 'verification' || !$this->showFusionButton) {
                 toastr()->error('Impossible de commencer la fusion dans l\'état actuel.');
@@ -487,10 +494,10 @@ class FusionIndex extends Component
             // Mise à jour de l'état
             $this->etapeFusion = 2;
             $this->etapeProgress = 50;
-            
+
             toastr()->success("$nbUpdated résultats passés à l'étape de seconde vérification avec succès.");
             $this->verifierEtatActuel();
-            
+
         } catch (\Exception $e) {
             Log::error('Erreur dans passerAVerify2', [
                 'examen_id' => $this->examen_id,
@@ -534,10 +541,10 @@ class FusionIndex extends Component
             // Mise à jour de l'état - TROISIÈME FUSION (toujours étape 2)
             $this->etapeFusion = 3;
             $this->etapeProgress = 60; // 3ème fusion terminée
-            
+
             toastr()->success("$nbUpdated résultats passés à la troisième vérification (VERIFY_3) avec succès.");
             $this->verifierEtatActuel();
-            
+
         } catch (\Exception $e) {
             Log::error('Erreur dans passerAVerify3', [
                 'examen_id' => $this->examen_id,
@@ -593,7 +600,7 @@ class FusionIndex extends Component
 
             toastr()->success("$nbValidated résultats validés avec succès après les 3 fusions.");
             $this->verifierEtatActuel();
-            
+
         } catch (\Exception $e) {
             Log::error('Erreur lors de la validation', [
                 'examen_id' => $this->examen_id,
@@ -645,8 +652,8 @@ class FusionIndex extends Component
             // Utiliser la méthode existante transfererResultats
             $fusionService = new FusionService();
             $result = $fusionService->transfererResultats(
-                $resultatIds, 
-                Auth::id(), 
+                $resultatIds,
+                Auth::id(),
                 $requiresDeliberation
             );
 
@@ -654,10 +661,10 @@ class FusionIndex extends Component
                 // Mise à jour de l'état - PUBLICATION TERMINÉE
                 $this->statut = 'publie';
                 $this->etapeProgress = 100;
-                
+
                 toastr()->success($result['message']);
                 $this->verifierEtatActuel();
-                
+
             } else {
                 toastr()->error($result['message']);
             }
@@ -704,14 +711,14 @@ class FusionIndex extends Component
             $this->etapeFusion = 0;
             $this->etapeProgress = 15;
             $this->showResetButton = false;
-            
+
             // Recharger le rapport de cohérence
             $this->chargerRapportCoherence();
-            
+
             // Si rapport non vide, activer le bouton de fusion
             $this->showFusionButton = !empty($this->rapportCoherence);
             $this->showVerificationButton = false;
-            
+
             toastr()->success('Fusion réinitialisée avec succès.');
             $this->switchTab('rapport-stats');
 
@@ -727,17 +734,6 @@ class FusionIndex extends Component
         $this->isProcessing = false;
     }
 
-    // Méthodes de confirmation
-    public function confirmVerification() { $this->confirmingVerification = true; }
-    public function confirmFusion() { $this->confirmingFusion = true; }
-    public function confirmVerify2() { $this->confirmingVerify2 = true; }
-    public function confirmVerify3() { $this->confirmingVerify3 = true; }
-    public function confirmValidation() { $this->confirmingValidation = true; }
-    public function confirmPublication() { $this->confirmingPublication = true; }
-    public function confirmResetFusion() { $this->confirmingResetFusion = true; }
-    public function confirmAnnulation() { $this->confirmingAnnulation = true; }
-    public function confirmRevenirValidation() { $this->confirmingRevenirValidation = true; }
-    public function confirmExport() { $this->confirmingExport = true; }
 
     // Autres méthodes existantes (gestion des filtres, onglets, etc.)
     public function reinitialiserFiltres()
@@ -810,7 +806,7 @@ class FusionIndex extends Component
         try {
             $resultatsFusionExistants = ResultatFusion::where('examen_id', $this->examen_id)
                 ->whereIn('statut', [
-                    ResultatFusion::STATUT_VERIFY_1, 
+                    ResultatFusion::STATUT_VERIFY_1,
                     ResultatFusion::STATUT_VERIFY_2,
                     ResultatFusion::STATUT_VERIFY_3,  // 3ème fusion au lieu de VERIFICATION
                     ResultatFusion::STATUT_VALIDE
@@ -956,7 +952,7 @@ class FusionIndex extends Component
     public function annulerResultats()
     {
         // Vérifications de sécurité et d'autorisation
-        if (!Auth::user()->hasPermissionTo('resultats.annuler')) {
+        if (!Auth::user()->hasPermissionTo('resultats.cancel')) {
             toastr()->error('Vous n\'avez pas l\'autorisation d\'annuler les résultats');
             $this->confirmingAnnulation = false;
             return;
@@ -1017,10 +1013,10 @@ class FusionIndex extends Component
 
             // Réinitialiser les propriétés de la modal
             $this->motifAnnulation = '';
-            
+
             // Vérifier l'état actuel pour mettre à jour l'interface
             $this->verifierEtatActuel();
-            
+
             toastr()->success("$nbResultatsAnnules résultats annulés avec succès. Ils peuvent être réactivés si nécessaire.");
 
             Log::info('Résultats annulés avec succès - NOUVELLE LOGIQUE', [
@@ -1032,14 +1028,14 @@ class FusionIndex extends Component
 
         } catch (\Exception $e) {
             \DB::rollBack();
-            
+
             Log::error('Erreur lors de l\'annulation des résultats', [
                 'examen_id' => $this->examen_id,
                 'user_id' => Auth::id(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             toastr()->error('Erreur lors de l\'annulation : ' . $e->getMessage());
         }
 
@@ -1114,7 +1110,7 @@ class FusionIndex extends Component
 
             // Vérifier l'état actuel pour mettre à jour l'interface
             $this->verifierEtatActuel();
-            
+
             toastr()->success("$nbResultatsReactives résultats réactivés avec succès. Ils sont maintenant prêts pour une nouvelle publication.");
 
             Log::info('Résultats réactivés avec succès - NOUVELLE LOGIQUE', [
@@ -1126,14 +1122,14 @@ class FusionIndex extends Component
 
         } catch (\Exception $e) {
             \DB::rollBack();
-            
+
             Log::error('Erreur lors de la réactivation des résultats', [
                 'examen_id' => $this->examen_id,
                 'user_id' => Auth::id(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             toastr()->error('Erreur lors de la réactivation : ' . $e->getMessage());
         }
 
@@ -1156,7 +1152,7 @@ class FusionIndex extends Component
             'activeTab' => $this->activeTab,
             'examen_id' => $this->examen_id,
             'estPACES' => $this->estPACES,
-            
+
             // Toutes les confirmations
             'confirmingFusion' => $this->confirmingFusion,
             'confirmingResetFusion' => $this->confirmingResetFusion,
@@ -1168,11 +1164,11 @@ class FusionIndex extends Component
             'confirmingVerify2' => $this->confirmingVerify2,
             'confirmingVerify3' => $this->confirmingVerify3,
             'confirmingExport' => $this->confirmingExport,
-            
+
             // Données
             'rapportCoherence' => $this->rapportCoherence,
             'resultatsStats' => $this->resultatsStats,
-            
+
             // États des boutons
             'showVerificationButton' => $this->showVerificationButton,
             'showResetButton' => $this->showResetButton,

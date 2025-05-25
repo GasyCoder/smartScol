@@ -134,38 +134,138 @@
             </div>
         @endif
 
-        <!-- Statistiques -->
-        @if($showVerification && !$printMode)
-            <div class="p-4 mb-6 rounded-md bg-gray-50 dark:bg-gray-900/50">
-                <div class="flex items-center justify-between">
-                    <div>
+<!-- Statistiques avec indication d'étape de vérification - VERSION CORRIGÉE -->
+@if($showVerification && !$printMode)
+    <div class="p-4 mb-6 border-l-4 border-blue-500 rounded-md bg-gray-50 dark:bg-gray-900/50">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <!-- Indicateur d'étape de vérification -->
+                <div class="flex items-center mb-4">
+                    <div class="flex items-center justify-center w-8 h-8 text-white bg-blue-600 rounded-full dark:bg-blue-700">
+                        <span class="text-sm font-semibold">{{ $etapeFusion }}</span>
+                    </div>
+                    <div class="ml-3">
+                        <h4 class="text-lg font-semibold text-gray-900 dark:text-white">
+                            @if($etapeFusion === 1)
+                                Première vérification en cours
+                            @elseif($etapeFusion === 2)
+                                Seconde vérification en cours
+                            @elseif($etapeFusion === 3)
+                                Troisième vérification en cours (finale)
+                            @else
+                                Vérification en cours
+                            @endif
+                        </h4>
                         <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Total des résultats : <span class="font-medium">{{ $totalResultats }}</span>
-                        </p>
-                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Résultats vérifiés : <span class="font-medium">{{ $resultatsVerifies }}</span>
-                        </p>
-                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Résultats non vérifiés : <span class="font-medium">{{ $resultatsNonVerifies }}</span>
-                        </p>
-                        <p class="text-sm text-gray-600 dark:text-gray-400">
-                            Pourcentage vérifié : <span class="font-medium">{{ $pourcentageVerification }}%</span>
+                            @if($etapeFusion === 1)
+                                Vérifiez et validez les résultats après la fusion initiale
+                            @elseif($etapeFusion === 2)
+                                Vérifiez et validez les résultats après la seconde fusion
+                            @elseif($etapeFusion === 3)
+                                Vérifiez et validez les résultats après la fusion finale avant validation définitive
+                            @else
+                                Vérifiez et validez les résultats de cette étape
+                            @endif
                         </p>
                     </div>
-                    @if($resultatsNonVerifies > 0)
-                        <button
-                            wire:click="marquerTousVerifies"
-                            wire:loading.attr="disabled"
-                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                        >
-                            <em class="mr-2 icon ni ni-check"></em>
-                            Marquer tout comme vérifié
-                            <span wire:loading wire:target="marquerTousVerifies" class="ml-2 animate-spin icon ni ni-loader"></span>
-                        </button>
-                    @endif
+                </div>
+
+                <!-- Progression des étapes -->
+                <div class="mb-4">
+                    <div class="flex items-center space-x-2 text-sm">
+                        <span class="text-gray-600 dark:text-gray-400">Progression :</span>
+                        <div class="flex items-center space-x-1">
+                            @for($i = 1; $i <= 3; $i++)
+                                <div class="flex items-center">
+                                    <div class="flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full
+                                        {{ $i <= $etapeFusion ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600' }}
+                                        {{ $i === $etapeFusion ? 'ring-2 ring-blue-300' : '' }}">
+                                        {{ $i }}
+                                    </div>
+                                    @if($i < 3)
+                                        <div class="w-8 h-0.5 {{ $i < $etapeFusion ? 'bg-blue-600' : 'bg-gray-300' }}"></div>
+                                    @endif
+                                </div>
+                            @endfor
+                        </div>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">
+                            (Étape {{ $etapeFusion }}/3)
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Statistiques détaillées -->
+                <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <div class="p-3 bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                        <div class="text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Total</div>
+                        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ $totalResultats }}</div>
+                    </div>
+                    <div class="p-3 bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                        <div class="text-xs font-medium text-green-600 uppercase dark:text-green-400">Vérifiés</div>
+                        <div class="text-lg font-semibold text-green-700 dark:text-green-300">{{ $resultatsVerifies }}</div>
+                    </div>
+                    <div class="p-3 bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                        <div class="text-xs font-medium uppercase text-amber-600 dark:text-amber-400">En attente</div>
+                        <div class="text-lg font-semibold text-amber-700 dark:text-amber-300">{{ $resultatsNonVerifies }}</div>
+                    </div>
+                    <div class="p-3 bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-600">
+                        <div class="text-xs font-medium text-blue-600 uppercase dark:text-blue-400">Progression</div>
+                        <div class="text-lg font-semibold text-blue-700 dark:text-blue-300">{{ $pourcentageVerification }}%</div>
+                    </div>
                 </div>
             </div>
-        @endif
+
+            <!-- Actions spécifiques à l'étape -->
+            @if($resultatsNonVerifies > 0)
+                <div class="flex-shrink-0 ml-6">
+                    <button
+                        wire:click="marquerTousVerifies"
+                        wire:loading.attr="disabled"
+                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 bg-green-600 border border-transparent rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                    >
+                        <em class="mr-2 icon ni ni-check"></em>
+                        @if($etapeFusion === 1)
+                            Marquer tout comme vérifié (1ère vérification)
+                        @elseif($etapeFusion === 2)
+                            Marquer tout comme vérifié (2ème vérification)
+                        @elseif($etapeFusion === 3)
+                            Marquer tout comme vérifié (3ème vérification)
+                        @else
+                            Marquer tout comme vérifié
+                        @endif
+                        <span wire:loading wire:target="marquerTousVerifies" class="ml-2 animate-spin icon ni ni-loader"></span>
+                    </button>
+
+                    <!-- Message d'aide contextuel -->
+                    <div class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                        @if($etapeFusion === 1)
+                            Action limitée aux résultats de la première fusion
+                        @elseif($etapeFusion === 2)
+                            Action limitée aux résultats de la seconde fusion
+                        @elseif($etapeFusion === 3)
+                            Action limitée aux résultats de la fusion finale
+                        @endif
+                    </div>
+                </div>
+            @else
+                <div class="flex-shrink-0 ml-6">
+                    <div class="inline-flex items-center px-4 py-2 text-sm font-medium text-green-700 bg-green-100 border border-green-200 rounded-lg dark:bg-green-800 dark:text-green-200 dark:border-green-700">
+                        <em class="mr-2 icon ni ni-check-circle"></em>
+                        @if($etapeFusion === 1)
+                            Première vérification terminée
+                        @elseif($etapeFusion === 2)
+                            Seconde vérification terminée
+                        @elseif($etapeFusion === 3)
+                            Troisième vérification terminée
+                        @else
+                            Vérification terminée
+                        @endif
+                    </div>
+                </div>
+            @endif
+        </div>
+    </div>
+@endif
 
         <!-- Tableau des résultats -->
         @if($showVerification)

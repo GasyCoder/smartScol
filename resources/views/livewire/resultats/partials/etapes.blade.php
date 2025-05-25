@@ -33,7 +33,7 @@
         </div>
     </div>
 
-    <!-- 2. Fusion des données -->
+    <!-- 2. Fusion des données - SECTION CORRIGÉE -->
     <div class="p-5 border rounded-lg {{ $statut === 'fusion' ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
@@ -56,21 +56,21 @@
                 @endif
             </div>
             <div class="ml-4 space-y-4">
-                <h4 class="text-base font-semibold text-gray-800 dark:text-gray-100">Fusion des données</h4>
+                <h4 class="text-base font-semibold text-gray-800 dark:text-gray-100">Fusion des données en 3 étapes</h4>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Associe les manchettes aux copies pour générer les résultats provisoires.</p>
                 @if($statut === 'fusion')
                     <div class="px-3 py-2 mt-2 text-sm bg-gray-100 rounded-md dark:bg-gray-700">
                         <div class="font-medium text-gray-700 dark:text-gray-300">
                             @if($etapeFusion === 1)
-                                Étape 1: Première fusion
+                                ✅ Fusion initiale terminée → <span class="text-blue-600 dark:text-blue-400">Première vérification requise</span>
                             @elseif($etapeFusion === 2)
-                                Étape 2: Seconde fusion
+                                ✅ Seconde fusion terminée → <span class="text-blue-600 dark:text-blue-400">Seconde vérification requise</span>
                             @elseif($etapeFusion === 3)
-                                Étape 3: Fusion finale
+                                ✅ Fusion finale terminée → <span class="text-blue-600 dark:text-blue-400">Troisième vérification requise</span>
                             @elseif($etapeFusion === 4)
-                                Étape 4: Validation (VALIDE)
+                                ✅ Toutes vérifications terminées → <span class="text-green-600 dark:text-green-400">Prêt pour validation</span>
                             @else
-                                En attente de fusion
+                                ⏳ En attente de démarrage de la fusion
                             @endif
                         </div>
                     </div>
@@ -100,6 +100,7 @@
                                 class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white transition-colors duration-200 bg-yellow-500 border border-transparent rounded-lg shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2 dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:focus:ring-yellow-500 disabled:opacity-50">
                                 <em class="mr-2 icon ni ni-reload"></em>
                                 Fusion - Étape 2
+                                <span class="ml-2 text-xs text-gray-200">(après première vérification)</span>
                                 <span wire:loading wire:target="confirmVerify2" class="ml-2 animate-spin icon ni ni-loader"></span>
                             </button>
                         @elseif($etapeFusion === 2)
@@ -108,7 +109,8 @@
                                 wire:loading.attr="disabled"
                                 class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white transition-colors duration-200 bg-yellow-500 border border-transparent rounded-lg shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2 dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:focus:ring-yellow-500 disabled:opacity-50">
                                 <em class="mr-2 icon ni ni-reload"></em>
-                                Fusion finale
+                                Fusion finale - Étape 3
+                                <span class="ml-2 text-xs text-gray-200">(après seconde vérification)</span>
                                 <span wire:loading wire:target="confirmVerify3" class="ml-2 animate-spin icon ni ni-loader"></span>
                             </button>
                         @endif
@@ -131,7 +133,7 @@
         </div>
     </div>
 
-    <!-- 3. Vérification et Validation -->
+    <!-- 3. Vérification et Validation - VERSION CORRIGÉE -->
     <div class="p-5 border rounded-lg {{ $statut === 'valide' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
@@ -154,38 +156,90 @@
                 @endif
             </div>
             <div class="ml-4">
-                <h4 class="text-base font-medium text-gray-800 dark:text-gray-200">Vérification et Validation</h4>
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Vérifiez les résultats fusionnés et validez-les pour préparer la publication.</p>
-                <div class="mt-3">
-                    <div class="flex flex-wrap gap-2">
+                <h4 class="text-base font-medium text-gray-800 dark:text-gray-200">Vérification des résultats</h4>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                    Vérifiez les résultats après chaque fusion pour vous assurer de leur exactitude.
+                </p>
+
+                <!-- Indicateur de l'étape de vérification actuelle -->
+                @if($statut === 'fusion')
+                    <div class="px-3 py-2 mt-3 text-sm bg-gray-100 rounded-md dark:bg-gray-700">
+                        <div class="font-medium text-gray-700 dark:text-gray-300">
+                            @if($etapeFusion === 1)
+                                📋 <span class="text-blue-600 dark:text-blue-400">Première vérification disponible</span>
+                                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">Vérifiez les résultats de la fusion initiale</div>
+                            @elseif($etapeFusion === 2)
+                                📋 <span class="text-blue-600 dark:text-blue-400">Seconde vérification disponible</span>
+                                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">Vérifiez les résultats après la seconde fusion</div>
+                            @elseif($etapeFusion === 3)
+                                📋 <span class="text-blue-600 dark:text-blue-400">Troisième vérification disponible</span>
+                                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">Vérifiez les résultats de la fusion finale</div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+
+                <div class="mt-4">
+                    <div class="flex flex-wrap gap-3">
+                        <!-- Bouton de vérification - Disponible dès qu'il y a des résultats -->
                         @if($statut === 'fusion' && $etapeFusion >= 1)
                             <a href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 bg-blue-600 border border-transparent rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-700 dark:hover:bg-blue-600"
                             >
-                                <em class="icon ni ni-eye mr-1.5"></em>
-                                Vérifier les résultats
+                                <em class="mr-2 icon ni ni-eye"></em>
+                                @if($etapeFusion === 1)
+                                    Effectuer la première vérification
+                                @elseif($etapeFusion === 2)
+                                    Effectuer la seconde vérification
+                                @elseif($etapeFusion === 3)
+                                    Effectuer la troisième vérification
+                                @else
+                                    Vérifier les résultats
+                                @endif
                             </a>
-                        @if($etapeFusion >= 3)
+
+                            <!-- Indicateur de progression des vérifications -->
+                            <div class="inline-flex items-center px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg dark:bg-gray-700 dark:text-gray-300">
+                                <em class="mr-2 text-blue-500 icon ni ni-info"></em>
+                                Étape {{ $etapeFusion }}/3 de vérification
+                            </div>
+
+                        @elseif($statut === 'valide')
+                            <!-- Mode consultation après validation -->
+                            <a href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+                            >
+                                <em class="mr-2 icon ni ni-eye"></em>
+                                Consulter les résultats validés
+                            </a>
+
+                            <div class="inline-flex items-center px-3 py-2 text-sm text-green-600 bg-green-100 rounded-lg dark:bg-green-800 dark:text-green-200">
+                                <em class="mr-2 icon ni ni-check-circle"></em>
+                                Toutes les vérifications terminées
+                            </div>
+                        @endif
+                    </div>
+
+                    <!-- Séparateur visuel pour la validation finale -->
+                    @if($statut === 'fusion' && $etapeFusion >= 3)
+                        <div class="pt-4 mt-6 border-t border-gray-200 dark:border-gray-600">
+                            <h5 class="mb-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                Validation finale
+                            </h5>
+                            <p class="mb-3 text-xs text-gray-600 dark:text-gray-400">
+                                Une fois toutes les vérifications effectuées, vous pouvez valider définitivement les résultats.
+                            </p>
                             <button
                                 wire:click="confirmValidation"
                                 wire:loading.attr="disabled"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 bg-green-600 border border-transparent rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:bg-green-700 dark:hover:bg-green-600 disabled:opacity-50"
                             >
-                                <em class="icon ni ni-check mr-1.5"></em>
-                                Valider les résultats
+                                <em class="mr-2 icon ni ni-check"></em>
+                                Valider définitivement les résultats
                                 <span wire:loading wire:target="confirmValidation" class="ml-2 animate-spin icon ni ni-loader"></span>
                             </button>
-                        @endif
-                        @elseif($statut === 'valide')
-                            <a href="#"
-                                wire:click="switchTab('rapport-stats')"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
-                            >
-                                <em class="icon ni ni-eye mr-1.5"></em>
-                                Consulter les résultats validés
-                            </a>
-                        @endif
-                    </div>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

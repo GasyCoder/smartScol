@@ -558,6 +558,11 @@ namespace App\Models{
  * @property int|null $modifie_par
  * @property string $statut
  * @property array $status_history
+ * @property string|null $motif_annulation
+ * @property \Illuminate\Support\Carbon|null $date_annulation
+ * @property int|null $annule_par
+ * @property \Illuminate\Support\Carbon|null $date_reactivation
+ * @property int|null $reactive_par
  * @property string|null $decision
  * @property \Illuminate\Support\Carbon|null $date_publication
  * @property string|null $hash_verification
@@ -577,8 +582,10 @@ namespace App\Models{
  * @property-read mixed $libelle_decision
  * @property-read mixed $libelle_statut
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
+ * @property-read \App\Models\User|null $utilisateurAnnulation
  * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
+ * @property-read \App\Models\User|null $utilisateurReactivation
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal annule()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal avecDeliberation()
@@ -600,10 +607,13 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal redoublant()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sansDeliberation()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereAnnulePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateAnnulation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateFusion($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDatePublication($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateReactivation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDecision($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDeliberationId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEcId($value)
@@ -614,7 +624,9 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereHashVerification($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereModifiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereMotifAnnulation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereNote($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereReactivePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatusHistory($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatut($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereUpdatedAt($value)

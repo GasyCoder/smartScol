@@ -35,7 +35,7 @@
                     </div>
                     <!-- Matières compactes -->
                     <div class="space-y-2">
-                        @foreach($resultatGroup as $i => $resultat)
+                        @foreach($resultatGroup as $resultat)
                             <div class="bg-gray-50 dark:bg-gray-800 rounded-md p-2 {{ $resultat['is_checked'] ? 'ring-1 ring-green-400 bg-green-50 dark:bg-green-900/20' : '' }}">
                                 <div class="flex items-center justify-between">
                                     <div class="flex-1 min-w-0">
@@ -48,7 +48,7 @@
                                         @endif
                                     </div>
                                     <div class="ml-2 text-right">
-                                        @if($editingRow === $i)
+                                        @if($editingRow === $resultat['unique_key'])
                                             <input
                                                 type="number"
                                                 wire:model.defer="newNote"
@@ -75,9 +75,9 @@
                                         @endif
                                     </div>
                                 </div>
-                                @if($editingRow === $i)
+                                @if($editingRow === $resultat['unique_key'])
                                     <div class="flex mt-2 space-x-1">
-                                        <button wire:click="saveChanges({{ $i }})" class="flex-1 px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700" aria-label="Enregistrer la modification">
+                                        <button wire:click="saveChanges('{{ $resultat['unique_key'] }}')" class="flex-1 px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700" aria-label="Enregistrer la modification">
                                             <em class="mr-1 icon ni ni-check"></em>Sauver
                                         </button>
                                         <button wire:click="cancelEditing" class="flex-1 px-2 py-1 text-xs font-medium text-white bg-gray-600 rounded hover:bg-gray-700" aria-label="Annuler la modification">
@@ -87,7 +87,7 @@
                                 @else
                                     <div class="mt-2 flex justify-end {{ $printMode ? 'hidden' : '' }}">
                                         <button
-                                            wire:click="startEditing({{ $i }})"
+                                            wire:click="startEditing('{{ $resultat['unique_key'] }}')"
                                             class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-primary-700 bg-primary-100 hover:bg-primary-200"
                                             aria-label="Modifier la note pour {{ $resultat['matiere'] }}"
                                         >
@@ -200,9 +200,9 @@
                         $firstResultat = $resultatGroup->first();
                         $rowCount = count($resultatGroup);
                     @endphp
-                    @foreach($resultatGroup as $i => $resultat)
-                        <tr class="{{ $i === 0 ? 'border-t border-primary-200 dark:border-primary-800' : '' }} {{ $resultat['is_checked'] ? 'bg-green-50 dark:bg-green-900/20' : '' }} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                            @if($i === 0)
+                    @foreach($resultatGroup as $resultat)
+                        <tr class="{{ $loop->first ? 'border-t border-primary-200 dark:border-primary-800' : '' }} {{ $resultat['is_checked'] ? 'bg-green-50 dark:bg-green-900/20' : '' }} hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            @if($loop->first)
                                 <td class="px-4 py-2" rowspan="{{ $rowCount }}">
                                     <div class="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900">
                                         <span class="text-xs font-semibold text-primary-700 dark:text-primary-300">{{ $index }}</span>
@@ -260,7 +260,7 @@
                             </td>
                             <td class="px-4 py-2 text-center whitespace-nowrap">
                                 <div class="flex flex-col items-center space-y-1">
-                                    @if($editingRow === $i)
+                                    @if($editingRow === $resultat['unique_key'])
                                         <div class="relative">
                                             <input
                                                 type="number"
@@ -315,10 +315,10 @@
                                 </td>
                             @endif
                             <td class="px-4 py-2 whitespace-nowrap text-center {{ $printMode ? 'hidden' : '' }}">
-                                @if($editingRow === $i)
+                                @if($editingRow === $resultat['unique_key'])
                                     <div class="flex items-center justify-center space-x-1">
                                         <button
-                                            wire:click="saveChanges({{ $i }})"
+                                            wire:click="saveChanges('{{ $resultat['unique_key'] }}')"
                                             class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700"
                                             aria-label="Enregistrer la modification"
                                         >
@@ -334,7 +334,7 @@
                                     </div>
                                 @else
                                     <button
-                                        wire:click="startEditing({{ $i }})"
+                                        wire:click="startEditing('{{ $resultat['unique_key'] }}')"
                                         class="inline-flex items-center px-2 py-1 text-xs font-medium text-white rounded bg-primary-600 hover:bg-primary-700"
                                         aria-label="Modifier la note pour {{ $resultat['matiere'] }}"
                                     >
