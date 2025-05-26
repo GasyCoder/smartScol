@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +19,7 @@ class ResultatFusion extends Model
     const STATUT_VERIFY_2 = 'verify_2';  // Seconde vérification
     const STATUT_VERIFY_3 = 'verify_3';  // Troisième vérification
     const STATUT_VALIDE = 'valide';      // Validé, prêt pour transfert
+    const STATUT_ANNULE = 'annule';
 
     protected $fillable = [
         'etudiant_id',
@@ -95,7 +97,7 @@ class ResultatFusion extends Model
             self::STATUT_VERIFY_1 => [self::STATUT_VERIFY_2],
             self::STATUT_VERIFY_2 => [self::STATUT_VERIFY_1, self::STATUT_VERIFY_3],
             self::STATUT_VERIFY_3 => [self::STATUT_VERIFY_2, self::STATUT_VALIDE],
-            self::STATUT_VALIDE => [self::STATUT_VERIFY_3], // Retour possible pour correction
+            self::STATUT_VALIDE => [self::STATUT_VERIFY_3],
         ];
     }
 
@@ -141,6 +143,77 @@ class ResultatFusion extends Model
             'de' => $ancienStatut,
             'vers' => $nouveauStatut,
             'user_id' => $userId,
+        ]);
+
+        return $this;
+    }
+
+    /**
+     * Marque le résultat comme vérifié (mise à jour du statut et traçabilité)
+     */
+    public function marquerCommeVerifie($etape, $userId)
+    {
+        $nouveauStatut = match($etape) {
+            1 => self::STATUT_VERIFY_1,
+            2 => self::STATUT_VERIFY_2,
+            3 => self::STATUT_VERIFY_3,
+            default => throw new \InvalidArgumentException("Étape de vérification invalide: {$etape}")
+        };
+
+        $this->statut = $nouveauStatut;
+        $this->modifie_par = $userId;
+
+        // Mise à jour de l'historique
+        $historique = $this->status_history ?? [];
+        $historique[] = [
+            'action' => 'verification',
+            'etape' => $etape,
+            'statut' => $nouveauStatut,
+            'user_id' => $userId,
+            'date' => now()->toDateTimeString(),
+        ];
+        $this->status_history = $historique;
+
+        $this->save();
+
+        Log::info('ResultatFusion marqué comme vérifié', [
+            'resultat_id' => $this->id,
+            'etape' => $etape,
+            'statut' => $nouveauStatut,
+            'user_id' => $userId
+        ]);
+
+        return $this;
+    }
+
+    /**
+     * Met à jour la note avec traçabilité
+     */
+    public function mettreAJourNote($nouvelleNote, $userId, $etape = null)
+    {
+        $ancienneNote = $this->note;
+        $this->note = $nouvelleNote;
+        $this->modifie_par = $userId;
+
+        // Mise à jour de l'historique
+        $historique = $this->status_history ?? [];
+        $historique[] = [
+            'action' => 'modification_note',
+            'ancienne_note' => $ancienneNote,
+            'nouvelle_note' => $nouvelleNote,
+            'etape' => $etape,
+            'user_id' => $userId,
+            'date' => now()->toDateTimeString(),
+        ];
+        $this->status_history = $historique;
+
+        $this->save();
+
+        Log::info('Note ResultatFusion mise à jour', [
+            'resultat_id' => $this->id,
+            'ancienne_note' => $ancienneNote,
+            'nouvelle_note' => $nouvelleNote,
+            'user_id' => $userId
         ]);
 
         return $this;
@@ -209,6 +282,11 @@ class ResultatFusion extends Model
         return $query->where('statut', self::STATUT_VERIFY_2);
     }
 
+    public function scopeTroisiemeVerification($query)
+    {
+        return $query->where('statut', self::STATUT_VERIFY_3);
+    }
+
     public function scopeValide($query)
     {
         return $query->where('statut', self::STATUT_VALIDE);
@@ -229,44 +307,14 @@ class ResultatFusion extends Model
         return $query->where('note', '<', 10);
     }
 
-    /**
-     * Vérifie les prérequis pour une délibération
-     */
-    public function verifierPrerequisDeliberation()
+    public function scopeParEtape($query, $etape)
     {
-        $errors = [];
+        return $query->where('etape_fusion', $etape);
+    }
 
-        if (!$this->examen || !$this->examen->session) {
-            $errors[] = "Aucun examen ou session associé à ce résultat";
-            return [
-                'valide' => false,
-                'erreurs' => $errors,
-            ];
-        }
-
-        // Vérifier la session de rattrapage
-        if (!$this->examen->session->isRattrapage()) {
-            $errors[] = "La délibération ne peut avoir lieu que pour une session de rattrapage";
-        }
-
-        // Vérifier que ce n'est pas un niveau concours
-        if ($this->examen->niveau && $this->examen->niveau->is_concours) {
-            $errors[] = "Aucune délibération n'est prévue pour les niveaux de concours";
-        }
-
-        // Vérifier que tous les résultats sont saisis et vérifiés
-        $allResultsValid = ResultatFusion::where('examen_id', $this->examen_id)
-            ->where('statut', self::STATUT_VALIDE)
-            ->count() === ResultatFusion::where('examen_id', $this->examen_id)->count();
-
-        if (!$allResultsValid) {
-            $errors[] = "Tous les résultats doivent être saisis et vérifiés avant la délibération";
-        }
-
-        return [
-            'valide' => empty($errors),
-            'erreurs' => $errors,
-        ];
+    public function scopeNecessiteVerification($query)
+    {
+        return $query->whereIn('statut', [self::STATUT_VERIFY_1, self::STATUT_VERIFY_2]);
     }
 
     /**
@@ -279,22 +327,32 @@ class ResultatFusion extends Model
             ->get();
 
         foreach ($copies as $copie) {
+            // Trouver l'étudiant via la manchette
+            $manchette = $copie->findCorrespondingManchette();
+            if (!$manchette || !$manchette->etudiant_id) {
+                Log::warning('Impossible de trouver l\'étudiant pour la copie', [
+                    'copie_id' => $copie->id,
+                    'code_anonymat_id' => $copie->code_anonymat_id
+                ]);
+                continue;
+            }
+
             $resultat = ResultatFusion::where('examen_id', $this->examen_id)
-                ->where('etudiant_id', $copie->etudiant_id)
+                ->where('etudiant_id', $manchette->etudiant_id)
                 ->where('ec_id', $copie->ec_id)
                 ->first();
 
             if ($resultat) {
-                $resultat->note = $copie->note;
-                $resultat->statut = self::STATUT_VERIFY_1;
-                $resultat->save();
+                $resultat->mettreAJourNote($copie->note, Auth::id(), $this->etape_fusion);
+                $resultat->marquerCommeVerifie($this->etape_fusion, Auth::id());
             } else {
                 ResultatFusion::create([
                     'examen_id' => $this->examen_id,
-                    'etudiant_id' => $copie->etudiant_id,
+                    'etudiant_id' => $manchette->etudiant_id,
                     'ec_id' => $copie->ec_id,
                     'code_anonymat_id' => $copie->code_anonymat_id,
                     'note' => $copie->note,
+                    'etape_fusion' => 1,
                     'statut' => self::STATUT_VERIFY_1,
                     'genere_par' => Auth::id() ?? 1,
                 ]);
@@ -303,6 +361,150 @@ class ResultatFusion extends Model
 
         Log::info('Résultats vérifiés synchronisés', [
             'examen_id' => $this->examen_id,
+            'copies_synchronisees' => $copies->count()
         ]);
+    }
+
+    /**
+     * Marque plusieurs résultats comme vérifiés en lot
+     */
+    public static function marquerPlusieursCommeVerifies($ids, $etape, $userId)
+    {
+        $resultats = self::whereIn('id', $ids)->get();
+        $count = 0;
+
+        foreach ($resultats as $resultat) {
+            try {
+                $resultat->marquerCommeVerifie($etape, $userId);
+                $count++;
+            } catch (\Exception $e) {
+                Log::error('Erreur lors du marquage en lot', [
+                    'resultat_id' => $resultat->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        Log::info('Marquage en lot terminé', [
+            'nb_resultats_traites' => $count,
+            'nb_resultats_demandes' => count($ids),
+            'etape' => $etape,
+            'user_id' => $userId
+        ]);
+
+        return $count;
+    }
+
+    /**
+     * Retourne les statistiques de vérification pour un examen
+     */
+    public static function getStatistiquesVerification($examenId, $etape = null)
+    {
+        $query = self::where('examen_id', $examenId);
+
+        if ($etape) {
+            $query->where('etape_fusion', $etape);
+        }
+
+        $total = $query->count();
+        $verify1 = $query->where('statut', self::STATUT_VERIFY_1)->count();
+        $verify2 = $query->where('statut', self::STATUT_VERIFY_2)->count();
+        $verify3 = $query->where('statut', self::STATUT_VERIFY_3)->count();
+        $valide = $query->where('statut', self::STATUT_VALIDE)->count();
+
+        return [
+            'total' => $total,
+            'verify_1' => $verify1,
+            'verify_2' => $verify2,
+            'verify_3' => $verify3,
+            'valide' => $valide,
+            'en_cours' => $verify1 + $verify2,
+            'termines' => $verify3 + $valide,
+            'pourcentage_completion' => $total > 0 ? round((($verify3 + $valide) / $total) * 100, 1) : 0
+        ];
+    }
+
+    /**
+     * Restaure les résultats annulés à l'état en attente
+     *
+     * @param int $examenId
+     * @return array
+     */
+    public function revenirValidation($examenId)
+    {
+        try {
+            DB::beginTransaction();
+
+            $resultats = ResultatFinal::where('examen_id', $examenId)
+                ->where('statut', ResultatFinal::STATUT_ANNULE)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                DB::rollBack();
+                return [
+                    'success' => false,
+                    'message' => 'Aucun résultat annulé à restaurer.',
+                ];
+            }
+
+            // Récupérer les IDs des résultats fusionnés associés
+            $fusionIds = $resultats->pluck('fusion_id')->filter()->unique()->toArray();
+
+            // Restaurer les résultats finaux
+            $updatedCount = 0;
+            foreach ($resultats as $resultat) {
+                $statusHistory = $resultat->status_history ?? [];
+                $statusHistory[] = [
+                    'de' => $resultat->statut,
+                    'vers' => ResultatFinal::STATUT_EN_ATTENTE,
+                    'user_id' => Auth::id(),
+                    'date' => now()->toDateTimeString(),
+                ];
+
+                $resultat->update([
+                    'statut' => ResultatFinal::STATUT_EN_ATTENTE,
+                    'motif_annulation' => null,
+                    'date_annulation' => null,
+                    'annule_par' => null,
+                    'date_reactivation' => now(),
+                    'reactive_par' => Auth::id(),
+                    'status_history' => $statusHistory,
+                ]);
+
+                $updatedCount++;
+            }
+
+            // Restaurer les résultats fusionnés
+            if (!empty($fusionIds)) {
+                ResultatFusion::whereIn('id', $fusionIds)
+                    ->update([
+                        'statut' => ResultatFusion::STATUT_VALIDE,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            DB::commit();
+
+            Log::info('Retour à l\'état en attente effectué', [
+                'examen_id' => $examenId,
+                'resultats_restaures' => $updatedCount,
+            ]);
+
+            return [
+                'success' => true,
+                'message' => "Retour à l'état en attente effectué. $updatedCount résultats restaurés.",
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors du retour à l\'état en attente', [
+                'examen_id' => $examenId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'Erreur lors du retour : ' . $e->getMessage(),
+            ];
+        }
     }
 }

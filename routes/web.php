@@ -16,15 +16,10 @@ use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
 use App\Livewire\Resultats\FusionIndex;
-use App\Livewire\Resultats\ResultatsIndex;
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Manchette\ManchettesIndex;
-use App\Livewire\Resultats\ResultatsFinale;
-use App\Livewire\Resultats\ResultatsVerifier;
-use App\Livewire\Resultats\FusionVerification;
 use App\Livewire\Resultats\ResultatValidation;
 use App\Livewire\Manchette\ManchettesCorbeille;
-use App\Livewire\Resultats\ResultatsProvisoires;
 use App\Livewire\Resultats\ResultatVerification;
 
 

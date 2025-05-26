@@ -21,7 +21,7 @@ return new class extends Migration
             $table->unsignedBigInteger('genere_par')->comment('Utilisateur ayant généré le résultat');
             $table->unsignedBigInteger('modifie_par')->nullable();
             $table->unsignedInteger('etape_fusion')->default(0)->comment('Compteur de fusion pour éviter les doublons');
-            $table->enum('statut', ['verify_1', 'verify_2', 'verify_3', 'valide'])->default('verify_1');
+            $table->enum('statut', ['verify_1', 'verify_2', 'verify_3', 'valide', 'annule'])->default('verify_1');
             $table->json('status_history')->nullable();
             $table->timestamp('date_validation')->nullable();
             $table->uuid('operation_id')->nullable();

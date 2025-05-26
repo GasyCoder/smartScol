@@ -58,11 +58,6 @@
                                     Session - {{ $examen->session->type }}
                                 - {{ $examen->niveau->nom }} {{ $examen->parcours->abr }}
                             </p>
-                            {{-- @if($estPACES)
-                            <div class="p-2 mt-2 text-yellow-800 bg-yellow-100 rounded-md dark:bg-yellow-900/30 dark:text-yellow-200">
-                                <p class="text-sm"><strong>Note:</strong> PACES 1ère année est considérée comme un concours sans délibération.</p>
-                            </div>
-                            @endif --}}
                         </div>
                     </div>
                 </div>

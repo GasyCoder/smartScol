@@ -101,11 +101,21 @@ namespace App\Models{
  * @property-read mixed $code_salle
  * @property-read mixed $etudiant
  * @property-read mixed $numero
+ * @property-read \App\Models\ResultatFinal|null $resultatFinal
+ * @property-read \App\Models\ResultatFusion|null $resultatFusion
  * @property-read \App\Models\User $utilisateurSaisie
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie modifiees()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie nonModifiees()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie nonVerifiees()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie parEtudiant($etudiantId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie parNiveau($niveauId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie parParcours($parcoursId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie parSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie verifiees()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereCommentaire($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereCreatedAt($value)
@@ -355,43 +365,6 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc whereUpdatedAt($value)
  */
 	class ExamenEc extends \Eloquent {}
-}
-
-namespace App\Models{
-/**
- * 
- *
- * @property string $id
- * @property int $examen_id
- * @property int $user_id
- * @property string $type
- * @property string $status
- * @property array<array-key, mixed>|null $parameters
- * @property array<array-key, mixed>|null $result
- * @property \Illuminate\Support\Carbon|null $started_at
- * @property \Illuminate\Support\Carbon|null $completed_at
- * @property string|null $error_message
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Examen $examen
- * @property-read \App\Models\User $user
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereCompletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereErrorMessage($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereExamenId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereParameters($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereResult($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereStartedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereStatus($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereType($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|FusionOperation whereUserId($value)
- */
-	class FusionOperation extends \Eloquent {}
 }
 
 namespace App\Models{
@@ -663,12 +636,15 @@ namespace App\Models{
  * @property-read \App\Models\User|null $utilisateurModification
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion echoue()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion eliminatoire()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion necessiteVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion parEtape($etape)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion premierVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion secondeVerification()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion troisiemeVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion valide()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereCreatedAt($value)

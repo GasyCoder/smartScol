@@ -512,7 +512,7 @@
             <p class="text-sm text-gray-600 dark:text-gray-300">
                 Voulez-vous annuler les résultats publiés ? Cette action les rendra indisponibles aux étudiants tout en préservant les données pour une éventuelle réactivation.
             </p>
-            
+
             @php
                 $contexteExamen = isset($contexteExamen) ? $contexteExamen : (isset($this->contexteExamen) ? $this->contexteExamen : null);
             @endphp
@@ -534,7 +534,7 @@
                     </ul>
                 </div>
             @endif
-            
+
             <div class="p-3 mt-3 border border-red-200 rounded-md bg-red-50 dark:bg-red-900/20 dark:border-red-700">
                 <p class="text-sm text-red-800 dark:text-red-200">
                     <em class="mr-1 icon ni ni-alert"></em>
@@ -547,7 +547,7 @@
                     <li>L'action sera tracée dans l'historique du système</li>
                 </ul>
             </div>
-            
+
             <!-- Zone de saisie optionnelle pour le motif d'annulation -->
             <div class="mt-4">
                 <label for="motif-annulation" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -565,7 +565,7 @@
                 </p>
             </div>
         </div>
-        
+
         <div class="flex justify-end space-x-3">
             <button
                 wire:click="$set('confirmingAnnulation', false)"

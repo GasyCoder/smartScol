@@ -68,11 +68,6 @@ class Examen extends Model
         return $this->hasMany(Manchette::class);
     }
 
-    public function resultats()
-    {
-        return $this->hasMany(Resultat::class);
-    }
-
     public function codesAnonymat()
     {
         return $this->hasMany(CodeAnonymat::class, 'examen_id');

@@ -66,7 +66,7 @@
                             @elseif($etapeFusion === 2)
                                 ✅ Seconde fusion terminée → <span class="text-blue-600 dark:text-blue-400">Seconde vérification requise</span>
                             @elseif($etapeFusion === 3)
-                                ✅ Fusion finale terminée → <span class="text-blue-600 dark:text-blue-400">Troisième vérification requise</span>
+                                ✅ Fusion finale terminée → <span class="text-green-600 dark:text-green-400">Prêt pour validation</span>
                             @elseif($etapeFusion === 4)
                                 ✅ Toutes vérifications terminées → <span class="text-green-600 dark:text-green-400">Prêt pour validation</span>
                             @else
@@ -133,7 +133,7 @@
         </div>
     </div>
 
-    <!-- 3. Vérification et Validation - VERSION CORRIGÉE -->
+    <!-- 3. Vérification et Validation - VERSION AJUSTÉE -->
     <div class="p-5 border rounded-lg {{ $statut === 'valide' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
@@ -141,7 +141,7 @@
                     <div class="flex items-center justify-center w-8 h-8 text-white bg-gray-400 rounded-full dark:bg-gray-600">
                         <span>3</span>
                     </div>
-                @elseif($statut === 'fusion' && $etapeFusion >= 1)
+                @elseif($statut === 'fusion' && $etapeFusion >= 1 && $etapeFusion <= 3)
                     <div class="flex items-center justify-center w-8 h-8 text-white rounded-full bg-primary-500 dark:bg-primary-600">
                         <span>3</span>
                     </div>
@@ -172,8 +172,8 @@
                                 📋 <span class="text-blue-600 dark:text-blue-400">Seconde vérification disponible</span>
                                 <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">Vérifiez les résultats après la seconde fusion</div>
                             @elseif($etapeFusion === 3)
-                                📋 <span class="text-blue-600 dark:text-blue-400">Troisième vérification disponible</span>
-                                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">Vérifiez les résultats de la fusion finale</div>
+                                ✅ <span class="text-green-600 dark:text-green-400">Fusion et vérifications terminées</span>
+                                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">Les résultats sont prêts pour la validation finale.</div>
                             @endif
                         </div>
                     </div>
@@ -181,8 +181,8 @@
 
                 <div class="mt-4">
                     <div class="flex flex-wrap gap-3">
-                        <!-- Bouton de vérification - Disponible dès qu'il y a des résultats -->
-                        @if($statut === 'fusion' && $etapeFusion >= 1)
+                        <!-- Bouton de vérification - Disponible uniquement pour les étapes 1 et 2 -->
+                        @if($statut === 'fusion' && $etapeFusion >= 1 && $etapeFusion <= 2)
                             <a href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
                                 class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 bg-blue-600 border border-transparent rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-700 dark:hover:bg-blue-600"
                             >
@@ -191,28 +191,16 @@
                                     Effectuer la première vérification
                                 @elseif($etapeFusion === 2)
                                     Effectuer la seconde vérification
-                                @elseif($etapeFusion === 3)
-                                    Effectuer la troisième vérification
-                                @else
-                                    Vérifier les résultats
                                 @endif
                             </a>
 
                             <!-- Indicateur de progression des vérifications -->
                             <div class="inline-flex items-center px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg dark:bg-gray-700 dark:text-gray-300">
                                 <em class="mr-2 text-blue-500 icon ni ni-info"></em>
-                                Étape {{ $etapeFusion }}/3 de vérification
+                                Étape {{ $etapeFusion }}/2 de vérification
                             </div>
-
                         @elseif($statut === 'valide')
                             <!-- Mode consultation après validation -->
-                            <a href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
-                            >
-                                <em class="mr-2 icon ni ni-eye"></em>
-                                Consulter les résultats validés
-                            </a>
-
                             <div class="inline-flex items-center px-3 py-2 text-sm text-green-600 bg-green-100 rounded-lg dark:bg-green-800 dark:text-green-200">
                                 <em class="mr-2 icon ni ni-check-circle"></em>
                                 Toutes les vérifications terminées
@@ -264,52 +252,56 @@
                 @endif
             </div>
             <div class="ml-4">
-                <h4 class="text-base font-medium text-gray-800 dark:text-gray-200">Publication ou transfert des résultats</h4>
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Publiez les résultats pour les rendre accessibles aux étudiants ou transférez-les pour délibération.</p>
+                <h4 class="text-base font-medium text-gray-800 dark:text-gray-200">Publication des résultats</h4>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Publiez les résultats pour les rendre accessibles aux étudiants.</p>
                 @if($statut === 'valide')
-                    @php
-                        $contexte = $this->contexteExamen;
-                        $requiresDeliberation = $contexte['requires_deliberation'] ?? false;
-                        $isConcours = $contexte['is_concours'] ?? false;
-                        $hasRattrapage = $contexte['has_rattrapage'] ?? false;
-                        $sessionType = $contexte['session_type'] ?? 'N/A';
-                        $niveauNom = $contexte['niveau']->nom ?? 'N/A';
-                        $anneeUniv = $contexte['annee_universitaire'] ?? 'N/A';
-                    @endphp
                     <div class="mt-3">
                         <div class="flex flex-wrap gap-2">
-                            {{-- <a href="#"
-                                wire:click="switchTab('rapport-stats')"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
-                            >
-                                <em class="icon ni ni-eye mr-1.5"></em>
-                                Vérifier les résultats
-                            </a> --}}
+                            {{-- Bouton de publication direct --}}
                             <button
                                 wire:click="confirmPublication"
                                 wire:loading.attr="disabled"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white {{ $requiresDeliberation ? 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500' : ($isConcours ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500') }} border border-transparent rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 dark:{{ $requiresDeliberation ? 'bg-purple-700 hover:bg-purple-600' : ($isConcours ? 'bg-blue-700 hover:bg-blue-600' : 'bg-green-700 hover:bg-green-600') }} disabled:opacity-50"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:ring-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:bg-green-700 dark:hover:bg-green-600 disabled:opacity-50"
                             >
-                                @if($requiresDeliberation)
-                                    <em class="icon ni ni-users mr-1.5"></em>
-                                    Transférer pour délibération
-                                @elseif($isConcours)
-                                    <em class="icon ni ni-target mr-1.5"></em>
-                                    Classer et publier
-                                @else
-                                    <em class="icon ni ni-check mr-1.5"></em>
-                                    Publier les résultats
-                                @endif
+                                <em class="icon ni ni-check mr-1.5"></em>
+                                Publier les résultats
                                 <span wire:loading wire:target="confirmPublication" class="ml-2 animate-spin icon ni ni-loader"></span>
                             </button>
+
+                            {{-- Bouton d'aperçu --}}
+                            <a href="{{ route('resultats.finale') }}"
+                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
+                                <em class="icon ni ni-eye mr-1.5"></em>
+                                Aperçu des résultats
+                            </a>
                         </div>
-                        <x-context-message
-                            :requiresDeliberation="$requiresDeliberation"
-                            :isConcours="$isConcours"
-                        />
+
+                        {{-- Message informatif simplifié --}}
+                        <div class="p-4 mt-4 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700">
+                            <div class="flex items-start space-x-3">
+                                <div class="flex-shrink-0">
+                                    <em class="text-blue-600 icon ni ni-info dark:text-blue-400"></em>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                                        Publication directe
+                                    </p>
+                                    <p class="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                        Les résultats seront publiés directement. Les décisions (admis/rattrapage/exclus) seront calculées automatiquement selon la moyenne UE.
+                                    </p>
+                                    @if($examen && $examen->session)
+                                        <p class="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                                            <span class="font-medium">Session :</span> {{ $examen->session->type ?? 'N/A' }}
+                                            ({{ $examen->session->annee_universitaire ?? 'N/A' }})
+                                        </p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 @endif
-                <!-- Section des actions post-publication avec interface optimisée -->
+
+                <!-- Section des actions post-publication -->
                 @if($statut === 'publie')
                     <div class="mt-6 space-y-4">
                         <!-- Actions principales -->

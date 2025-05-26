@@ -45,15 +45,7 @@ class SessionExam extends Model
         return $this->hasMany(Deliberation::class, 'session_id');
     }
 
-    /**
-     * Récupère les résultats associés à cette session
-     */
-    public function resultats()
-    {
-        return Resultat::whereHas('examen', function($query) {
-            $query->where('session_id', $this->id);
-        });
-    }
+
 
     /**
      * Vérifie si c'est une session de première session (normale)

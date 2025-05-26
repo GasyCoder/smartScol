@@ -160,9 +160,9 @@ class RolesAndPermissionsSeeder extends Seeder
                 'description' => 'Permet d\'annuler les résultats d\'un examen'
             ],
             [
-                'name' => 'resultats.revert-validation',
-                'label' => 'Annuler la validation',
-                'description' => 'Permet d\'annuler la validation des résultats d\'un examen'
+                'name' => 'resultats.reactiver',
+                'label' => 'Reactiver la résultats',
+                'description' => 'Permet de réactiver la validation des résultats d\'un examen'
             ],
             // Permissions pour l'administration
             [

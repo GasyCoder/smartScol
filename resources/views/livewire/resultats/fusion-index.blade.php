@@ -4,7 +4,7 @@
         <div class="sticky top-0 z-10 px-5 py-4 mb-6 bg-white border-b border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-xl font-medium text-gray-800 dark:text-gray-100">Fusion des Résultats d'Examens</h2>
+                    <h2 class="text-xl font-medium text-gray-800 dark:text-gray-100">Fusion et vérification des résultats d'examens</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Génération de résultats à partir des manchettes et copies anonymes</p>
                 </div>
                 <div class="flex items-center space-x-2">
