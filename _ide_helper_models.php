@@ -530,12 +530,6 @@ namespace App\Models{
  * @property int $genere_par Utilisateur ayant généré le résultat
  * @property int|null $modifie_par
  * @property string $statut
- * @property string|null $status_history
- * @property string|null $motif_annulation
- * @property string|null $date_annulation
- * @property int|null $annule_par
- * @property string|null $date_reactivation
- * @property int|null $reactive_par
  * @property string|null $decision
  * @property \Illuminate\Support\Carbon|null $date_publication
  * @property string|null $hash_verification
@@ -551,11 +545,17 @@ namespace App\Models{
  * @property-read \App\Models\EC $ec
  * @property-read \App\Models\Etudiant $etudiant
  * @property-read \App\Models\Examen $examen
+ * @property-read mixed $annule_par
+ * @property-read mixed $date_annulation
+ * @property-read mixed $date_reactivation
  * @property-read mixed $est_eliminatoire
  * @property-read mixed $est_modifie
  * @property-read mixed $est_reussie
  * @property-read mixed $libelle_decision
  * @property-read mixed $libelle_statut
+ * @property-read mixed $motif_annulation
+ * @property-read mixed $reactive_par
+ * @property-read mixed $status_history
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFinalHistorique> $historique
  * @property-read int|null $historique_count
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
@@ -582,13 +582,10 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal redoublant()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sansDeliberation()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereAnnulePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateAnnulation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateFusion($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDatePublication($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateReactivation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDecision($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDeliberationId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEcId($value)
@@ -599,10 +596,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereHashVerification($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereModifiePar($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereMotifAnnulation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereNote($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereReactivePar($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatusHistory($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatut($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereUpdatedAt($value)
  */
@@ -613,9 +607,20 @@ namespace App\Models{
 /**
  * 
  *
+ * @property int $id
+ * @property int $resultat_final_id Référence vers le résultat final
+ * @property string $type_action Type d'action effectuée
+ * @property string|null $statut_precedent Statut avant l'action
+ * @property string|null $statut_nouveau Nouveau statut après l'action
+ * @property int $user_id Utilisateur ayant effectué l'action
+ * @property string|null $motif Motif de l'action (pour annulation par exemple)
+ * @property array<array-key, mixed>|null $donnees_supplementaires Données supplémentaires selon le type d'action
+ * @property \Illuminate\Support\Carbon $date_action Date et heure de l'action
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read mixed $libelle_type_action
- * @property-read \App\Models\ResultatFinal|null $resultatFinal
- * @property-read \App\Models\User|null $utilisateur
+ * @property-read \App\Models\ResultatFinal $resultatFinal
+ * @property-read \App\Models\User $utilisateur
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique ordreAntichronologique()
@@ -625,6 +630,17 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique parUtilisateur($userId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique recent($jours = 30)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereDateAction($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereDonneesSupplementaires($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereMotif($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereResultatFinalId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereStatutNouveau($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereStatutPrecedent($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereTypeAction($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique whereUserId($value)
  */
 	class ResultatFinalHistorique extends \Eloquent {}
 }
