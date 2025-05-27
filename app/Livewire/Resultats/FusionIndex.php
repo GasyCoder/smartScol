@@ -552,7 +552,7 @@ class FusionIndex extends Component
     }
 
     /**
-     * ÉTAPE 4 : Publie les résultats
+     * ÉTAPE 4 : Publie les résultats - VERSION MISE À JOUR
      */
     public function publierResultats()
     {
@@ -582,7 +582,6 @@ class FusionIndex extends Component
                     'resultats_en_attente' => $resultatsFinauxEnAttente->count()
                 ]);
 
-                // Créer une instance de CalculAcademiqueService
                 $calculService = new CalculAcademiqueService();
                 $etudiantsTraites = [];
 
@@ -591,20 +590,21 @@ class FusionIndex extends Component
                     $etudiantsTraites[$etudiantId] = true;
 
                     // Calculer les résultats complets pour l'étudiant
-                    $resultatsEtudiant = $calculService->calculerResultatsComplets($etudiantId, $this->sessionActive->id, true);
+                    $resultatsEtudiantCalculs = $calculService->calculerResultatsComplets($etudiantId, $this->sessionActive->id, true);
 
                     // Déterminer la décision en fonction de la moyenne
-                    $moyenneUE = $resultatsEtudiant['synthese']['moyenne_generale'];
+                    $moyenneUE = $resultatsEtudiantCalculs['synthese']['moyenne_generale'];
                     $decision = $moyenneUE >= 10 ? 'admis' : 'rattrapage';
 
-                    // Mettre à jour tous les résultats de l'étudiant
-                    ResultatFinal::where('etudiant_id', $etudiantId)
-                        ->where('examen_id', $this->examen_id)
-                        ->update([
-                            'decision' => $decision,
-                            'statut' => 'publie',
-                            'date_publication' => now()
-                        ]);
+                    // Publier chaque résultat de l'étudiant avec la nouvelle méthode
+                    foreach ($resultatsEtudiant as $resultat) {
+                        $resultat->changerStatut(
+                            ResultatFinal::STATUT_PUBLIE,
+                            Auth::id(),
+                            false,
+                            $decision
+                        );
+                    }
 
                     Log::info("Décision recalculée après réactivation", [
                         'etudiant_id' => $etudiantId,
@@ -646,9 +646,8 @@ class FusionIndex extends Component
                 return;
             }
 
-            // Utiliser la méthode transfererResultats (sans délibération)
             $fusionService = new FusionService();
-            $result = $fusionService->transfererResultats($resultatIds, Auth::id(), false);
+            $result = $fusionService->transfererResultats($resultatIds, Auth::id());
 
             if ($result['success']) {
                 // Mise à jour de l'état

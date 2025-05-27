@@ -35,26 +35,17 @@ class ResultatFinal extends Model
         'modifie_par',
         'statut',
         'date_publication',
-        'status_history',
         'decision',
         'deliberation_id',
         'fusion_id',
         'date_fusion',
         'hash_verification',
-        'motif_annulation',
-        'date_annulation',
-        'annule_par',
-        'date_reactivation',
-        'reactive_par'
     ];
 
     protected $casts = [
         'note' => 'decimal:2',
-        'status_history' => 'array',
         'date_publication' => 'datetime',
         'date_fusion' => 'datetime',
-        'date_annulation' => 'datetime',
-        'date_reactivation' => 'datetime'
     ];
 
     /**
@@ -100,14 +91,32 @@ class ResultatFinal extends Model
         return $this->belongsTo(ResultatFusion::class, 'fusion_id');
     }
 
-    public function utilisateurAnnulation()
+    /**
+     * Relation avec l'historique
+     */
+    public function historique()
     {
-        return $this->belongsTo(User::class, 'annule_par');
+        return $this->hasMany(ResultatFinalHistorique::class)->ordreChronologique();
     }
 
-    public function utilisateurReactivation()
+    /**
+     * Relation pour obtenir la dernière action d'annulation
+     */
+    public function derniereAnnulation()
     {
-        return $this->belongsTo(User::class, 'reactive_par');
+        return $this->hasOne(ResultatFinalHistorique::class)
+            ->where('type_action', ResultatFinalHistorique::TYPE_ANNULATION)
+            ->latest('date_action');
+    }
+
+    /**
+     * Relation pour obtenir la dernière action de réactivation
+     */
+    public function derniereReactivation()
+    {
+        return $this->hasOne(ResultatFinalHistorique::class)
+            ->where('type_action', ResultatFinalHistorique::TYPE_REACTIVATION)
+            ->latest('date_action');
     }
 
     /**
@@ -168,20 +177,232 @@ class ResultatFinal extends Model
 
     /**
      * Vérifie si une transition est autorisée entre deux statuts
-     *
-     * @param string $statutActuel
-     * @param string $nouveauStatut
-     * @return bool
      */
     private static function transitionAutorisee($statutActuel, $nouveauStatut)
     {
-        $transitions = [
-            self::STATUT_EN_ATTENTE => [self::STATUT_PUBLIE, self::STATUT_ANNULE],
-            self::STATUT_PUBLIE => [self::STATUT_ANNULE],
-            self::STATUT_ANNULE => [self::STATUT_EN_ATTENTE]
-        ];
-
+        $transitions = self::getTransitionsAutorisees();
         return in_array($nouveauStatut, $transitions[$statutActuel] ?? []);
+    }
+
+    /**
+     * Change le statut du résultat final avec historique
+     */
+    public function changerStatut($nouveauStatut, $userId, $avecDeliberation = false, $decision = null)
+    {
+        if (!self::transitionAutorisee($this->statut, $nouveauStatut)) {
+            throw new \Exception("Transition de statut non autorisée: {$this->statut} → {$nouveauStatut}");
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $ancienStatut = $this->statut;
+
+            // Gestion de la décision si fournie
+            if ($decision) {
+                $validDecisions = [
+                    self::DECISION_ADMIS,
+                    self::DECISION_RATTRAPAGE,
+                    self::DECISION_REDOUBLANT,
+                    self::DECISION_EXCLUS
+                ];
+                if (!in_array($decision, $validDecisions)) {
+                    throw new \Exception("Décision non valide: {$decision}");
+                }
+                $this->decision = $decision;
+            }
+
+            // Gestion de la publication
+            if ($nouveauStatut === self::STATUT_PUBLIE) {
+                $this->date_publication = now();
+                if (!$this->hash_verification) {
+                    $this->hash_verification = hash('sha256',
+                        $this->id . $this->etudiant_id . $this->note . now()->timestamp
+                    );
+                }
+            }
+
+            // Mettre à jour le statut
+            $this->statut = $nouveauStatut;
+            $this->modifie_par = $userId;
+            $this->save();
+
+            // Créer l'entrée d'historique
+            ResultatFinalHistorique::creerEntreeChangementStatut(
+                $this->id,
+                $ancienStatut,
+                $nouveauStatut,
+                $userId,
+                [
+                    'avec_deliberation' => $avecDeliberation,
+                    'decision' => $decision
+                ]
+            );
+
+            DB::commit();
+
+            Log::info('Changement de statut résultat final', [
+                'resultat_id' => $this->id,
+                'de' => $ancienStatut,
+                'vers' => $nouveauStatut,
+                'user_id' => $userId,
+                'avec_deliberation' => $avecDeliberation,
+                'decision' => $decision
+            ]);
+
+            return $this;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors du changement de statut', [
+                'resultat_id' => $this->id,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Annule le résultat avec motif
+     */
+    public function annuler($userId, $motif = null)
+    {
+        if ($this->statut !== self::STATUT_PUBLIE) {
+            throw new \Exception("Seuls les résultats publiés peuvent être annulés");
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Mettre à jour le statut
+            $this->statut = self::STATUT_ANNULE;
+            $this->modifie_par = $userId;
+            $this->save();
+
+            // Créer l'entrée d'historique d'annulation
+            ResultatFinalHistorique::creerEntreeAnnulation($this->id, $userId, $motif);
+
+            DB::commit();
+
+            Log::info('Résultat final annulé', [
+                'resultat_id' => $this->id,
+                'user_id' => $userId,
+                'motif' => $motif
+            ]);
+
+            return $this;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors de l\'annulation', [
+                'resultat_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Réactive le résultat annulé
+     */
+    public function reactiver($userId)
+    {
+        if ($this->statut !== self::STATUT_ANNULE) {
+            throw new \Exception("Seuls les résultats annulés peuvent être réactivés");
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Mettre à jour le statut
+            $this->statut = self::STATUT_EN_ATTENTE;
+            $this->modifie_par = $userId;
+            $this->save();
+
+            // Créer l'entrée d'historique de réactivation
+            ResultatFinalHistorique::creerEntreeReactivation($this->id, $userId);
+
+            DB::commit();
+
+            Log::info('Résultat final réactivé', [
+                'resultat_id' => $this->id,
+                'user_id' => $userId
+            ]);
+
+            return $this;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors de la réactivation', [
+                'resultat_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Obtient le motif de la dernière annulation
+     */
+    public function getMotifAnnulationAttribute()
+    {
+        return $this->derniereAnnulation?->motif;
+    }
+
+    /**
+     * Obtient la date de la dernière annulation
+     */
+    public function getDateAnnulationAttribute()
+    {
+        return $this->derniereAnnulation?->date_action;
+    }
+
+    /**
+     * Obtient l'utilisateur qui a annulé
+     */
+    public function getAnnuleParAttribute()
+    {
+        return $this->derniereAnnulation?->user_id;
+    }
+
+    /**
+     * Obtient la date de la dernière réactivation
+     */
+    public function getDateReactivationAttribute()
+    {
+        return $this->derniereReactivation?->date_action;
+    }
+
+    /**
+     * Obtient l'utilisateur qui a réactivé
+     */
+    public function getReactiveParAttribute()
+    {
+        return $this->derniereReactivation?->user_id;
+    }
+
+    /**
+     * Obtient l'historique complet formaté
+     */
+    public function getStatusHistoryAttribute()
+    {
+        return $this->historique()
+            ->where('type_action', ResultatFinalHistorique::TYPE_CHANGEMENT_STATUT)
+            ->get()
+            ->map(function ($entry) {
+                $donnees = $entry->donnees_supplementaires ?? [];
+                return [
+                    'de' => $entry->statut_precedent,
+                    'vers' => $entry->statut_nouveau,
+                    'user_id' => $entry->user_id,
+                    'date' => $entry->date_action->toDateTimeString(),
+                    'avec_deliberation' => $donnees['avec_deliberation'] ?? false,
+                    'decision' => $donnees['decision'] ?? null,
+                ];
+            })
+            ->toArray();
     }
 
     /**
@@ -195,123 +416,6 @@ class ResultatFinal extends Model
             return false;
         }
         return $session && $session->isRattrapage();
-    }
-
-    /**
-     * Change le statut du résultat final avec gestion de la délibération
-     *
-     * @param string $nouveauStatut
-     * @param int $userId
-     * @param bool $avecDeliberation
-     * @param string|null $decision
-     * @return ResultatFinal
-     * @throws \Exception
-     */
-    public function changerStatut($nouveauStatut, $userId, $avecDeliberation = false, $decision = null)
-    {
-        if (!self::transitionAutorisee($this->statut, $nouveauStatut)) {
-            throw new \Exception("Transition de statut non autorisée: {$this->statut} → {$nouveauStatut}");
-        }
-
-        try {
-            // Récupérer l'historique actuel
-            $historique = $this->status_history ?? [];
-            if (!is_array($historique)) {
-                $historique = json_decode($historique, true) ?? [];
-            }
-
-            // Créer la nouvelle entrée
-            $nouvelleEntree = [
-                'de' => $this->statut,
-                'vers' => $nouveauStatut,
-                'user_id' => $userId,
-                'date' => now()->toDateTimeString(),
-                'avec_deliberation' => $avecDeliberation,
-                'decision' => $decision
-            ];
-
-            // Ajouter la nouvelle entrée à l'historique
-            $historique[] = $nouvelleEntree;
-
-            // Mettre à jour les attributs
-            $this->attributes['status_history'] = json_encode($historique);
-            $this->attributes['statut'] = $nouveauStatut;
-            $this->attributes['modifie_par'] = $userId;
-
-            // Gestion de la décision si fournie
-            if ($decision) {
-                $validDecisions = [
-                    self::DECISION_ADMIS,
-                    self::DECISION_RATTRAPAGE,
-                    self::DECISION_REDOUBLANT,
-                    self::DECISION_EXCLUS
-                ];
-                if (!in_array($decision, $validDecisions)) {
-                    throw new \Exception("Décision non valide: {$decision}");
-                }
-                $this->attributes['decision'] = $decision;
-            }
-
-            // Gestion de la publication
-            if ($nouveauStatut === self::STATUT_PUBLIE) {
-                $this->attributes['date_publication'] = now();
-                if (!$this->hash_verification) {
-                    $this->attributes['hash_verification'] = hash('sha256',
-                        $this->id . $this->etudiant_id . $this->note . now()->timestamp
-                    );
-                }
-            }
-
-            // Sauvegarder les modifications
-            $this->save();
-
-            // Log le changement
-            Log::info('Changement de statut résultat final', [
-                'resultat_id' => $this->id,
-                'de' => $nouvelleEntree['de'],
-                'vers' => $nouvelleEntree['vers'],
-                'user_id' => $userId,
-                'avec_deliberation' => $avecDeliberation,
-                'decision' => $decision
-            ]);
-
-            return $this;
-
-        } catch (\Exception $e) {
-            Log::error('Erreur lors du changement de statut', [
-                'resultat_id' => $this->id,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
-            throw $e;
-        }
-    }
-
-
-    /**
-     * Get the status_history attribute
-     *
-     * @param  string|null  $value
-     * @return array
-     */
-    public function getStatusHistoryAttribute($value)
-    {
-        if (empty($value)) {
-            return [];
-        }
-        return is_array($value) ? $value : json_decode($value, true) ?? [];
-    }
-
-    /**
-     * Set the status_history attribute
-     *
-     * @param  array|string  $value
-     * @return void
-     */
-    public function setStatusHistoryAttribute($value)
-    {
-        $this->attributes['status_history'] = is_array($value) ? json_encode($value) : $value;
     }
 
     /**
@@ -386,9 +490,6 @@ class ResultatFinal extends Model
 
     /**
      * Détermine automatiquement la décision pour première session
-     * @param int $etudiantId
-     * @param int $sessionId
-     * @return string
      */
     public static function determinerDecisionPremiereSession($etudiantId, $sessionId)
     {
@@ -653,6 +754,7 @@ class ResultatFinal extends Model
     {
         $observations = [];
         $moyenne = $resultats['synthese']['moyenne_generale'];
+
         if ($moyenne >= 16) {
             $observations[] = "Excellent résultat avec une moyenne générale de {$moyenne}/20.";
         } elseif ($moyenne >= 14) {

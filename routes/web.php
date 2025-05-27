@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
 use App\Livewire\Resultats\FusionIndex;
+use App\Livewire\Resultats\ResultatFinale;
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Manchette\ManchettesIndex;
 use App\Livewire\Resultats\ResultatValidation;
@@ -69,7 +70,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('resultats')->name('resultats.')->group(function () {
         Route::get('/fusion', FusionIndex::class)->name('fusion');
         Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
-        Route::get('/resultats-examen/finale', ResultatValidation::class)->name('finale');
+        Route::get('/resultats-examen/finale', ResultatFinale::class)->name('finale');
     });
 
     // Routes de gestion du profil

@@ -233,7 +233,7 @@
         </div>
     </div>
 
-    <!-- 4. Publication ou transfert des résultats -->
+<!-- 4. Publication ou transfert des résultats -->
     <div class="p-5 border rounded-lg {{ $statut === 'publie' ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800' : ($statut === 'annule' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700') }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
@@ -255,16 +255,30 @@
                 <h4 class="text-base font-medium text-gray-800 dark:text-gray-200">Publication des résultats</h4>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">Publiez les résultats pour les rendre accessibles aux étudiants.</p>
                 @if($statut === 'valide')
+                    @php
+                        // Vérifier s'il y a des résultats en attente (cas de réactivation)
+                        $resultatsEnAttente = \App\Models\ResultatFinal::where('examen_id', $examen_id)
+                            ->where('statut', \App\Models\ResultatFinal::STATUT_EN_ATTENTE)
+                            ->exists();
+
+                        $estReactivation = $resultatsEnAttente;
+                    @endphp
+
                     <div class="mt-3">
                         <div class="flex flex-wrap gap-2">
-                            {{-- Bouton de publication direct --}}
+                            {{-- Bouton de publication/republication --}}
                             <button
                                 wire:click="confirmPublication"
                                 wire:loading.attr="disabled"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:ring-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:bg-green-700 dark:hover:bg-green-600 disabled:opacity-50"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white {{ $estReactivation ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500 dark:bg-green-700 dark:hover:bg-green-600' }} border border-transparent rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
                             >
-                                <em class="icon ni ni-check mr-1.5"></em>
-                                Publier les résultats
+                                @if($estReactivation)
+                                    <em class="icon ni ni-repeat mr-1.5"></em>
+                                    Republier les résultats
+                                @else
+                                    <em class="icon ni ni-check mr-1.5"></em>
+                                    Publier les résultats
+                                @endif
                                 <span wire:loading wire:target="confirmPublication" class="ml-2 animate-spin icon ni ni-loader"></span>
                             </button>
 
@@ -276,23 +290,35 @@
                             </a>
                         </div>
 
-                        {{-- Message informatif simplifié --}}
-                        <div class="p-4 mt-4 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700">
+                        {{-- Message informatif adapté --}}
+                        <div class="p-4 mt-4 border {{ $estReactivation ? 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700' : 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700' }} rounded-lg">
                             <div class="flex items-start space-x-3">
                                 <div class="flex-shrink-0">
-                                    <em class="text-blue-600 icon ni ni-info dark:text-blue-400"></em>
+                                    @if($estReactivation)
+                                        <em class="text-blue-600 icon ni ni-repeat dark:text-blue-400"></em>
+                                    @else
+                                        <em class="text-blue-600 icon ni ni-info dark:text-blue-400"></em>
+                                    @endif
                                 </div>
                                 <div class="flex-1">
-                                    <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
-                                        Publication directe
+                                    <p class="text-sm font-medium {{ $estReactivation ? 'text-blue-800 dark:text-blue-200' : 'text-blue-800 dark:text-blue-200' }}">
+                                        @if($estReactivation)
+                                            Republication après réactivation
+                                        @else
+                                            Publication directe
+                                        @endif
                                     </p>
-                                    <p class="mt-1 text-xs text-blue-700 dark:text-blue-300">
-                                        Les résultats seront publiés directement. Les décisions (admis/rattrapage/exclus) seront calculées automatiquement selon la moyenne UE.
+                                    <p class="mt-1 text-xs {{ $estReactivation ? 'text-blue-700 dark:text-blue-300' : 'text-blue-700 dark:text-blue-300' }}">
+                                        @if($estReactivation)
+                                            Les résultats précédemment annulés seront republiés après recalcul des décisions (admis/rattrapage/exclus) selon la moyenne UE.
+                                        @else
+                                            Les résultats seront publiés directement. Les décisions (admis/rattrapage/exclus) seront calculées automatiquement selon la moyenne UE.
+                                        @endif
                                     </p>
                                     @if($examen && $examen->session)
-                                        <p class="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                                        <p class="mt-2 text-xs {{ $estReactivation ? 'text-blue-700 dark:text-blue-300' : 'text-blue-700 dark:text-blue-300' }}">
                                             <span class="font-medium">Session :</span> {{ $examen->session->type ?? 'N/A' }}
-                                            ({{ $examen->session->annee_universitaire ?? 'N/A' }})
+                                            ({{ $examen->session->anneeUniversitaire->libelle ?? 'N/A' }})
                                         </p>
                                     @endif
                                 </div>
@@ -351,7 +377,7 @@
                             <button
                                 wire:click="$set('confirmingRevenirValidation', true)"
                                 wire:loading.attr="disabled"
-                                class="inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-blue-700 transition-all duration-200 bg-blue-50 border border-blue-200 rounded-lg shadow-sm hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700 dark:hover:bg-blue-800 disabled:opacity-50 min-w-[200px]"
+                                class="inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-blue-700 transition-all duration-200 bg-blue-50 border border-blue-200 rounded-lg shadow-sm hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700 dark:hover:blue-800 disabled:opacity-50 min-w-[200px]"
                             >
                                 <em class="mr-2 text-base icon ni ni-arrow-left"></em>
                                 <span>Réactiver les résultats</span>

@@ -14,6 +14,7 @@ use App\Models\SessionExam;
 use App\Models\CodeAnonymat;
 use App\Models\ResultatFusion;
 use App\Models\ResultatFinal;
+use App\Models\ResultatFinalHistorique;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -99,10 +100,6 @@ class FusionService
 
     /**
      * Analyse les résultats existants dans resultats_fusion
-     *
-     * @param int $examenId
-     * @param int $totalEtudiants
-     * @return array
      */
     private function analyserResultatsExistants($examenId, $totalEtudiants)
     {
@@ -149,11 +146,6 @@ class FusionService
 
     /**
      * Analyse les données avant fusion
-     *
-     * @param int $examenId
-     * @param int $totalEtudiants
-     * @param Collection $etudiants
-     * @return array
      */
     private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection $etudiants)
     {
@@ -254,10 +246,6 @@ class FusionService
 
     /**
      * Effectue la fusion des manchettes et copies
-     *
-     * @param int $examenId
-     * @param bool $force Forcer la refusion
-     * @return array
      */
     public function fusionner($examenId, $force = false)
     {
@@ -341,9 +329,6 @@ class FusionService
 
     /**
      * Étape 1 : Fusion des manchettes et copies
-     *
-     * @param int $examenId
-     * @return array
      */
     private function executerEtape1($examenId)
     {
@@ -468,9 +453,6 @@ class FusionService
 
     /**
      * Extrait la séquence d'un code d'anonymat
-     *
-     * @param string $codeAnonymat
-     * @return int|null
      */
     private function extraireSequence($codeAnonymat)
     {
@@ -479,9 +461,6 @@ class FusionService
 
     /**
      * Étape 2 : Validation des résultats
-     *
-     * @param int $examenId
-     * @return array
      */
     private function executerEtape2($examenId)
     {
@@ -521,9 +500,6 @@ class FusionService
 
     /**
      * Étape 3 : Troisième vérification avant finalisation
-     *
-     * @param int $examenId
-     * @return array
      */
     private function executerEtape3($examenId)
     {
@@ -563,9 +539,6 @@ class FusionService
 
     /**
      * Effectue des vérifications supplémentaires pour l'étape 3
-     *
-     * @param ResultatFusion $resultat
-     * @return bool
      */
     private function verifierResultatEtape3(ResultatFusion $resultat)
     {
@@ -597,9 +570,6 @@ class FusionService
 
     /**
      * Valide un résultat
-     *
-     * @param ResultatFusion $resultat
-     * @return bool
      */
     private function validerResultat(ResultatFusion $resultat)
     {
@@ -626,152 +596,7 @@ class FusionService
     }
 
     /**
-     * Valide et publie les résultats finals après fusion
-     *
-     * @param int $examenId ID de l'examen concerné
-     * @return array Résultat de l'opération
-     */
-    public function validerResultats($examenId)
-    {
-        try {
-            DB::beginTransaction();
-
-            $examen = Examen::with(['niveau', 'session'])->findOrFail($examenId);
-            $niveau = $examen->niveau;
-            $session = $examen->session;
-
-            if (!$niveau || !$session) {
-                DB::rollBack();
-                return [
-                    'success' => false,
-                    'message' => 'Données d\'examen incomplètes (niveau ou session manquant).'
-                ];
-            }
-
-            $resultats = ResultatFusion::where('examen_id', $examenId)
-                ->where('statut', ResultatFusion::STATUT_VERIFY_3)
-                ->where('etape_fusion', 3)
-                ->get();
-
-            if ($resultats->isEmpty()) {
-                DB::rollBack();
-                return [
-                    'success' => false,
-                    'message' => 'Aucun résultat validé à l\'étape 3 (VERIFY_3).'
-                ];
-            }
-
-            // Finalisation des résultats fusionnés
-            $resultatsFinalises = 0;
-            foreach ($resultats as $resultat) {
-                $resultat->changerStatut(ResultatFusion::STATUT_VALIDE, Auth::id());
-                $resultat->save();
-                $resultatsFinalises++;
-            }
-
-            // Initialiser les statistiques par étudiant
-            $statsEtudiants = [
-                'total' => 0,
-                'admis' => 0,
-                'rattrapage' => 0
-            ];
-
-            $calculService = new CalculAcademiqueService();
-
-            // Transférer vers ResultatFinal
-            foreach ($resultats->groupBy('etudiant_id') as $etudiantId => $etudiantResultats) {
-                $statsEtudiants['total']++;
-
-                $moyenneUE = 0;
-                $totalECs = 0;
-
-                foreach ($etudiantResultats as $resultat) {
-                    $moyenneUE += $resultat->note;
-                    $totalECs++;
-                }
-
-                $moyenneGenerale = $totalECs > 0 ? round($moyenneUE / $totalECs, 2) : 0;
-                $decision = $moyenneGenerale >= 10 ? 'admis' : 'rattrapage';
-
-                if ($decision === 'admis') {
-                    $statsEtudiants['admis']++;
-                } else {
-                    $statsEtudiants['rattrapage']++;
-                }
-
-                foreach ($etudiantResultats as $resultat) {
-                    $exists = ResultatFinal::where('etudiant_id', $resultat->etudiant_id)
-                        ->where('examen_id', $resultat->examen_id)
-                        ->where('ec_id', $resultat->ec_id)
-                        ->exists();
-
-                    if ($exists) {
-                        continue;
-                    }
-
-                    ResultatFinal::create([
-                        'etudiant_id' => $resultat->etudiant_id,
-                        'examen_id' => $resultat->examen_id,
-                        'code_anonymat_id' => $resultat->code_anonymat_id,
-                        'ec_id' => $resultat->ec_id,
-                        'note' => $resultat->note,
-                        'genere_par' => Auth::id(),
-                        'statut' => 'en_attente',
-                        'status_history' => [[
-                            'de' => 'en_attente',
-                            'vers' => 'en_attente',
-                            'user_id' => Auth::id(),
-                            'date' => now()->toDateTimeString(),
-                            'decision' => $decision
-                        ]],
-                        'decision' => $decision,
-                        'date_publication' => null,
-                        'hash_verification' => hash('sha256', $resultat->id . $resultat->note . time()),
-                        'fusion_id' => $resultat->id,
-                        'date_fusion' => now(),
-                    ]);
-                }
-            }
-
-            DB::commit();
-
-            Log::info('Validation des résultats terminée', [
-                'examen_id' => $examenId,
-                'total_etudiants' => $statsEtudiants['total'],
-                'admis' => $statsEtudiants['admis'],
-                'rattrapage' => $statsEtudiants['rattrapage'],
-            ]);
-
-            return [
-                'success' => true,
-                'message' => sprintf(
-                    'Résultats validés avec succès. Total étudiants: %d, Admis: %d, Rattrapage: %d',
-                    $statsEtudiants['total'],
-                    $statsEtudiants['admis'],
-                    $statsEtudiants['rattrapage']
-                )
-            ];
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Erreur lors de la validation des résultats', [
-                'examen_id' => $examenId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return [
-                'success' => false,
-                'message' => 'Erreur lors de la validation : ' . $e->getMessage()
-            ];
-        }
-    }
-
-    /**
      * Transfère les résultats de resultats_fusion vers resultats_finaux
-     *
-     * @param array $resultatFusionIds
-     * @param int $generePar
-     * @return array
      */
     public function transfererResultats(array $resultatFusionIds, int $generePar)
     {
@@ -813,7 +638,7 @@ class FusionService
                     continue;
                 }
 
-                // Créer le résultat final (initialement sans décision)
+                // Créer le résultat final
                 $resultatFinal = ResultatFinal::create([
                     'etudiant_id' => $resultatFusion->etudiant_id,
                     'examen_id' => $resultatFusion->examen_id,
@@ -823,19 +648,15 @@ class FusionService
                     'genere_par' => $generePar,
                     'modifie_par' => null,
                     'statut' => 'en_attente',
-                    'status_history' => [[
-                        'de' => 'en_attente',
-                        'vers' => 'en_attente',
-                        'user_id' => $generePar,
-                        'date' => now()->toDateTimeString(),
-                        'decision' => null,
-                    ]],
                     'decision' => null,
                     'date_publication' => null,
                     'hash_verification' => hash('sha256', $resultatFusion->id . $resultatFusion->note . time()),
                     'fusion_id' => $resultatFusion->id,
                     'date_fusion' => now(),
                 ]);
+
+                // Créer l'entrée d'historique de création
+                ResultatFinalHistorique::creerEntreeCreation($resultatFinal->id, $generePar);
 
                 $resultatsTransférés++;
                 $etudiantsTraites[$resultatFusion->etudiant_id] = true;
@@ -852,14 +673,14 @@ class FusionService
                 $moyenneUE = $resultatsEtudiant['synthese']['moyenne_generale'];
                 $decision = $moyenneUE >= 10 ? 'admis' : 'rattrapage';
 
-                // Mettre à jour tous les résultats de l'étudiant
-                ResultatFinal::where('etudiant_id', $etudiantId)
+                // Mettre à jour tous les résultats de l'étudiant avec publication
+                $resultatsEtudiantFinaux = ResultatFinal::where('etudiant_id', $etudiantId)
                     ->where('examen_id', $examenId)
-                    ->update([
-                        'decision' => $decision,
-                        'statut' => 'publie',
-                        'date_publication' => now()
-                    ]);
+                    ->get();
+
+                foreach ($resultatsEtudiantFinaux as $resultat) {
+                    $resultat->changerStatut('publie', $generePar, false, $decision);
+                }
 
                 Log::info("Décision calculée et appliquée", [
                     'etudiant_id' => $etudiantId,
@@ -890,7 +711,7 @@ class FusionService
     }
 
     /**
-     * Annule les résultats publiés
+     * Annule les résultats publiés - VERSION MISE À JOUR
      *
      * @param int $examenId
      * @param string|null $motifAnnulation
@@ -915,26 +736,10 @@ class FusionService
 
             $fusionIds = $resultats->pluck('fusion_id')->filter()->unique()->toArray();
 
-            // Mettre à jour les résultats finaux
+            // Annuler les résultats finaux en utilisant la nouvelle méthode
             $updatedCount = 0;
             foreach ($resultats as $resultat) {
-                $statusHistory = $resultat->status_history ?? [];
-                $statusHistory[] = [
-                    'de' => $resultat->statut,
-                    'vers' => ResultatFinal::STATUT_ANNULE,
-                    'user_id' => Auth::id(),
-                    'date' => now()->toDateTimeString(),
-                    'motif' => $motifAnnulation,
-                ];
-
-                $resultat->update([
-                    'statut' => ResultatFinal::STATUT_ANNULE,
-                    'motif_annulation' => $motifAnnulation,
-                    'date_annulation' => now(),
-                    'annule_par' => Auth::id(),
-                    'status_history' => $statusHistory,
-                ]);
-
+                $resultat->annuler(Auth::id(), $motifAnnulation);
                 $updatedCount++;
             }
 
@@ -975,7 +780,7 @@ class FusionService
     }
 
     /**
-     * Restaure les résultats annulés à l'état en attente
+     * Restaure les résultats annulés à l'état en attente - VERSION MISE À JOUR
      *
      * @param int $examenId
      * @return array
@@ -999,9 +804,9 @@ class FusionService
 
             $fusionIds = $resultats->pluck('fusion_id')->filter()->unique()->toArray();
 
-            // Restaurer les résultats finaux
+            // Restaurer les résultats finaux en utilisant la nouvelle méthode
             foreach ($resultats as $resultat) {
-                $resultat->changerStatut(ResultatFinal::STATUT_EN_ATTENTE, Auth::id());
+                $resultat->reactiver(Auth::id());
             }
 
             // Restaurer les résultats fusionnés au statut VALIDE
@@ -1066,6 +871,12 @@ class FusionService
                     'success' => false,
                     'message' => 'Aucun résultat à supprimer pour cet examen.',
                 ];
+            }
+
+            // Supprimer d'abord les historiques associés
+            $resultatFinalIds = ResultatFinal::where('examen_id', $examenId)->pluck('id');
+            if ($resultatFinalIds->isNotEmpty()) {
+                ResultatFinalHistorique::whereIn('resultat_final_id', $resultatFinalIds)->delete();
             }
 
             $deletedFusion = ResultatFusion::where('examen_id', $examenId)->delete();

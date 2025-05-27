@@ -101,7 +101,7 @@
         </h3>
         <div class="mb-6">
             <p class="text-sm text-gray-600 dark:text-gray-300">
-                Voulez-vous avancer la fusion à l'étape VERIFY_2 ? Cette action validera les données associées et préparera les résultats pour la délibération.
+                Voulez-vous avancer la fusion à l'étape VERIFY_2 ? Cette action validera les données associées.
             </p>
             <div class="p-3 mt-3 border border-yellow-200 rounded-md bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700">
                 <p class="text-sm text-yellow-800 dark:text-yellow-200">
@@ -209,13 +209,6 @@
                     <ul class="mt-2 text-xs text-purple-700 list-disc list-inside dark:text-purple-300">
                         <li>Vérification des notes et des associations</li>
                         <li>Calcul des moyennes par étudiant</li>
-                        @if($requiresDeliberation)
-                            <li>Préparation pour la délibération (session de rattrapage)</li>
-                        @elseif($isConcours)
-                            <li>Préparation du classement pour le concours</li>
-                        @else
-                            <li>Préparation pour la publication directe</li>
-                        @endif
                     </ul>
                 </div>
             @else
@@ -263,46 +256,80 @@
      aria-modal="true"
      aria-labelledby="publication-modal-title">
     <div class="relative w-full max-w-lg p-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
+        @php
+            $resultatsEnAttente = \App\Models\ResultatFinal::where('examen_id', $examen_id)
+                ->where('statut', \App\Models\ResultatFinal::STATUT_EN_ATTENTE)
+                ->exists();
+
+            $estReactivation = $resultatsEnAttente;
+
+            $contexteExamen = isset($contexteExamen) ? $contexteExamen : (isset($this->contexteExamen) ? $this->contexteExamen : null);
+            $isConcours = $contexteExamen && isset($contexteExamen['is_concours']) ? $contexteExamen['is_concours'] : false;
+        @endphp
+
         <h3 id="publication-modal-title" class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">
-            Confirmer la publication ou le transfert
+            @if($estReactivation)
+                Confirmer la republication des résultats
+            @else
+                Confirmer la publication des résultats
+            @endif
         </h3>
         <div class="mb-6">
-            @php
-                $contexteExamen = isset($contexteExamen) ? $contexteExamen : (isset($this->contexteExamen) ? $this->contexteExamen : null);
-                $requiresDeliberation = $contexteExamen && isset($contexteExamen['requires_deliberation']) ? $contexteExamen['requires_deliberation'] : false;
-                $isConcours = $contexteExamen && isset($contexteExamen['is_concours']) ? $contexteExamen['is_concours'] : false;
-            @endphp
             <p class="text-sm text-gray-600 dark:text-gray-300">
-                @if($requiresDeliberation)
-                    Voulez-vous transférer les résultats pour délibération ? Ils seront marqués comme "en attente" jusqu'à la délibération finale.
-                @elseif($isConcours)
-                    Voulez-vous classer et publier les résultats ? Ils seront immédiatement accessibles aux étudiants.
+                @if($estReactivation)
+                    @if($isConcours)
+                        Voulez-vous republier et classer les résultats ? Ils seront immédiatement accessibles aux étudiants après recalcul du classement.
+                    @else
+                        Voulez-vous republier les résultats ? Ils seront immédiatement accessibles aux étudiants après recalcul des décisions.
+                    @endif
                 @else
-                    Voulez-vous publier les résultats ? Ils seront immédiatement accessibles aux étudiants.
+                    @if($isConcours)
+                        Voulez-vous classer et publier les résultats ? Ils seront immédiatement accessibles aux étudiants.
+                    @else
+                        Voulez-vous publier les résultats ? Ils seront immédiatement accessibles aux étudiants.
+                    @endif
                 @endif
             </p>
+
             @if($contexteExamen)
                 @php
                     $sessionType = $contexteExamen['session_type'] ?? 'Inconnu';
                     $niveauNom = isset($contexteExamen['niveau']) && isset($contexteExamen['niveau']->nom) ? $contexteExamen['niveau']->nom : 'Inconnu';
                 @endphp
-                <div class="p-3 mt-3 border border-green-200 rounded-md bg-green-50 dark:bg-green-900/20 dark:border-green-700">
-                    <p class="text-sm text-green-800 dark:text-green-200">
-                        <em class="mr-1 icon ni ni-info"></em>
-                        <strong>Étape 4 :</strong> Publication pour {{ $niveauNom }} - Session {{ $sessionType }}
+                <div class="p-3 mt-3 border {{ $estReactivation ? 'border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700' : 'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-700' }} rounded-md">
+                    <p class="text-sm {{ $estReactivation ? 'text-blue-800 dark:text-blue-200' : 'text-green-800 dark:text-green-200' }}">
+                        @if($estReactivation)
+                            <em class="mr-1 icon ni ni-repeat"></em>
+                            <strong>Republication :</strong> {{ $niveauNom }} - Session {{ $sessionType }}
+                        @else
+                            <em class="mr-1 icon ni ni-info"></em>
+                            <strong>Publication :</strong> {{ $niveauNom }} - Session {{ $sessionType }}
+                        @endif
                     </p>
-                    <ul class="mt-2 text-xs text-green-700 list-disc list-inside dark:text-green-300">
-                        <li>Transfert vers la table `resultats_finaux`</li>
-                        <li>Calcul des décisions (admis, rattrapage, exclus)</li>
-                        @if($requiresDeliberation)
-                            <li>Programmation d'une délibération</li>
-                        @elseif($isConcours)
-                            <li>Établissement du classement</li>
+                    <ul class="mt-2 text-xs {{ $estReactivation ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300' }} list-disc list-inside">
+                        @if($estReactivation)
+                            <li>Recalcul automatique des moyennes et décisions</li>
+                            <li>Mise à jour des statuts depuis "en_attente" vers "publié"</li>
+                            <li>Conservation de l'historique des modifications</li>
+                        @else
+                            <li>Transfert vers la table `resultats_finaux`</li>
+                            <li>Calcul des décisions (admis, rattrapage, exclus)</li>
+                        @endif
+
+                        @if($isConcours)
+                            <li>{{ $estReactivation ? 'Mise à jour du' : 'Établissement du' }} classement</li>
                         @else
                             <li>Publication immédiate</li>
                         @endif
                         <li>Génération des hash de vérification</li>
                     </ul>
+
+                    @if($examen && $examen->session)
+                        <p class="mt-2 text-xs {{ $estReactivation ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300' }}">
+                            <span class="font-medium">Session :</span> {{ $examen->session->type ?? 'N/A' }}
+                            ({{ $examen->session->anneeUniversitaire->libelle ?? 'N/A' }})
+                        </p>
+                    @endif
                 </div>
             @else
                 <div class="p-3 mt-3 border border-yellow-200 rounded-md bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700">
@@ -312,12 +339,22 @@
                     </p>
                 </div>
             @endif
-            <div class="p-3 mt-3 border border-red-200 rounded-md bg-red-50 dark:bg-red-900/20 dark:border-red-700">
-                <p class="text-sm text-red-800 dark:text-red-200">
-                    <em class="mr-1 icon ni ni-alert"></em>
-                    <strong>Attention :</strong> Cette action est irréversible sans annulation complète.
-                </p>
-            </div>
+
+            @if($estReactivation)
+                <div class="p-3 mt-3 border rounded-md border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+                    <p class="text-sm text-amber-800 dark:text-amber-200">
+                        <em class="mr-1 icon ni ni-info"></em>
+                        <strong>Republication après réactivation :</strong> Les résultats précédemment annulés seront republiés avec recalcul des décisions.
+                    </p>
+                </div>
+            @else
+                <div class="p-3 mt-3 border border-red-200 rounded-md bg-red-50 dark:bg-red-900/20 dark:border-red-700">
+                    <p class="text-sm text-red-800 dark:text-red-200">
+                        <em class="mr-1 icon ni ni-alert"></em>
+                        <strong>Attention :</strong> Cette action est irréversible sans annulation complète.
+                    </p>
+                </div>
+            @endif
         </div>
         <div class="flex justify-end space-x-3">
             <button
@@ -331,22 +368,31 @@
             <button
                 wire:click="publierResultats"
                 wire:loading.attr="disabled"
-                class="px-4 py-2 text-sm font-medium text-white {{ $requiresDeliberation ? 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500' : ($isConcours ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500') }} rounded-md dark:{{ $requiresDeliberation ? 'bg-purple-700 hover:bg-purple-600' : ($isConcours ? 'bg-blue-700 hover:bg-blue-600' : 'bg-green-700 hover:bg-green-600') }} disabled:opacity-50"
-                aria-label="Publier ou transférer les résultats"
+                class="px-4 py-2 text-sm font-medium text-white {{ $estReactivation ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600' : ($isConcours ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500 dark:bg-green-700 dark:hover:bg-green-600') }} rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50"
+                aria-label="Publier les résultats"
             >
-                @if($requiresDeliberation)
-                    Transférer pour délibération
-                @elseif($isConcours)
-                    Classer et publier
+                @if($estReactivation)
+                    @if($isConcours)
+                        <em class="mr-1 icon ni ni-repeat"></em>
+                        Republier et classer
+                    @else
+                        <em class="mr-1 icon ni ni-repeat"></em>
+                        Republier les résultats
+                    @endif
                 @else
-                    Publier
+                    @if($isConcours)
+                        <em class="mr-1 icon ni ni-list-check"></em>
+                        Classer et publier
+                    @else
+                        <em class="mr-1 icon ni ni-check"></em>
+                        Publier
+                    @endif
                 @endif
                 <span wire:loading wire:target="publierResultats" class="ml-2 animate-spin icon ni ni-loader"></span>
             </button>
         </div>
     </div>
 </div>
-
 <!-- 5. Modal Réinitialisation -->
 <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
      x-show="$wire.confirmingResetFusion"
@@ -370,7 +416,6 @@
                 <ul class="mt-2 text-xs text-red-700 list-disc list-inside dark:text-red-300">
                     <li>Résultats de fusion (`resultats_fusion`)</li>
                     <li>Résultats finaux (`resultats_finaux`)</li>
-                    <li>Délibérations non validées</li>
                     <li>Historique des statuts</li>
                 </ul>
                 <p class="mt-2 text-xs text-red-700 dark:text-red-300">
@@ -424,7 +469,6 @@
                 <ul class="mt-2 text-xs text-red-700 list-disc list-inside dark:text-red-300">
                     <li>Résultats de fusion (`resultats_fusion`)</li>
                     <li>Résultats finaux (`resultats_finaux`)</li>
-                    <li>Délibérations non validées</li>
                 </ul>
                 <p class="mt-2 text-xs text-red-700 dark:text-red-300">
                     Les copies et manchettes originales resteront intactes.

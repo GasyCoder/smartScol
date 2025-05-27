@@ -530,11 +530,11 @@ namespace App\Models{
  * @property int $genere_par Utilisateur ayant généré le résultat
  * @property int|null $modifie_par
  * @property string $statut
- * @property array $status_history
+ * @property string|null $status_history
  * @property string|null $motif_annulation
- * @property \Illuminate\Support\Carbon|null $date_annulation
+ * @property string|null $date_annulation
  * @property int|null $annule_par
- * @property \Illuminate\Support\Carbon|null $date_reactivation
+ * @property string|null $date_reactivation
  * @property int|null $reactive_par
  * @property string|null $decision
  * @property \Illuminate\Support\Carbon|null $date_publication
@@ -546,6 +546,8 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\CodeAnonymat $codeAnonymat
  * @property-read \App\Models\Deliberation|null $deliberation
+ * @property-read \App\Models\ResultatFinalHistorique|null $derniereAnnulation
+ * @property-read \App\Models\ResultatFinalHistorique|null $derniereReactivation
  * @property-read \App\Models\EC $ec
  * @property-read \App\Models\Etudiant $etudiant
  * @property-read \App\Models\Examen $examen
@@ -554,11 +556,11 @@ namespace App\Models{
  * @property-read mixed $est_reussie
  * @property-read mixed $libelle_decision
  * @property-read mixed $libelle_statut
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFinalHistorique> $historique
+ * @property-read int|null $historique_count
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
- * @property-read \App\Models\User|null $utilisateurAnnulation
  * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
- * @property-read \App\Models\User|null $utilisateurReactivation
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal annule()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal avecDeliberation()
@@ -605,6 +607,26 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereUpdatedAt($value)
  */
 	class ResultatFinal extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * 
+ *
+ * @property-read mixed $libelle_type_action
+ * @property-read \App\Models\ResultatFinal|null $resultatFinal
+ * @property-read \App\Models\User|null $utilisateur
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique ordreAntichronologique()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique ordreChronologique()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique parPeriode($dateDebut, $dateFin)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique parType($type)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique parUtilisateur($userId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique recent($jours = 30)
+ */
+	class ResultatFinalHistorique extends \Eloquent {}
 }
 
 namespace App\Models{
