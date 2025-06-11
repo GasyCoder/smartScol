@@ -47,7 +47,7 @@ class DatabaseSeeder extends Seeder
             NiveauxSeeder::class,
             ParcoursSeeder::class,
             SessionExamSeeder::class,
-            DeliberationSeeder::class,
+            // DeliberationSeeder::class,
         ]);
     }
 }

@@ -73,37 +73,51 @@
                         <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">Aucun parcours trouvé pour ce niveau</p>
                     @endif
                 </div>
-                <!-- Matière/EC avec icône et animation -->
-                <div class="col-span-6 sm:col-span-2 transition-allmin-w-xl duration-300 transform hover:scale-[1.02]">
+                <!-- Matière/EC avec icône et animation - VERSION CORRIGÉE -->
+                <div class="col-span-6 sm:col-span-2 transition-all min-w-xl duration-300 transform hover:scale-[1.02]">
                     <div class="relative mb-5 last:mb-0">
                         <label for="ec_id" class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                             </svg>
                             Matière
+                            @if(count($ecs) > 0)
+                                <span class="text-xs text-green-600">({{ count($ecs) }} matière{{ count($ecs) > 1 ? 's' : '' }})</span>
+                            @endif
                         </label>
                         <div class="relative mt-1 rounded-md">
                             <select
+                                id="ec_id"
                                 wire:model.live="ec_id"
-                                id="default-4-02"
                                 class="block w-full py-2 pl-3 pr-10 text-base transition-colors duration-200 border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                                {{ count($parcours) ? '' : 'disabled' }}>
-                                data-search="true" {{ count($ecs) ? '' : 'disabled' }}>
+                                {{ count($ecs) > 0 ? '' : 'disabled' }}>
+
                                 <option value="">Sélectionner une matière</option>
-                                <option value="all">Toutes les matières</option>
-                                @foreach($ecs as $ec)
-                                    <option value="{{ $ec->id }}">
-                                        {{ $ec->nom }}
-                                        @if(isset($ec->manchettes_count))
-                                            ({{ $ec->manchettes_count }}/{{ $totalEtudiantsCount ?? '?' }})
-                                        @endif
-                                    </option>
-                                @endforeach
+
+                                @if(count($ecs) > 1)
+                                    <option value="all">Toutes les matières ({{ count($ecs) }})</option>
+                                @endif
+
+                                @if(count($ecs) > 0)
+                                    @foreach($ecs as $ec)
+                                        <option value="{{ $ec->id }}"
+                                                class="{{ isset($ec->has_manchette) && $ec->has_manchette ? 'text-green-600' : 'text-red-600' }}"
+                                                data-manchettes="{{ $ec->manchettes_count ?? 0 }}"
+                                                data-total="{{ $totalEtudiantsCount ?? 0 }}">
+                                            @if(isset($ec->has_manchette))
+                                                {{ $ec->has_manchette ? '✅' : '❌' }}
+                                            @else
+                                                ⚫
+                                            @endif
+                                            {{ $ec->nom ?? 'Nom indisponible' }}
+                                            @if(isset($ec->manchettes_count) && isset($totalEtudiantsCount))
+                                                ({{ $ec->manchettes_count }}/{{ $totalEtudiantsCount }})
+                                            @endif
+                                        </option>
+                                    @endforeach
+                                @endif
                             </select>
                         </div>
-                        @if(!count($ecs) && $salle_id)
-                            <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">Aucune matière trouvée pour cette salle</p>
-                        @endif
                     </div>
                 </div>
             </div>

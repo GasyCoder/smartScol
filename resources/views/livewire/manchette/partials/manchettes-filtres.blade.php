@@ -4,7 +4,18 @@
     @if($niveau_id || $parcours_id || $salle_id || $ec_id)
     <div class="overflow-hidden transition-all duration-300 bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
         <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-sm font-medium text-gray-700 dark:text-white">Filtres actifs</h3>
+            <div class="flex items-center gap-3">
+                <h3 class="text-sm font-medium text-gray-700 dark:text-white">Filtres actifs</h3>
+                <!-- NOUVEAU : Indicateur de session dans les filtres -->
+                @if(isset($sessionInfo) && is_array($sessionInfo) && ($sessionInfo['is_active'] ?? false))
+                    <div class="flex items-center px-2 py-1 text-xs rounded-full
+                        {{ ($sessionInfo['type'] ?? '') === 'rattrapage' ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-300' : 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300' }}">
+                        <span class="w-1.5 h-1.5 mr-1.5 rounded-full
+                            {{ ($sessionInfo['type'] ?? '') === 'rattrapage' ? 'bg-orange-400' : 'bg-blue-400' }}"></span>
+                        Session {{ $sessionInfo['type'] ?? 'normale' }}
+                    </div>
+                @endif
+            </div>
             <button wire:click="resetFiltres" class="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 transition-colors bg-gray-100 rounded-md hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
                 <em class="mr-1 text-sm icon ni ni-reload"></em>
                 Réinitialiser
@@ -45,42 +56,6 @@
             </div>
             @endif
 
-            @if($salle_id)
-            <div class="relative group">
-                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-purple-800 transition-all duration-200 bg-purple-100 rounded-full dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    @foreach($salles as $salle)
-                        @if($salle->id == $salle_id)
-                            {{ $salle->nom }}
-                            <span class="px-1.5 py-0.5 ml-1 text-xxs bg-purple-200 rounded text-purple-800 dark:bg-purple-800 dark:text-purple-200">{{ $salle->code_base ?? '' }}</span>
-                        @endif
-                    @endforeach
-                    <button wire:click="clearFilter('salle_id')" class="ml-1 text-purple-500 transition-opacity opacity-0 group-hover:opacity-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </span>
-            </div>
-            @endif
-
-            @if($examen_id)
-            <div class="relative group">
-                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-green-800 transition-all duration-200 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    {{ App\Models\Examen::find($examen_id)->session->type ?? 'Inconnu' }}
-                    <button wire:click="clearFilter('examen_id')" class="ml-1 text-green-500 transition-opacity opacity-0 group-hover:opacity-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </span>
-            </div>
-            @endif
 
             @if($ec_id && $ec_id !== 'all')
             <div class="relative group">
@@ -124,6 +99,12 @@
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex items-center gap-2">
                     <div class="text-xs font-medium text-gray-700 dark:text-gray-300">Progression</div>
+                    <!-- NOUVEAU : Affichage du type de session dans la progression -->
+                    @if(isset($sessionInfo) && is_array($sessionInfo) && ($sessionInfo['active'] ?? false))
+                        <div class="px-2 py-0.5 text-xs rounded text-gray-600 bg-gray-100 dark:bg-gray-600 dark:text-gray-300">
+                            Session {{ $sessionInfo['type'] ?? 'normale' }}
+                        </div>
+                    @endif
                     <div class="flex items-center gap-2">
                         <div class="w-32 h-2 overflow-hidden bg-gray-200 rounded-full dark:bg-gray-600">
                             <div class="h-full rounded-full transition-all duration-500 ease-out
@@ -163,12 +144,31 @@
                         </svg>
                         <span>{{ $userManchettesCount }} par vous</span>
                     </div>
+                    <!-- NOUVEAU : Statut de la session dans les stats -->
+                    @if(isset($sessionInfo) && is_array($sessionInfo))
+                        @if($sessionInfo['can_add'] ?? false)
+                            <div class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                                <span>Saisie autorisée</span>
+                            </div>
+                        @else
+                            <div class="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                </svg>
+                                <span>Saisie bloquée</span>
+                            </div>
+                        @endif
+                    @endif
                 </div>
             </div>
         </div>
         @endif
     </div>
     @endif
+
     @include('livewire.manchette.partials.selection-filtres')
 
 </div>

@@ -10,11 +10,14 @@ use App\Models\Niveau;
 use App\Models\Parcour;
 use App\Models\Salle;
 use App\Models\EC;
+use App\Models\SessionExam;
+use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
 use Livewire\WithPagination;
+
 /**
  * @property \Illuminate\Support\Collection $niveaux
  * @property \Illuminate\Support\Collection $parcours
@@ -25,48 +28,425 @@ class ManchettesIndex extends Component
 {
     use WithPagination;
 
+    // Propriétés de filtrage
     public $niveau_id;
     public $parcours_id;
     public $salle_id;
     public $examen_id;
     public $ec_id;
+    public $currentSessionType = '';
+    public $session_exam_id;
+
+    // Collections pour les sélecteurs
     public $niveaux = [];
     public $parcours = [];
     public $salles = [];
     public $ecs = [];
+
+    // Gestion des sessions
+    public $sessionActive = null;
+    public $sessionActiveId = null;
+    public $sessionType = null;
+    public $sessionInfo = '';
+    public $canAddManchettes = true;
+
+    // Propriétés d'affichage et tri
     public $statusFilter = 'all';
     public $sortField = 'created_at';
     public $sortDirection = 'desc';
     public $perPage = 25;
+    public $search = '';
+
+    // Gestion des étudiants
     public $etudiantsAvecManchettes = [];
     public $etudiantsSansManchette = [];
+    public $totalEtudiantsCount = 0;
+    public $totalEtudiantsExpected = 0;
+
+    // Modal de saisie
     public $showManchetteModal = false;
     public $code_anonymat = '';
     public $etudiant_id = null;
     public $matricule = '';
     public $editingManchetteId = null;
-    public $selectedSalleCode = '';
+
+    // Recherche d'étudiants
     public $searchMode = 'matricule';
     public $searchQuery = '';
     public $searchResults = [];
+
+    // Informations contextuelles
+    public $selectedSalleCode = '';
     public $currentEcName = '';
     public $currentSalleName = '';
     public $currentEcDate = '';
     public $currentEcHeure = '';
+
+    // Modal de suppression
     public $showDeleteModal = false;
     public $manchetteToDelete = null;
+
+    // Messages et compteurs
     public $message = '';
     public $messageType = '';
     public $userManchettesCount = 0;
     public $totalManchettesCount = 0;
-    public $totalEtudiantsCount = 0;
-    public $totalEtudiantsExpected = 0;
-    public $search = '';
 
     protected $rules = [
         'code_anonymat' => 'required|string|max:20',
         'etudiant_id' => 'required|exists:etudiants,id',
     ];
+
+    // Écouter les changements de session
+    protected $listeners = ['session-changed' => 'handleSessionChanged'];
+
+    public function mount()
+    {
+        $this->niveaux = Niveau::where('is_active', true)
+            ->orderBy('abr', 'desc')
+            ->get();
+        $this->parcours = collect();
+        $this->salles = collect();
+        $this->ecs = collect();
+        $this->sortField = 'created_at';
+        $this->sortDirection = 'asc';
+
+        try {
+            // Tenter de récupérer la session active
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) {
+                throw new \Exception('Aucune année universitaire active trouvée.');
+            }
+
+            $sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                ->where('is_active', true)
+                ->where('is_current', true)
+                ->first();
+
+            if (!$sessionActive) {
+                throw new \Exception('Aucune session active et courante trouvée.');
+            }
+
+            $this->sessionActive = $sessionActive;
+            $this->sessionActiveId = $sessionActive->id;
+            $this->session_exam_id = $sessionActive->id;
+            $this->currentSessionType = $sessionActive->type;
+            $this->sessionType = strtolower($sessionActive->type);
+            $this->canAddManchettes = true;
+            $this->sessionInfo = "Session {$sessionActive->type} active - Année {$anneeActive->libelle}";
+
+            \Log::info('Session active initialisée dans ManchettesIndex', [
+                'session_id' => $this->session_exam_id,
+                'type' => $this->currentSessionType,
+                'is_active' => $sessionActive->is_active,
+                'is_current' => $sessionActive->is_current,
+            ]);
+        } catch (\Exception $e) {
+            $this->sessionInfo = 'Erreur : ' . $e->getMessage();
+            $this->sessionActive = null;
+            $this->sessionActiveId = null;
+            $this->session_exam_id = null;
+            $this->currentSessionType = '';
+            $this->canAddManchettes = false;
+            \Log::error('Erreur lors de l\'initialisation de la session dans ManchettesIndex', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            toastr()->error($this->sessionInfo);
+        }
+
+        $this->loadFiltres();
+    }
+
+    /**
+     * Méthode pour changer de session d'examen
+     */
+    public function changeSession($sessionId)
+    {
+        try {
+            $session = SessionExam::find($sessionId);
+            if (!$session) {
+                throw new \Exception('Session d\'examen introuvable.');
+            }
+
+            // Mettre à jour la session active
+            $this->session_exam_id = $sessionId;
+            $this->currentSessionType = $session->type;
+
+            // Sauvegarder dans les filtres
+            $this->storeFiltres();
+
+            // Recharger les données pour la nouvelle session
+            if ($this->ec_id) {
+                $this->updatedEcId();
+            }
+
+            // Message de confirmation
+            $this->message = "Session changée vers : {$session->type}";
+            $this->messageType = 'success';
+            toastr()->success($this->message);
+
+            // Émettre un événement pour le JavaScript
+            $this->dispatch('session-changed', ['sessionType' => $session->type]);
+
+        } catch (\Exception $e) {
+            $this->message = 'Erreur lors du changement de session : ' . $e->getMessage();
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+        }
+    }
+
+    /**
+     * Met à jour les informations de session avec vraie relation
+     */
+    private function updateSessionInfo()
+    {
+        try {
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) {
+                throw new \Exception('Aucune année universitaire active trouvée.');
+            }
+
+            $sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                ->where('is_active', true)
+                ->where('is_current', true)
+                ->first();
+
+            if (!$sessionActive) {
+                throw new \Exception('Aucune session active et courante trouvée.');
+            }
+
+            $this->sessionActive = $sessionActive;
+            $this->sessionActiveId = $sessionActive->id;
+            $this->session_exam_id = $sessionActive->id;
+            $this->sessionType = strtolower($sessionActive->type);
+            $this->currentSessionType = $sessionActive->type;
+            $this->canAddManchettes = true;
+            $this->sessionInfo = "Session {$sessionActive->type} active - Année {$anneeActive->libelle}";
+
+            \Log::info('Session active mise à jour', [
+                'session_id' => $this->session_exam_id,
+                'type' => $this->sessionType,
+                'annee_universitaire' => $anneeActive->libelle,
+            ]);
+        } catch (\Exception $e) {
+            $this->sessionInfo = 'Erreur : ' . $e->getMessage();
+            $this->sessionActive = null;
+            $this->sessionActiveId = null;
+            $this->session_exam_id = null;
+            $this->currentSessionType = '';
+            $this->canAddManchettes = false;
+            \Log::error('Erreur lors de la mise à jour de la session', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Charger TOUS les ECs depuis tous les examens du niveau/parcours
+     */
+    private function loadAllEcsFromExamens()
+    {
+        if (!$this->niveau_id || !$this->salle_id) {
+            $this->ecs = collect();
+            return;
+        }
+
+        $sessionId = $this->getCurrentSessionId();
+        $sessionType = $this->getCurrentSessionType();
+
+        // Récupérer TOUS les examens pour ce niveau/parcours
+        $examens = DB::table('examens')
+            ->where('niveau_id', $this->niveau_id)
+            ->where('parcours_id', $this->parcours_id)
+            ->whereNull('deleted_at')
+            ->pluck('id')
+            ->toArray();
+
+        \Log::info('Examens trouvés pour niveau/parcours', [
+            'niveau_id' => $this->niveau_id,
+            'parcours_id' => $this->parcours_id,
+            'examens_ids' => $examens
+        ]);
+
+        if (empty($examens)) {
+            $this->ecs = collect();
+            return;
+        }
+
+        // Récupérer TOUS les ECs associés à ces examens pour cette salle
+        $ecsData = DB::table('ecs')
+            ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+            ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
+            ->join('ues', 'ecs.ue_id', '=', 'ues.id')
+            ->whereIn('examen_ec.examen_id', $examens)
+            ->where('examen_ec.salle_id', $this->salle_id)
+            ->whereNull('ecs.deleted_at')
+            ->whereNull('examens.deleted_at')
+            ->select(
+                'ecs.*',
+                'ues.nom as ue_nom',
+                'ues.abr as ue_abr',
+                'examen_ec.examen_id',
+                'examen_ec.date_specifique',
+                'examen_ec.heure_specifique'
+            )
+            ->distinct()
+            ->orderBy('ues.nom')
+            ->orderBy('ecs.nom')
+            ->get();
+
+        \Log::info('ECs trouvés depuis tous les examens', [
+            'count' => $ecsData->count(),
+            'salle_id' => $this->salle_id,
+            'examens_checked' => $examens,
+            'ecs_found' => $ecsData->pluck('nom')->toArray()
+        ]);
+
+        if ($ecsData->isEmpty()) {
+            $this->ecs = collect();
+            return;
+        }
+
+        // Grouper par EC (car un EC peut être dans plusieurs examens)
+        $ecsGrouped = $ecsData->groupBy('id')->map(function($group) use ($sessionType) {
+            $firstEc = $group->first();
+
+            // Prendre le premier examen comme référence si pas encore défini
+            if (!$this->examen_id) {
+                $this->examen_id = $firstEc->examen_id;
+            }
+
+            return (object) [
+                'id' => $firstEc->id,
+                'nom' => $firstEc->nom,
+                'abr' => $firstEc->abr,
+                'coefficient' => $firstEc->coefficient,
+                'ue_id' => $firstEc->ue_id,
+                'ue_nom' => $firstEc->ue_nom,
+                'ue_abr' => $firstEc->ue_abr,
+                'enseignant' => $firstEc->enseignant,
+                'examen_id' => $firstEc->examen_id,
+                'date_specifique' => $firstEc->date_specifique,
+                'heure_specifique' => $firstEc->heure_specifique,
+                'date_formatted' => $firstEc->date_specifique ?
+                    \Carbon\Carbon::parse($firstEc->date_specifique)->format('d/m/Y') : null,
+                'heure_formatted' => $firstEc->heure_specifique ?
+                    \Carbon\Carbon::parse($firstEc->heure_specifique)->format('H:i') : null,
+                'has_manchette' => false, // Sera calculé après
+                'manchettes_count' => 0,  // Sera calculé après
+                'user_manchettes_count' => 0,
+                'pourcentage' => 0,
+                'session_libelle' => ucfirst($sessionType)
+            ];
+        })->values();
+
+        $this->ecs = $ecsGrouped;
+
+        // Calculer les compteurs de manchettes pour tous les ECs
+        $this->calculateManchettesCountsForAllEcs();
+
+        \Log::info('ECs finaux chargés', [
+            'count' => $this->ecs->count(),
+            'examen_id_used' => $this->examen_id,
+            'ecs_names' => $this->ecs->pluck('nom')->toArray()
+        ]);
+
+        // Sélectionner automatiquement si une seule EC
+        if ($this->ecs->count() == 1) {
+            $this->ec_id = $this->ecs->first()->id;
+            $this->updatedEcId();
+        }
+    }
+
+    /**
+     * Calculer les compteurs de manchettes pour tous les ECs chargés
+     */
+    private function calculateManchettesCountsForAllEcs()
+    {
+        if ($this->ecs->isEmpty()) {
+            return;
+        }
+
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return;
+        }
+
+        $ecIds = $this->ecs->pluck('id')->toArray();
+
+        // Compter les manchettes par EC pour la session active
+        $manchettesCounts = DB::table('manchettes')
+            ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('manchettes.session_exam_id', $sessionId)
+            ->whereIn('codes_anonymat.ec_id', $ecIds)
+            ->whereNull('manchettes.deleted_at')
+            ->select('codes_anonymat.ec_id', DB::raw('count(*) as total'))
+            ->groupBy('codes_anonymat.ec_id')
+            ->pluck('total', 'ec_id')
+            ->toArray();
+
+        // Compter les manchettes de l'utilisateur
+        $userManchettesCounts = DB::table('manchettes')
+            ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('manchettes.session_exam_id', $sessionId)
+            ->where('manchettes.saisie_par', Auth::id())
+            ->whereIn('codes_anonymat.ec_id', $ecIds)
+            ->whereNull('manchettes.deleted_at')
+            ->select('codes_anonymat.ec_id', DB::raw('count(*) as total'))
+            ->groupBy('codes_anonymat.ec_id')
+            ->pluck('total', 'ec_id')
+            ->toArray();
+
+        // Mettre à jour les compteurs
+        $this->ecs = $this->ecs->map(function($ec) use ($manchettesCounts, $userManchettesCounts) {
+            $manchettesCount = $manchettesCounts[$ec->id] ?? 0;
+            $userCount = $userManchettesCounts[$ec->id] ?? 0;
+
+            $ec->manchettes_count = $manchettesCount;
+            $ec->user_manchettes_count = $userCount;
+            $ec->has_manchette = $manchettesCount > 0;
+            $ec->pourcentage = $this->totalEtudiantsCount > 0 ?
+                round(($manchettesCount / $this->totalEtudiantsCount) * 100, 1) : 0;
+
+            return $ec;
+        });
+
+        \Log::info('Compteurs mis à jour pour tous les ECs', [
+            'manchettes_counts' => $manchettesCounts,
+            'user_counts' => $userManchettesCounts
+        ]);
+    }
+
+    /**
+     * Gère les changements de session
+     */
+    public function handleSessionChanged($data)
+    {
+        $this->updateSessionInfo();
+        $this->updateCountersForCurrentSession();
+        toastr()->info('Session changée - Les données ont été mises à jour');
+    }
+
+    /**
+     * Récupère l'ID de la session actuelle
+     */
+    private function getCurrentSessionId()
+    {
+        if (!$this->sessionActiveId) {
+            $this->updateSessionInfo();
+        }
+        return $this->sessionActiveId;
+    }
+
+    /**
+     * Récupère le type de session actuel
+     */
+    private function getCurrentSessionType()
+    {
+        return $this->sessionActive ? strtolower($this->sessionActive->type) : 'normale';
+    }
 
     public function resetEtudiantSelection()
     {
@@ -109,6 +489,12 @@ class ManchettesIndex extends Component
 
     public function openManchetteModalForEtudiant($etudiantId)
     {
+        // Vérification des autorisations de session
+        if (!$this->canAddManchettes) {
+            toastr()->error($this->sessionInfo);
+            return;
+        }
+
         if (!$this->examen_id || !$this->salle_id || !$this->ec_id || $this->ec_id === 'all') {
             toastr()->error('Veuillez d\'abord sélectionner une matière spécifique');
             return;
@@ -120,18 +506,54 @@ class ManchettesIndex extends Component
             return;
         }
 
-        $hasExistingManchette = Manchette::whereHas('codeAnonymat', function ($query) {
-                $query->where('ec_id', $this->ec_id);
-            })
-            ->where('examen_id', $this->examen_id)
-            ->where('etudiant_id', $etudiantId)
-            ->exists();
+        // Vérifier l'existence pour la session ACTIVE
+        $hasExistingManchette = $this->checkExistingManchetteForCurrentSession($etudiantId);
 
         if ($hasExistingManchette) {
-            toastr()->error('Cet étudiant a déjà une manchette pour cette matière');
+            $sessionLibelle = ucfirst($this->getCurrentSessionType());
+            toastr()->error("Cet étudiant a déjà une manchette pour cette matière en session {$sessionLibelle}");
             return;
         }
 
+        // Générer le code d'anonymat pour la session courante
+        $this->generateCodeAnonymat();
+
+        $this->etudiant_id = $etudiant->id;
+        $this->matricule = $etudiant->matricule;
+        $this->searchQuery = '';
+        $this->searchResults = [];
+        $this->editingManchetteId = null;
+        $this->showManchetteModal = true;
+
+        $sessionLibelle = ucfirst($this->getCurrentSessionType());
+        toastr()->info("Prêt à enregistrer une manchette pour {$etudiant->nom} {$etudiant->prenom} (Session {$sessionLibelle})");
+        $this->dispatch('manchette-etudiant-selected');
+    }
+
+    /**
+     * Vérifie si une manchette existe pour la session courante
+     */
+    private function checkExistingManchetteForCurrentSession($etudiantId)
+    {
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return false;
+        }
+
+        return Manchette::where('etudiant_id', $etudiantId)
+            ->where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $sessionId)
+            ->whereHas('codeAnonymat', function ($query) {
+                $query->where('ec_id', $this->ec_id);
+            })
+            ->exists();
+    }
+
+    /**
+     * Génère le code d'anonymat pour la session courante
+     */
+    private function generateCodeAnonymat()
+    {
         if (empty($this->selectedSalleCode)) {
             $salle = Salle::find($this->salle_id);
             if ($salle) {
@@ -140,33 +562,48 @@ class ManchettesIndex extends Component
             }
         }
 
+        $sessionId = $this->getCurrentSessionId();
+
+        // Compter les manchettes pour cette session spécifique
         $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
             ->where('ec_id', $this->ec_id)
             ->where('code_complet', 'like', $this->selectedSalleCode . '%')
             ->pluck('id')
             ->toArray();
 
-        $manchettesCount = empty($codesIds) ? 0 : Manchette::whereIn('code_anonymat_id', $codesIds)->count();
+        $manchettesCount = empty($codesIds) ? 0 : Manchette::whereIn('code_anonymat_id', $codesIds)
+            ->where('session_exam_id', $sessionId)
+            ->count();
+
         $nextNumber = $manchettesCount + 1;
         $proposedCode = $this->selectedSalleCode . $nextNumber;
 
-        while (CodeAnonymat::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->where('code_complet', $proposedCode)
-            ->exists()) {
+        // Vérifier que le code n'existe pas déjà pour cette session
+        while ($this->codeExistsForCurrentSession($proposedCode)) {
             $nextNumber++;
             $proposedCode = $this->selectedSalleCode . $nextNumber;
         }
 
         $this->code_anonymat = $proposedCode;
-        $this->etudiant_id = $etudiant->id;
-        $this->matricule = $etudiant->matricule;
-        $this->searchQuery = '';
-        $this->searchResults = [];
-        $this->editingManchetteId = null;
-        $this->showManchetteModal = true;
-        toastr()->info('Prêt à enregistrer une manchette pour ' . $etudiant->nom . ' ' . $etudiant->prenom);
-        $this->dispatch('manchette-etudiant-selected');
+    }
+
+    /**
+     * Vérifie si un code existe pour la session courante
+     */
+    private function codeExistsForCurrentSession($code)
+    {
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return false;
+        }
+
+        return CodeAnonymat::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('code_complet', $code)
+            ->whereHas('manchettes', function($query) use ($sessionId) {
+                $query->where('session_exam_id', $sessionId);
+            })
+            ->exists();
     }
 
     protected function storeFiltres()
@@ -223,6 +660,7 @@ class ManchettesIndex extends Component
             $this->currentSalleName = '';
             $this->currentEcDate = '';
             $this->currentEcHeure = '';
+            $this->currentSessionType = '';
         }
         $this->storeFiltres();
         $this->resetPage();
@@ -233,26 +671,13 @@ class ManchettesIndex extends Component
         $this->reset([
             'niveau_id', 'parcours_id', 'salle_id', 'examen_id', 'ec_id',
             'selectedSalleCode', 'currentEcName', 'currentSalleName',
-            'currentEcDate', 'currentEcHeure'
+            'currentEcDate', 'currentEcHeure', 'currentSessionType'
         ]);
         session()->forget('manchettes.filtres');
         $this->parcours = collect();
         $this->salles = collect();
         $this->ecs = collect();
         $this->resetPage();
-    }
-
-    public function mount()
-    {
-        $this->niveaux = Niveau::where('is_active', true)
-            ->orderBy('abr', 'desc')
-            ->get();
-        $this->parcours = collect();
-        $this->salles = collect();
-        $this->ecs = collect();
-        $this->sortField = 'created_at';
-        $this->sortDirection = 'asc';
-        $this->loadFiltres();
     }
 
     public function updatedNiveauId()
@@ -281,6 +706,7 @@ class ManchettesIndex extends Component
             }
         }
 
+        $this->updateSessionInfo();
         $this->storeFiltres();
         $this->resetPage();
     }
@@ -341,102 +767,101 @@ class ManchettesIndex extends Component
                 $this->currentSalleName = $salle->nom ?? '';
             }
 
-            $examens = DB::table('examens')
-                ->join('examen_ec', 'examens.id', '=', 'examen_ec.examen_id')
-                ->where('examens.niveau_id', $this->niveau_id)
-                ->where('examens.parcours_id', $this->parcours_id)
-                ->where('examen_ec.salle_id', $this->salle_id)
-                ->select('examens.id')
-                ->distinct()
-                ->get()
-                ->pluck('id');
-
-            if ($examens->count() > 0) {
-                $this->examen_id = $examens->first();
-                $ecData = DB::table('ecs')
-                    ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
-                    ->where('examen_ec.examen_id', $this->examen_id)
-                    ->where('examen_ec.salle_id', $this->salle_id)
-                    ->whereNull('ecs.deleted_at')
-                    ->select(
-                        'ecs.*',
-                        'examen_ec.examen_id',
-                        'examen_ec.date_specifique',
-                        'examen_ec.heure_specifique'
-                    )
-                    ->distinct()
-                    ->get();
-
-                $ecIds = $ecData->pluck('id')->toArray();
-                $codesParEC = [];
-                foreach ($ecIds as $ec_id) {
-                    $codesParEC[$ec_id] = CodeAnonymat::where('examen_id', $this->examen_id)
-                        ->where('ec_id', $ec_id)
-                        ->pluck('id')
-                        ->toArray();
-                }
-
-                $manchettesCountsParEC = [];
-                $userManchettesCountsParEC = [];
-                foreach ($codesParEC as $ec_id => $codes) {
-                    if (!empty($codes)) {
-                        $manchettesCountsParEC[$ec_id] = Manchette::whereIn('code_anonymat_id', $codes)->count();
-                        $userManchettesCountsParEC[$ec_id] = Manchette::whereIn('code_anonymat_id', $codes)
-                            ->where('saisie_par', Auth::id())
-                            ->count();
-                    } else {
-                        $manchettesCountsParEC[$ec_id] = 0;
-                        $userManchettesCountsParEC[$ec_id] = 0;
-                    }
-                }
-
-                $this->ecs = $ecData->map(function ($item) use ($manchettesCountsParEC, $userManchettesCountsParEC) {
-                    $ec = new \stdClass();
-                    foreach ((array)$item as $key => $value) {
-                        $ec->$key = $value;
-                    }
-                    $ec->date_formatted = $ec->date_specifique ? \Carbon\Carbon::parse($ec->date_specifique)->format('d/m/Y') : null;
-                    $ec->heure_formatted = $ec->heure_specifique ? \Carbon\Carbon::parse($ec->heure_specifique)->format('H:i') : null;
-                    $ec->manchettes_count = $manchettesCountsParEC[$ec->id] ?? 0;
-                    $ec->user_manchettes_count = $userManchettesCountsParEC[$ec->id] ?? 0;
-                    $ec->pourcentage = $this->totalEtudiantsCount > 0
-                        ? round(($ec->manchettes_count / $this->totalEtudiantsCount) * 100, 1)
-                        : 0;
-                    return $ec;
-                });
-
-                if ($this->ecs->count() == 1) {
-                    $this->ec_id = $this->ecs->first()->id;
-                    $this->updatedEcId();
-                }
-            }
+            // CORRIGÉ : Charger TOUS les ECs de tous les examens
+            $this->loadAllEcsFromExamens();
         }
 
         $this->storeFiltres();
         $this->resetPage();
     }
 
+    /**
+     * Charge les étudiants avec et sans manchettes pour la session active
+     */
     public function chargerEtudiants()
     {
-        if (!$this->examen_id || !$this->ec_id || $this->ec_id === 'all') {
+        if (!$this->examen_id || !$this->ec_id || $this->ec_id === 'all' || !$this->session_exam_id) {
             $this->etudiantsSansManchette = collect();
+            $this->etudiantsAvecManchettes = collect();
+            $this->totalEtudiantsCount = 0;
             return;
         }
 
-        $etudiants = Etudiant::where('niveau_id', $this->niveau_id)
-            ->where('parcours_id', $this->parcours_id)
-            ->get();
+        // NOUVELLE LOGIQUE : Récupérer la session actuelle
+        $session = SessionExam::find($this->session_exam_id);
+        if (!$session) {
+            $this->etudiantsSansManchette = collect();
+            $this->etudiantsAvecManchettes = collect();
+            $this->totalEtudiantsCount = 0;
+            $this->sessionInfo = "Erreur : Session introuvable";
+            return;
+        }
 
-        $etudiantsAvecManchettesIds = Manchette::join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
-            ->where('manchettes.examen_id', $this->examen_id)
-            ->where('codes_anonymat.ec_id', $this->ec_id)
-            ->pluck('manchettes.etudiant_id')
+        // LOGIQUE DIFFÉRENTE SELON LE TYPE DE SESSION
+        if ($session->type === 'Normale') {
+            // Session normale : TOUS les étudiants du niveau/parcours
+            $etudiants = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->get();
+
+            $this->sessionInfo = "Session Normale - {$etudiants->count()} étudiant(s) disponible(s)";
+
+        } else {
+            // Session rattrapage : SEULS les étudiants éligibles
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                $this->etudiantsSansManchette = collect();
+                $this->etudiantsAvecManchettes = collect();
+                $this->totalEtudiantsCount = 0;
+                $this->sessionInfo = "Erreur : Aucune session normale trouvée pour cette année";
+                return;
+            }
+
+            // Utiliser la nouvelle méthode du modèle Etudiant
+            $etudiants = Etudiant::eligiblesRattrapage(
+                $this->niveau_id,
+                $this->parcours_id,
+                $sessionNormale->id
+            )->get();
+
+            // Message informatif pour session rattrapage
+            if ($etudiants->isEmpty()) {
+                $this->sessionInfo = "Session Rattrapage - Aucun étudiant éligible (tous sont déjà admis ou n'ont pas de décision rattrapage)";
+            } else {
+                $this->sessionInfo = "Session Rattrapage - {$etudiants->count()} étudiant(s) éligible(s)";
+            }
+        }
+
+        // Récupérer les IDs des étudiants qui ont déjà une manchette pour cette EC dans cette session
+        $etudiantsAvecManchettesIds = Manchette::where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereHas('codeAnonymat', function ($query) {
+                $query->where('ec_id', $this->ec_id);
+            })
+            ->pluck('etudiant_id')
+            ->filter()
+            ->unique()
             ->toArray();
 
+        // Séparer les étudiants
         $this->etudiantsAvecManchettes = $etudiants->whereIn('id', $etudiantsAvecManchettesIds)->values();
         $this->etudiantsSansManchette = $etudiants->whereNotIn('id', $etudiantsAvecManchettesIds)->values();
         $this->totalEtudiantsCount = $etudiants->count();
         $this->totalEtudiantsExpected = $this->totalEtudiantsCount;
+
+        // Log pour debug
+        \Log::info('Étudiants chargés avec nouvelle logique (Manchettes)', [
+            'session_type' => $session->type,
+            'session_id' => $this->session_exam_id,
+            'total_etudiants_disponibles' => $etudiants->count(),
+            'avec_manchettes' => count($etudiantsAvecManchettesIds),
+            'sans_manchettes' => $this->etudiantsSansManchette->count(),
+            'niveau_id' => $this->niveau_id,
+            'parcours_id' => $this->parcours_id,
+        ]);
     }
 
     public function updatedEcId()
@@ -446,76 +871,9 @@ class ManchettesIndex extends Component
         $this->currentEcHeure = '';
 
         if ($this->ec_id === 'all') {
-            if ($this->examen_id && $this->salle_id) {
-                $ecInfo = DB::table('ecs')
-                    ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
-                    ->where('examen_ec.examen_id', $this->examen_id)
-                    ->where('examen_ec.salle_id', $this->salle_id)
-                    ->select('ecs.id', 'ecs.nom')
-                    ->get();
-
-                $ecNames = $ecInfo->pluck('nom')->toArray();
-                $ecIds = $ecInfo->pluck('id')->toArray();
-                $this->currentEcName = 'Toutes les matières (' . implode(', ', $ecNames) . ')';
-
-                $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
-                    ->whereIn('ec_id', $ecIds)
-                    ->pluck('id')
-                    ->toArray();
-
-                if (!empty($codesIds)) {
-                    $this->totalManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)->count();
-                    $this->userManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
-                        ->where('saisie_par', Auth::id())
-                        ->count();
-                } else {
-                    $this->totalManchettesCount = 0;
-                    $this->userManchettesCount = 0;
-                }
-
-                $nombreMatieres = count($ecIds);
-                $this->totalEtudiantsExpected = $nombreMatieres > 0 ? $this->totalEtudiantsCount * $nombreMatieres : 0;
-            }
+            $this->handleAllEcsSelection();
         } else if ($this->ec_id && $this->salle_id && $this->examen_id) {
-            $ecInfo = DB::table('ecs')
-                ->join('examen_ec', function ($join) {
-                    $join->on('ecs.id', '=', 'examen_ec.ec_id')
-                         ->where('examen_ec.examen_id', $this->examen_id)
-                         ->where('examen_ec.salle_id', $this->salle_id);
-                })
-                ->where('ecs.id', $this->ec_id)
-                ->select('ecs.nom', 'examen_ec.date_specifique', 'examen_ec.heure_specifique')
-                ->first();
-
-            if ($ecInfo) {
-                $this->currentEcName = $ecInfo->nom;
-                $this->currentEcDate = $ecInfo->date_specifique ? \Carbon\Carbon::parse($ecInfo->date_specifique)->format('d/m/Y') : '';
-                $this->currentEcHeure = $ecInfo->heure_specifique ? \Carbon\Carbon::parse($ecInfo->heure_specifique)->format('H:i') : '';
-            } else {
-                Log::warning('EC info not found', [
-                    'ec_id' => $this->ec_id,
-                    'examen_id' => $this->examen_id,
-                    'salle_id' => $this->salle_id,
-                ]);
-                $this->ec_id = null;
-            }
-
-            $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
-                ->where('ec_id', $this->ec_id)
-                ->pluck('id')
-                ->toArray();
-
-            if (!empty($codesIds)) {
-                $this->totalManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)->count();
-                $this->userManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
-                    ->where('saisie_par', Auth::id())
-                    ->count();
-            } else {
-                $this->totalManchettesCount = 0;
-                $this->userManchettesCount = 0;
-            }
-
-            $this->totalEtudiantsExpected = $this->totalEtudiantsCount;
+            $this->handleSpecificEcSelection();
         }
 
         $this->message = '';
@@ -523,8 +881,154 @@ class ManchettesIndex extends Component
         $this->resetPage();
     }
 
+    /**
+     * Gère la sélection "Toutes les matières"
+     */
+    private function handleAllEcsSelection()
+    {
+        if ($this->examen_id && $this->salle_id) {
+            $ecInfo = DB::table('ecs')
+                ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+                ->where('examen_ec.examen_id', $this->examen_id)
+                ->where('examen_ec.salle_id', $this->salle_id)
+                ->select('ecs.id', 'ecs.nom')
+                ->get();
+
+            $ecNames = $ecInfo->pluck('nom')->toArray();
+            $ecIds = $ecInfo->pluck('id')->toArray();
+            $this->currentEcName = 'Toutes les matières (' . implode(', ', $ecNames) . ')';
+
+            $this->updateCountersForAllEcs($ecIds);
+        }
+    }
+
+    /**
+     * Gère la sélection d'une matière spécifique
+     */
+    private function handleSpecificEcSelection()
+    {
+        $ecInfo = DB::table('ecs')
+            ->join('examen_ec', function ($join) {
+                $join->on('ecs.id', '=', 'examen_ec.ec_id')
+                     ->where('examen_ec.examen_id', $this->examen_id)
+                     ->where('examen_ec.salle_id', $this->salle_id);
+            })
+            ->where('ecs.id', $this->ec_id)
+            ->select('ecs.nom', 'examen_ec.date_specifique', 'examen_ec.heure_specifique')
+            ->first();
+
+        if ($ecInfo) {
+            $this->currentEcName = $ecInfo->nom;
+            $this->currentEcDate = $ecInfo->date_specifique ? \Carbon\Carbon::parse($ecInfo->date_specifique)->format('d/m/Y') : '';
+            $this->currentEcHeure = $ecInfo->heure_specifique ? \Carbon\Carbon::parse($ecInfo->heure_specifique)->format('H:i') : '';
+        } else {
+            // Essayer de trouver l'EC dans la collection chargée
+            $ec = $this->ecs->firstWhere('id', $this->ec_id);
+            if ($ec) {
+                $this->currentEcName = $ec->nom;
+                $this->currentEcDate = $ec->date_formatted ?? '';
+                $this->currentEcHeure = $ec->heure_formatted ?? '';
+            } else {
+                Log::warning('EC info not found', [
+                    'ec_id' => $this->ec_id,
+                    'examen_id' => $this->examen_id,
+                    'salle_id' => $this->salle_id,
+                ]);
+                $this->ec_id = null;
+                return;
+            }
+        }
+
+        $this->updateCountersForSpecificEc();
+    }
+
+    /**
+     * Met à jour les compteurs pour toutes les matières
+     */
+    private function updateCountersForAllEcs($ecIds)
+    {
+        $sessionId = $this->getCurrentSessionId();
+
+        $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
+            ->whereIn('ec_id', $ecIds)
+            ->pluck('id')
+            ->toArray();
+
+        if (!empty($codesIds) && $sessionId) {
+            $this->totalManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
+                ->where('session_exam_id', $sessionId)
+                ->count();
+            $this->userManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
+                ->where('session_exam_id', $sessionId)
+                ->where('saisie_par', Auth::id())
+                ->count();
+        } else {
+            $this->totalManchettesCount = 0;
+            $this->userManchettesCount = 0;
+        }
+
+        $nombreMatieres = count($ecIds);
+        $this->totalEtudiantsExpected = $nombreMatieres > 0 ? $this->totalEtudiantsCount * $nombreMatieres : 0;
+    }
+
+    /**
+     * Met à jour les compteurs pour une matière spécifique
+     */
+    private function updateCountersForSpecificEc()
+    {
+        $sessionId = $this->getCurrentSessionId();
+
+        $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->pluck('id')
+            ->toArray();
+
+        if (!empty($codesIds) && $sessionId) {
+            $this->totalManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
+                ->where('session_exam_id', $sessionId)
+                ->count();
+            $this->userManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
+                ->where('session_exam_id', $sessionId)
+                ->where('saisie_par', Auth::id())
+                ->count();
+        } else {
+            $this->totalManchettesCount = 0;
+            $this->userManchettesCount = 0;
+        }
+
+        $this->totalEtudiantsExpected = $this->totalEtudiantsCount;
+    }
+
+    /**
+     * Met à jour les compteurs pour la session courante
+     */
+    private function updateCountersForCurrentSession()
+    {
+        if ($this->examen_id && $this->ec_id) {
+            if ($this->ec_id === 'all') {
+                $ecIds = DB::table('ecs')
+                    ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+                    ->where('examen_ec.examen_id', $this->examen_id)
+                    ->where('examen_ec.salle_id', $this->salle_id)
+                    ->pluck('ecs.id')
+                    ->toArray();
+                $this->updateCountersForAllEcs($ecIds);
+            } else {
+                $this->updateCountersForSpecificEc();
+            }
+        }
+    }
+
     public function openManchetteModal()
     {
+        // Vérification des autorisations de session
+        if (!$this->canAddManchettes) {
+            $this->message = $this->sessionInfo;
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
         if (!$this->examen_id || !$this->salle_id || !$this->ec_id || $this->ec_id === 'all') {
             $this->message = 'Veuillez sélectionner une matière spécifique';
             $this->messageType = 'error';
@@ -532,33 +1036,7 @@ class ManchettesIndex extends Component
             return;
         }
 
-        if (empty($this->selectedSalleCode)) {
-            $salle = Salle::find($this->salle_id);
-            if ($salle) {
-                $this->selectedSalleCode = $salle->code_base;
-                $this->currentSalleName = $salle->nom;
-            }
-        }
-
-        $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->where('code_complet', 'like', $this->selectedSalleCode . '%')
-            ->pluck('id')
-            ->toArray();
-
-        $manchettesCount = empty($codesIds) ? 0 : Manchette::whereIn('code_anonymat_id', $codesIds)->count();
-        $nextNumber = $manchettesCount + 1;
-        $proposedCode = $this->selectedSalleCode . $nextNumber;
-
-        while (CodeAnonymat::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->where('code_complet', $proposedCode)
-            ->exists()) {
-            $nextNumber++;
-            $proposedCode = $this->selectedSalleCode . $nextNumber;
-        }
-
-        $this->code_anonymat = $proposedCode;
+        $this->generateCodeAnonymat();
         $this->etudiant_id = null;
         $this->matricule = '';
         $this->searchQuery = '';
@@ -588,29 +1066,55 @@ class ManchettesIndex extends Component
             return;
         }
 
-        $query = Etudiant::query();
+        // Récupérer la session actuelle
+        $session = SessionExam::find($this->session_exam_id);
+        if (!$session) {
+            $this->searchResults = [];
+            return;
+        }
+
+        // Base de la requête selon le type de session
+        if ($session->type === 'Normale') {
+            // Session normale : tous les étudiants du niveau/parcours
+            $query = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id);
+
+        } else {
+            // Session rattrapage : seuls les étudiants éligibles
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                $this->searchResults = [];
+                return;
+            }
+
+            $query = Etudiant::eligiblesRattrapage(
+                $this->niveau_id,
+                $this->parcours_id,
+                $sessionNormale->id
+            );
+        }
+
+        // Appliquer le filtre de recherche
         if ($this->searchMode === 'matricule') {
             $query->where('matricule', 'like', '%' . $this->searchQuery . '%');
         } else {
             $searchTerm = '%' . $this->searchQuery . '%';
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('nom', 'like', $searchTerm)
-                  ->orWhere('prenom', 'like', $searchTerm);
+                ->orWhere('prenom', 'like', $searchTerm);
             });
         }
 
-        if ($this->niveau_id) {
-            $query->where('niveau_id', $this->niveau_id);
-            if ($this->parcours_id) {
-                $query->where('parcours_id', $this->parcours_id);
-            }
-        }
-
-        $etudiantsAvecManchettes = DB::table('manchettes')
-            ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
-            ->where('manchettes.examen_id', $this->examen_id)
-            ->where('codes_anonymat.ec_id', $this->ec_id)
-            ->pluck('manchettes.etudiant_id')
+        // Exclure les étudiants ayant déjà une manchette pour cette session
+        $etudiantsAvecManchettes = Manchette::where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereHas('codeAnonymat', function($q) {
+                $q->where('ec_id', $this->ec_id);
+            })
+            ->pluck('etudiant_id')
             ->toArray();
 
         if (!empty($etudiantsAvecManchettes) && !isset($this->editingManchetteId)) {
@@ -618,6 +1122,13 @@ class ManchettesIndex extends Component
         }
 
         $this->searchResults = $query->limit(10)->get();
+
+        // Log pour debug
+        \Log::info('Recherche étudiants avec nouvelle logique', [
+            'session_type' => $session->type,
+            'search_query' => $this->searchQuery,
+            'results_count' => $this->searchResults->count()
+        ]);
     }
 
     public function selectEtudiant($id)
@@ -633,6 +1144,14 @@ class ManchettesIndex extends Component
 
     public function saveManchette()
     {
+        // Vérification des autorisations de session
+        if (!$this->canAddManchettes) {
+            $this->message = $this->sessionInfo;
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
         $this->validate();
 
         try {
@@ -646,16 +1165,26 @@ class ManchettesIndex extends Component
                 throw new \Exception("La matière sélectionnée n'existe pas.");
             }
 
+            $sessionId = $this->getCurrentSessionId();
+            $sessionType = $this->getCurrentSessionType();
+
+            if (!$sessionId) {
+                throw new \Exception("Aucune session active trouvée.");
+            }
+
             if (!isset($this->editingManchetteId)) {
+                // Vérifier l'existence pour la session ACTIVE
                 $existingManchette = Manchette::where('etudiant_id', $this->etudiant_id)
                     ->where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $sessionId)
                     ->whereHas('codeAnonymat', function ($query) {
                         $query->where('ec_id', $this->ec_id);
                     })
                     ->first();
 
                 if ($existingManchette) {
-                    throw new \Exception("Cet étudiant a déjà une manchette pour cette matière (Code: {$existingManchette->codeAnonymat->code_complet}).");
+                    $sessionLibelle = ucfirst($sessionType);
+                    throw new \Exception("Cet étudiant a déjà une manchette pour cette matière en session {$sessionLibelle} (Code: {$existingManchette->codeAnonymat->code_complet}).");
                 }
             }
 
@@ -670,19 +1199,24 @@ class ManchettesIndex extends Component
                 ]
             );
 
+            // Vérifier l'utilisation du code pour la session ACTIVE
             $existingManchetteWithCode = Manchette::where('code_anonymat_id', $codeAnonymat->id)
+                ->where('session_exam_id', $sessionId)
                 ->when(isset($this->editingManchetteId), function ($query) {
                     return $query->where('id', '!=', $this->editingManchetteId);
                 })
                 ->first();
 
             if ($existingManchetteWithCode) {
-                throw new \Exception("Ce code d'anonymat est déjà utilisé par l'étudiant {$existingManchetteWithCode->etudiant->nom} {$existingManchetteWithCode->etudiant->prenom}.");
+                $sessionLibelle = ucfirst($sessionType);
+                throw new \Exception("Ce code d'anonymat est déjà utilisé en session {$sessionLibelle} par l'étudiant {$existingManchetteWithCode->etudiant->nom} {$existingManchetteWithCode->etudiant->prenom}.");
             }
 
+            // Rechercher une manchette supprimée pour cette session
             $deletedManchette = Manchette::withTrashed()
                 ->where('examen_id', $this->examen_id)
                 ->where('code_anonymat_id', $codeAnonymat->id)
+                ->where('session_exam_id', $sessionId)
                 ->whereNotNull('deleted_at')
                 ->first();
 
@@ -693,7 +1227,8 @@ class ManchettesIndex extends Component
                     'saisie_par' => Auth::id(),
                     'date_saisie' => now(),
                 ]);
-                $this->message = 'Manchette restaurée et mise à jour avec succès';
+                $sessionLibelle = ucfirst($sessionType);
+                $this->message = "Manchette restaurée et mise à jour avec succès pour la session {$sessionLibelle}";
             } elseif (isset($this->editingManchetteId)) {
                 $manchette = Manchette::find($this->editingManchetteId);
                 if (!$manchette) {
@@ -703,6 +1238,7 @@ class ManchettesIndex extends Component
                 if ($manchette->etudiant_id != $this->etudiant_id) {
                     $etudiantHasEC = Manchette::where('etudiant_id', $this->etudiant_id)
                         ->where('examen_id', $this->examen_id)
+                        ->where('session_exam_id', $sessionId)
                         ->where('id', '!=', $this->editingManchetteId)
                         ->whereHas('codeAnonymat', function ($query) {
                             $query->where('ec_id', $this->ec_id);
@@ -710,7 +1246,8 @@ class ManchettesIndex extends Component
                         ->exists();
 
                     if ($etudiantHasEC) {
-                        throw new \Exception("Cet étudiant a déjà une manchette pour cette matière.");
+                        $sessionLibelle = ucfirst($sessionType);
+                        throw new \Exception("Cet étudiant a déjà une manchette pour cette matière en session {$sessionLibelle}.");
                     }
                 }
 
@@ -720,36 +1257,32 @@ class ManchettesIndex extends Component
                     'saisie_par' => Auth::id(),
                     'date_saisie' => now(),
                 ]);
-                $this->message = 'Manchette modifiée avec succès';
+                $sessionLibelle = ucfirst($sessionType);
+                $this->message = "Manchette modifiée avec succès pour la session {$sessionLibelle}";
             } else {
+                // NOUVELLE CRÉATION avec session_exam_id
                 Manchette::create([
                     'examen_id' => $this->examen_id,
                     'code_anonymat_id' => $codeAnonymat->id,
                     'etudiant_id' => $this->etudiant_id,
                     'saisie_par' => Auth::id(),
                     'date_saisie' => now(),
+                    'session_exam_id' => $sessionId,
                 ]);
-                $this->message = 'Manchette enregistrée avec succès';
+                $sessionLibelle = ucfirst($sessionType);
+                $this->message = "Manchette enregistrée avec succès pour la session {$sessionLibelle}";
             }
 
+            // Gestion post-sauvegarde
             if (!isset($this->editingManchetteId)) {
                 $this->etudiant_id = null;
                 $this->matricule = '';
                 $this->searchQuery = '';
                 $this->searchResults = [];
-                if (preg_match('/^([A-Za-z]+)(\d+)$/', $this->code_anonymat, $matches)) {
-                    $prefix = $matches[1];
-                    $number = (int)$matches[2] + 1;
-                    $newCode = $prefix . $number;
-                    while (CodeAnonymat::where('examen_id', $this->examen_id)
-                        ->where('ec_id', $this->ec_id)
-                        ->where('code_complet', $newCode)
-                        ->exists()) {
-                        $number++;
-                        $newCode = $prefix . $number;
-                    }
-                    $this->code_anonymat = $newCode;
-                }
+
+                // Générer le prochain code pour la session courante
+                $this->generateNextCodeForCurrentSession();
+
                 $this->showManchetteModal = true;
                 $this->dispatch('focus-search-field');
             } else {
@@ -757,19 +1290,8 @@ class ManchettesIndex extends Component
                 $this->showManchetteModal = false;
             }
 
-            if ($this->examen_id && $this->ec_id) {
-                $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
-                    ->where('ec_id', $this->ec_id)
-                    ->pluck('id')
-                    ->toArray();
-
-                if (!empty($codesIds)) {
-                    $this->totalManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)->count();
-                    $this->userManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
-                        ->where('saisie_par', Auth::id())
-                        ->count();
-                }
-            }
+            // Mettre à jour les compteurs pour la session courante
+            $this->updateCountersForCurrentSession();
 
             $this->messageType = 'success';
             toastr()->success($this->message);
@@ -781,9 +1303,28 @@ class ManchettesIndex extends Component
         }
     }
 
+    /**
+     * Génère le prochain code pour la session courante
+     */
+    private function generateNextCodeForCurrentSession()
+    {
+        if (preg_match('/^([A-Za-z]+)(\d+)$/', $this->code_anonymat, $matches)) {
+            $prefix = $matches[1];
+            $number = (int)$matches[2] + 1;
+            $newCode = $prefix . $number;
+
+            while ($this->codeExistsForCurrentSession($newCode)) {
+                $number++;
+                $newCode = $prefix . $number;
+            }
+
+            $this->code_anonymat = $newCode;
+        }
+    }
+
     public function editManchette($id)
     {
-        $manchette = Manchette::with(['codeAnonymat', 'etudiant'])->find($id);
+        $manchette = Manchette::with(['codeAnonymat', 'etudiant', 'sessionExam'])->find($id);
         if (!$manchette) {
             $this->message = 'Manchette introuvable.';
             $this->messageType = 'error';
@@ -798,6 +1339,17 @@ class ManchettesIndex extends Component
             return;
         }
 
+        // Vérifier que la manchette appartient à la session active
+        $sessionId = $this->getCurrentSessionId();
+        if ($manchette->session_exam_id !== $sessionId) {
+            $sessionLibelle = $this->sessionActive ? $this->sessionActive->type : 'Inconnue';
+            $manchetteSessionLibelle = $manchette->sessionExam ? $manchette->sessionExam->type : 'Inconnue';
+            $this->message = "Cette manchette appartient à la session {$manchetteSessionLibelle}. Session active : {$sessionLibelle}.";
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
         $this->code_anonymat = $manchette->codeAnonymat->code_complet;
         $this->etudiant_id = $manchette->etudiant_id;
         $this->matricule = $manchette->etudiant->matricule;
@@ -807,7 +1359,7 @@ class ManchettesIndex extends Component
 
     public function confirmDelete($id)
     {
-        $manchette = Manchette::with('codeAnonymat.ec')->find($id);
+        $manchette = Manchette::with(['codeAnonymat.ec', 'sessionExam'])->find($id);
         if (!$manchette) {
             $this->message = 'Manchette introuvable.';
             $this->messageType = 'error';
@@ -817,6 +1369,17 @@ class ManchettesIndex extends Component
 
         if ($manchette->codeAnonymat->ec_id != $this->ec_id) {
             $this->message = 'Cette manchette appartient à une autre matière. Veuillez sélectionner la bonne matière avant de supprimer.';
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
+        // Vérifier que la manchette appartient à la session active
+        $sessionId = $this->getCurrentSessionId();
+        if ($manchette->session_exam_id !== $sessionId) {
+            $sessionLibelle = $this->sessionActive ? $this->sessionActive->type : 'Inconnue';
+            $manchetteSessionLibelle = $manchette->sessionExam ? $manchette->sessionExam->type : 'Inconnue';
+            $this->message = "Cette manchette appartient à la session {$manchetteSessionLibelle}. Session active : {$sessionLibelle}.";
             $this->messageType = 'error';
             toastr()->error($this->message);
             return;
@@ -840,26 +1403,18 @@ class ManchettesIndex extends Component
             }
 
             if ($this->manchetteToDelete->isAssociated()) {
-                throw new \Exception('Cette manchette est déjà associée à un résultat et ne peut pas être supprimée.');
+                throw new \Exception('Cette manchette est déjà associée à une copie et ne peut pas être supprimée.');
             }
 
+            $sessionLibelle = $this->manchetteToDelete->sessionExam ? $this->manchetteToDelete->sessionExam->type : 'Inconnue';
             $this->manchetteToDelete->delete();
-            $this->message = 'Manchette supprimée avec succès';
+            $this->message = "Manchette supprimée avec succès de la session {$sessionLibelle}";
             $this->messageType = 'success';
             $this->showDeleteModal = false;
             $this->manchetteToDelete = null;
 
-            $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
-                ->where('ec_id', $this->ec_id)
-                ->pluck('id')
-                ->toArray();
-
-            if (!empty($codesIds)) {
-                $this->totalManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)->count();
-                $this->userManchettesCount = Manchette::whereIn('code_anonymat_id', $codesIds)
-                    ->where('saisie_par', Auth::id())
-                    ->count();
-            }
+            // Mettre à jour les compteurs pour la session courante
+            $this->updateCountersForCurrentSession();
 
             toastr()->success($this->message);
 
@@ -873,6 +1428,9 @@ class ManchettesIndex extends Component
 
     public function render()
     {
+        // Mise à jour des informations de session
+        $this->updateSessionInfo();
+
         Log::debug('Rendering ManchettesIndex', [
             'niveau_id' => $this->niveau_id,
             'parcours_id' => $this->parcours_id,
@@ -880,6 +1438,8 @@ class ManchettesIndex extends Component
             'examen_id' => $this->examen_id,
             'ec_id' => $this->ec_id,
             'search' => $this->search,
+            'session_id' => $this->getCurrentSessionId(),
+            'session_type' => $this->getCurrentSessionType(),
         ]);
 
         if ($this->examen_id && !Examen::find($this->examen_id)) {
@@ -892,7 +1452,16 @@ class ManchettesIndex extends Component
         }
 
         if ($this->niveau_id && $this->parcours_id && $this->salle_id && $this->examen_id) {
+            // Filtrer par session active (session_exam_id)
+            $sessionId = $this->getCurrentSessionId();
             $query = Manchette::where('examen_id', $this->examen_id);
+
+            if ($sessionId) {
+                $query->where('session_exam_id', $sessionId);
+            } else {
+                // Si pas de session active, ne rien afficher
+                $query->where('id', 0);
+            }
 
             if ($this->ec_id && $this->ec_id !== 'all') {
                 $query->whereHas('codeAnonymat', function ($q) {
@@ -947,30 +1516,18 @@ class ManchettesIndex extends Component
                 $query->orderBy('created_at', 'asc');
             }
 
-            $manchettes = $query->with(['codeAnonymat.ec', 'etudiant', 'utilisateurSaisie'])
+            $manchettes = $query->with(['codeAnonymat.ec', 'etudiant', 'utilisateurSaisie', 'sessionExam'])
                 ->paginate($this->perPage);
 
             Log::debug('Manchettes retrieved', [
                 'examen_id' => $this->examen_id,
                 'ec_id' => $this->ec_id,
+                'session_id' => $sessionId,
                 'total' => $manchettes->total(),
-                'manchettes' => $manchettes->items(),
             ]);
 
-            if ($this->ec_id && $this->ec_id !== 'all') {
-                $this->totalManchettesCount = $manchettes->total();
-                $this->userManchettesCount = Manchette::where('examen_id', $this->examen_id)
-                    ->where('saisie_par', Auth::id())
-                    ->whereHas('codeAnonymat', function ($q) {
-                        $q->where('ec_id', $this->ec_id);
-                    })
-                    ->count();
-            } else {
-                $this->totalManchettesCount = $manchettes->total();
-                $this->userManchettesCount = Manchette::where('examen_id', $this->examen_id)
-                    ->where('saisie_par', Auth::id())
-                    ->count();
-            }
+            // Mettre à jour les compteurs pour la session courante
+            $this->updateCountersForCurrentSession();
         } else {
             $manchettes = Manchette::where('id', 0)->paginate($this->perPage);
             Log::debug('No manchettes retrieved due to missing filters', [
@@ -986,8 +1543,19 @@ class ManchettesIndex extends Component
             $this->chargerEtudiants();
         }
 
+        // Créer un tableau complet pour sessionInfo
+        $sessionInfo = [
+            'message' => $this->sessionInfo,
+            'active' => $this->sessionActive,
+            'active_id' => $this->sessionActiveId,
+            'type' => $this->sessionType,
+            'can_add' => $this->canAddManchettes,
+            'session_libelle' => $this->sessionActive ? $this->sessionActive->type : null
+        ];
+
         return view('livewire.manchette.manchettes-index', [
             'manchettes' => $manchettes,
+            'sessionInfo' => $sessionInfo
         ]);
     }
 }

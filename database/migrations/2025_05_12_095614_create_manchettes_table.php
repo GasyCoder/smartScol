@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('manchettes', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('examen_id')->comment('Examen concerné');
+            $table->unsignedBigInteger('session_exam_id')->nullable()->comment('Référence à la session d\'examen');
             $table->unsignedBigInteger('code_anonymat_id')->comment('Référence au code d\'anonymat');
             $table->unsignedBigInteger('etudiant_id')->comment('Référence à l\'étudiant');
             $table->unsignedBigInteger('saisie_par')->comment('Utilisateur ayant saisi la manchette');
@@ -22,14 +23,15 @@ return new class extends Migration
             $table->softDeletes();
 
             // Garder cette contrainte: un code_anonymat ne peut être utilisé que dans une seule manchette
-            $table->unique(['examen_id', 'code_anonymat_id']);
+            $table->unique(['examen_id', 'code_anonymat_id', 'session_exam_id'], 'manchettes_examen_code_session_unique');
             $table->index(['examen_id', 'code_anonymat_id'], 'manchettes_examen_code_idx');
-            // SUPPRIMÉ: $table->unique(['examen_id', 'etudiant_id']);
-            // Cette contrainte empêche un étudiant d'avoir plusieurs manchettes pour différentes matières
-            // d'un même examen, ce qui ne correspond pas à la nouvelle logique
+            // Index pour optimiser les requêtes par session
+            $table->index(['examen_id', 'session_exam_id'], 'manchettes_examen_session_idx');
 
             // Contraintes de clé étrangère (inchangées)
             $table->foreign('examen_id')->references('id')->on('examens');
+            // Contrainte de clé étrangère
+            $table->foreign('session_exam_id')->references('id')->on('session_exams')->onDelete('set null');
             $table->foreign('code_anonymat_id')->references('id')->on('codes_anonymat')->onDelete('cascade');
             $table->foreign('etudiant_id')->references('id')->on('etudiants')->onDelete('cascade');
             $table->foreign('saisie_par')->references('id')->on('users');

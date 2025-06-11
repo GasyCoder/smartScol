@@ -48,42 +48,6 @@
             </div>
             @endif
 
-            @if($salle_id)
-            <div class="relative group">
-                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-purple-800 transition-all duration-200 bg-purple-100 rounded-full dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    @foreach($salles as $salle)
-                        @if($salle->id == $salle_id)
-                            {{ $salle->nom }}
-                            <span class="px-1.5 py-0.5 ml-1 text-xxs bg-purple-200 rounded text-purple-800 dark:bg-purple-800 dark:text-purple-200">{{ $salle->code_base ?? '' }}</span>
-                        @endif
-                    @endforeach
-                    <button wire:click="clearFilter('salle_id')" class="ml-1 text-purple-500 transition-opacity opacity-0 group-hover:opacity-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </span>
-            </div>
-            @endif
-
-            @if($examen_id)
-            <div class="relative group">
-                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-green-800 transition-all duration-200 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Session: {{ App\Models\Examen::find($examen_id)->session->type ?? 'Inconnu' }}
-                    <button wire:click="clearFilter('examen_id')" class="ml-1 text-green-500 transition-opacity opacity-0 group-hover:opacity-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </span>
-            </div>
-            @endif
 
             @if($ec_id && $ec_id !== 'all')
             <div class="relative group">
@@ -248,41 +212,44 @@
                     @endif
                 </div>
 
-                <!-- Matière/EC avec icône et animation -->
-                <div class="col-span-6 sm:col-span-2 transition-allmin-w-xl duration-300 transform hover:scale-[1.02]">
+                <!-- Matière/EC avec indicateur simple -->
+                <div class="col-span-6 sm:col-span-2 transition-all min-w-xl duration-300 transform hover:scale-[1.02]">
                     <div class="relative mb-5 last:mb-0">
-                    <label for="ec_id" class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                        Matière
-                    </label>
-                     <div class="relative mt-1 rounded-md">
-                        <select
-                            id="ec_id"
-                            wire:model.live="ec_id"
-                            class="block w-full py-2 pl-3 pr-10 text-base transition-colors duration-200 border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            {{ count($ecs) ? '' : 'disabled' }}>
-                            <option value="">Sélectionner une matière</option>
-                            <option value="all">Toutes les matières</option>
-                            @foreach($ecs as $ec)
-                               <option value="{{ $ec->id }}">
-                                    {{ $ec->nom }}
-                                    @if(isset($ec->copies_count))
-                                        ({{ $ec->copies_count }}/{{ $totalEtudiantsCount ?? $totalEtudiantsPerEc[$ec->id] ?? '?' }})
-                                    @endif
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    @if(!count($ecs) && $salle_id)
-                        <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">Aucune matière trouvée pour cette salle</p>
-                    @endif
+                        <label for="ec_id" class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                            </svg>
+                            Matière
+                            @if(count($ecs) > 0)
+                                <span class="text-xs text-green-600">({{ count($ecs) }} matière{{ count($ecs) > 1 ? 's' : '' }})</span>
+                            @endif
+                        </label>
+
+                        <div class="relative mt-1 rounded-md">
+                            <select
+                                id="ec_id"
+                                wire:model.live="ec_id"
+                                class="block w-full py-2 pl-3 pr-10 text-base transition-colors duration-200 border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                {{ count($ecs) ? '' : 'disabled' }}>
+                                <option value="">Sélectionner une matière</option>
+                                <option value="all">Toutes les matières</option>
+                                @foreach($ecs->sortByDesc('has_copies') as $ec)
+                                    <option value="{{ $ec->id }}" class="{{ $ec->has_copies ? 'text-green-600' : 'text-red-600' }}">
+                                        {{ $ec->has_copies ? '✅' : '❌' }} {{ $ec->nom }}
+                                        @if(isset($ec->copies_count))
+                                            ({{ $ec->copies_count }}/{{ $totalEtudiantsCount ?? '?' }})
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @if(!count($ecs) && $salle_id)
+                            <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">Aucune matière trouvée pour cette salle</p>
+                        @endif
                     </div>
                 </div>
-            </div>
 
+            </div>
         </div>
     </div>
-
 </div>

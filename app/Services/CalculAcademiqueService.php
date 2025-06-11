@@ -24,7 +24,8 @@ class CalculAcademiqueService
     const NOTE_ELIMINATOIRE = 0;
 
     /**
-     * Calcule toutes les moyennes et crédits pour un étudiant dans une session
+     * CORRECTION CRITIQUE : Calcule toutes les moyennes et crédits pour un étudiant dans une session
+     * PLUS DE RÉFÉRENCE À examen.session_id car cette relation n'existe plus
      *
      * @param int $etudiantId
      * @param int $sessionId
@@ -41,10 +42,8 @@ class CalculAcademiqueService
             // Sélection du modèle en fonction de la table à utiliser
             $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
 
-            // Récupérer les résultats avec relations
-            $query = $modelClass::whereHas('examen', function ($query) use ($sessionId) {
-                $query->where('session_id', $sessionId);
-            })
+            // CORRECTION CRITIQUE : Utiliser session_exam_id au lieu de examen.session_id
+            $query = $modelClass::where('session_exam_id', $sessionId)
                 ->where('etudiant_id', $etudiantId)
                 ->with(['ec.ue', 'examen']);
 
@@ -71,11 +70,15 @@ class CalculAcademiqueService
             $aUneNoteEliminatoire = false;
             $notesEliminatoires = [];
 
-            // Récupérer toutes les UEs du niveau pour vérifier si des UEs manquent
-            $ues = UE::whereHas('ecs.examens', function ($query) use ($sessionId, $etudiant) {
-                $query->where('session_id', $sessionId)
-                      ->where('niveau_id', $etudiant->niveau_id);
-            })->get();
+            // CORRECTION : Récupérer toutes les UEs qui ont des résultats dans cette session
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $uesIds = $modelClass::where('session_exam_id', $sessionId)
+                ->join('ecs', 'ecs.id', '=', ($useResultatFinal ? 'resultats_finaux' : 'resultats_fusion') . '.ec_id')
+                ->distinct()
+                ->pluck('ecs.ue_id');
+
+            $ues = UE::whereIn('id', $uesIds)->get();
 
             foreach ($ues as $ue) {
                 $resultatsUE = $resultatsParUE->get($ue->id, collect());
@@ -359,6 +362,7 @@ class CalculAcademiqueService
             'date_calcul' => now()->format('Y-m-d H:i:s')
         ];
     }
+
     /**
      * Détermine la décision finale pour un étudiant
      *
@@ -496,7 +500,8 @@ class CalculAcademiqueService
     }
 
     /**
-     * Applique automatiquement les décisions à tous les étudiants d'une session
+     * CORRECTION CRITIQUE : Applique automatiquement les décisions à tous les étudiants d'une session
+     * PLUS DE RÉFÉRENCE À examen.session_id
      *
      * @param int $sessionId
      * @param bool $useResultatFinal
@@ -509,12 +514,10 @@ class CalculAcademiqueService
 
             $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
 
-            // Récupérer les étudiants distincts
-            $etudiantsIds = $modelClass::whereHas('examen', function ($query) use ($sessionId) {
-                $query->where('session_id', $sessionId);
-            })
-            ->distinct('etudiant_id')
-            ->pluck('etudiant_id');
+            // CORRECTION : Récupérer les étudiants distincts via session_exam_id
+            $etudiantsIds = $modelClass::where('session_exam_id', $sessionId)
+                ->distinct('etudiant_id')
+                ->pluck('etudiant_id');
 
             // Initialiser les statistiques
             $stats = [
@@ -577,7 +580,8 @@ class CalculAcademiqueService
     }
 
     /**
-     * Applique une décision à un étudiant
+     * CORRECTION CRITIQUE : Applique une décision à un étudiant
+     * PLUS DE RÉFÉRENCE À examen.session_id
      *
      * @param int $etudiantId
      * @param int $sessionId
@@ -597,10 +601,8 @@ class CalculAcademiqueService
 
             $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
 
-            // Récupérer les résultats de l'étudiant pour cette session
-            $resultats = $modelClass::whereHas('examen', function ($query) use ($sessionId) {
-                    $query->where('session_id', $sessionId);
-                })
+            // CORRECTION : Récupérer les résultats de l'étudiant pour cette session via session_exam_id
+            $resultats = $modelClass::where('session_exam_id', $sessionId)
                 ->where('etudiant_id', $etudiantId)
                 ->get();
 
@@ -665,7 +667,8 @@ class CalculAcademiqueService
     }
 
     /**
-     * Calcule les statistiques globales pour un niveau/parcours
+     * CORRECTION : Calcule les statistiques globales pour un niveau/parcours
+     * Amélioration pour éviter les problèmes de relations manquantes
      *
      * @param int $niveauId
      * @param int|null $parcoursId
@@ -714,21 +717,30 @@ class CalculAcademiqueService
             $etudiantsAvecNoteEliminatoire = 0;
 
             foreach ($etudiants as $etudiant) {
-                $resultat = $this->calculerResultatsComplets($etudiant->id, $sessionId, $useResultatFinal);
+                try {
+                    $resultat = $this->calculerResultatsComplets($etudiant->id, $sessionId, $useResultatFinal);
 
-                if (!empty($resultat['resultats_ue'])) {
-                    $etudiantsAvecResultats++;
-                    $sommeMoyennes += $resultat['synthese']['moyenne_generale'];
-                    $sommeCredits += $resultat['synthese']['credits_valides'];
+                    if (!empty($resultat['resultats_ue'])) {
+                        $etudiantsAvecResultats++;
+                        $sommeMoyennes += $resultat['synthese']['moyenne_generale'];
+                        $sommeCredits += $resultat['synthese']['credits_valides'];
 
-                    if ($resultat['synthese']['a_note_eliminatoire']) {
-                        $etudiantsAvecNoteEliminatoire++;
+                        if ($resultat['synthese']['a_note_eliminatoire']) {
+                            $etudiantsAvecNoteEliminatoire++;
+                        }
+
+                        $decisionCode = $resultat['decision']['code'];
+                        if (isset($decisions[$decisionCode])) {
+                            $decisions[$decisionCode]++;
+                        }
                     }
-
-                    $decisionCode = $resultat['decision']['code'];
-                    if (isset($decisions[$decisionCode])) {
-                        $decisions[$decisionCode]++;
-                    }
+                } catch (\Exception $e) {
+                    Log::warning('Erreur lors du calcul pour un étudiant', [
+                        'etudiant_id' => $etudiant->id,
+                        'session_id' => $sessionId,
+                        'error' => $e->getMessage()
+                    ]);
+                    continue;
                 }
             }
 
@@ -766,6 +778,404 @@ class CalculAcademiqueService
             ]);
 
             throw new \Exception('Erreur lors du calcul des statistiques : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Calcule la moyenne d'une UE pour un étudiant
+     *
+     * @param int $etudiantId
+     * @param int $ueId
+     * @param int $sessionId
+     * @param bool $useResultatFinal
+     * @return float|null
+     */
+    public function calculerMoyenneUE($etudiantId, $ueId, $sessionId, $useResultatFinal = false)
+    {
+        try {
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $resultats = $modelClass::where('session_exam_id', $sessionId)
+                ->whereHas('ec', function($q) use ($ueId) {
+                    $q->where('ue_id', $ueId);
+                })
+                ->where('etudiant_id', $etudiantId);
+
+            if ($useResultatFinal) {
+                $resultats->where('statut', '!=', ResultatFinal::STATUT_ANNULE);
+            } else {
+                $resultats->where('statut', ResultatFusion::STATUT_VALIDE);
+            }
+
+            $resultats = $resultats->get();
+
+            if ($resultats->isEmpty()) {
+                return null;
+            }
+
+            // Vérifier s'il y a une note éliminatoire (0)
+            $hasNoteZero = $resultats->contains('note', 0);
+
+            if ($hasNoteZero) {
+                return 0;
+            }
+
+            return round($resultats->avg('note'), 2);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul de moyenne UE', [
+                'etudiant_id' => $etudiantId,
+                'ue_id' => $ueId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Calcule la moyenne générale d'un étudiant
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @param bool $useResultatFinal
+     * @return float
+     */
+    public function calculerMoyenneGenerale($etudiantId, $sessionId, $useResultatFinal = false)
+    {
+        try {
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $query = $modelClass::where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId)
+                ->with('ec.ue');
+
+            if ($useResultatFinal) {
+                $query->where('statut', '!=', ResultatFinal::STATUT_ANNULE);
+            } else {
+                $query->where('statut', ResultatFusion::STATUT_VALIDE);
+            }
+
+            $resultats = $query->get();
+
+            if ($resultats->isEmpty()) {
+                return 0;
+            }
+
+            // Grouper par UE
+            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            $moyennesUE = [];
+
+            foreach ($resultatsParUE as $ueId => $notesUE) {
+                // Vérifier s'il y a une note éliminatoire (0)
+                $hasNoteZeroInUE = $notesUE->contains('note', 0);
+
+                if ($hasNoteZeroInUE) {
+                    $moyennesUE[] = 0;
+                } else {
+                    $moyenneUE = $notesUE->avg('note');
+                    $moyennesUE[] = $moyenneUE;
+                }
+            }
+
+            $moyenneGenerale = count($moyennesUE) > 0 ?
+                array_sum($moyennesUE) / count($moyennesUE) : 0;
+
+            return round($moyenneGenerale, 2);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul de moyenne générale', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return 0;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifie si un étudiant valide une UE
+     *
+     * @param int $etudiantId
+     * @param int $ueId
+     * @param int $sessionId
+     * @param bool $useResultatFinal
+     * @return bool
+     */
+    public function etudiantValideUE($etudiantId, $ueId, $sessionId, $useResultatFinal = false)
+    {
+        try {
+            $moyenneUE = $this->calculerMoyenneUE($etudiantId, $ueId, $sessionId, $useResultatFinal);
+
+            if ($moyenneUE === null) {
+                return false;
+            }
+
+            return $moyenneUE >= self::NOTE_VALIDATION;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification de validation UE', [
+                'etudiant_id' => $etudiantId,
+                'ue_id' => $ueId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Obtient les résultats d'un étudiant pour une session
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @param bool $useResultatFinal
+     * @param array $statuts
+     * @return Collection
+     */
+    public function getResultatsEtudiant($etudiantId, $sessionId, $useResultatFinal = false, $statuts = null)
+    {
+        try {
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $query = $modelClass::where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId)
+                ->with(['ec', 'ec.ue', 'examen']);
+
+            if ($statuts) {
+                $query->whereIn('statut', $statuts);
+            } else {
+                if ($useResultatFinal) {
+                    $query->where('statut', '!=', ResultatFinal::STATUT_ANNULE);
+                } else {
+                    $query->where('statut', ResultatFusion::STATUT_VALIDE);
+                }
+            }
+
+            return $query->get();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la récupération des résultats étudiant', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return collect();
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Calcule les statistiques d'une session
+     *
+     * @param int $sessionId
+     * @param bool $useResultatFinal
+     * @return array
+     */
+    public function calculerStatistiquesSession($sessionId, $useResultatFinal = false)
+    {
+        try {
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $query = $modelClass::where('session_exam_id', $sessionId);
+
+            if ($useResultatFinal) {
+                $query->where('statut', '!=', ResultatFinal::STATUT_ANNULE);
+            } else {
+                $query->where('statut', ResultatFusion::STATUT_VALIDE);
+            }
+
+            $resultats = $query->get();
+
+            $stats = [
+                'total_resultats' => $resultats->count(),
+                'moyenne_session' => round($resultats->avg('note'), 2),
+                'notes_eliminatoires' => $resultats->where('note', 0)->count(),
+                'decisions' => [
+                    'admis' => $resultats->where('decision', 'admis')->count(),
+                    'rattrapage' => $resultats->where('decision', 'rattrapage')->count(),
+                    'redoublant' => $resultats->where('decision', 'redoublant')->count(),
+                    'exclus' => $resultats->where('decision', 'exclus')->count(),
+                ]
+            ];
+
+            return $stats;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul des statistiques de session', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Obtient tous les résultats d'une session
+     *
+     * @param int $sessionId
+     * @param bool $useResultatFinal
+     * @param array|null $statuts
+     * @return Collection
+     */
+    public function getResultatsSession($sessionId, $useResultatFinal = false, $statuts = null)
+    {
+        try {
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $query = $modelClass::where('session_exam_id', $sessionId)
+                ->with(['etudiant', 'ec', 'ec.ue', 'examen']);
+
+            if ($statuts) {
+                $query->whereIn('statut', $statuts);
+            } else {
+                if ($useResultatFinal) {
+                    $query->where('statut', '!=', ResultatFinal::STATUT_ANNULE);
+                } else {
+                    $query->where('statut', ResultatFusion::STATUT_VALIDE);
+                }
+            }
+
+            return $query->get();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la récupération des résultats de session', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return collect();
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Calcule les résultats par niveau/parcours dans une session
+     *
+     * @param int $sessionId
+     * @param int|null $niveauId
+     * @param int|null $parcoursId
+     * @param bool $useResultatFinal
+     * @return Collection
+     */
+    public function calculerResultatsNiveauParcours($sessionId, $niveauId = null, $parcoursId = null, $useResultatFinal = false)
+    {
+        try {
+            $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
+
+            $query = $modelClass::where('session_exam_id', $sessionId)
+                ->with(['etudiant', 'ec', 'ec.ue', 'examen']);
+
+            if ($useResultatFinal) {
+                $query->where('statut', '!=', ResultatFinal::STATUT_ANNULE);
+            } else {
+                $query->where('statut', ResultatFusion::STATUT_VALIDE);
+            }
+
+            if ($niveauId) {
+                $query->whereHas('examen', function($q) use ($niveauId) {
+                    $q->where('niveau_id', $niveauId);
+                });
+            }
+
+            if ($parcoursId) {
+                $query->whereHas('examen', function($q) use ($parcoursId) {
+                    $q->where('parcours_id', $parcoursId);
+                });
+            }
+
+            return $query->get();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul des résultats niveau/parcours', [
+                'session_id' => $sessionId,
+                'niveau_id' => $niveauId,
+                'parcours_id' => $parcoursId,
+                'error' => $e->getMessage()
+            ]);
+            return collect();
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Transfère les décisions de ResultatFusion vers ResultatFinal
+     *
+     * @param int $sessionId
+     * @return array
+     */
+    public function transfererDecisions($sessionId)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Récupérer tous les résultats de fusion avec décisions
+            $resultats = ResultatFusion::where('session_exam_id', $sessionId)
+                ->where('statut', ResultatFusion::STATUT_VALIDE)
+                ->whereNotNull('decision')
+                ->get();
+
+            $stats = [
+                'total_traites' => 0,
+                'transferes' => 0,
+                'erreurs' => 0,
+                'decisions' => [
+                    'admis' => 0,
+                    'rattrapage' => 0,
+                    'redoublant' => 0,
+                    'exclus' => 0
+                ]
+            ];
+
+            foreach ($resultats as $resultatFusion) {
+                $stats['total_traites']++;
+
+                try {
+                    // Chercher le résultat final correspondant
+                    $resultatFinal = ResultatFinal::where('session_exam_id', $sessionId)
+                        ->where('etudiant_id', $resultatFusion->etudiant_id)
+                        ->where('ec_id', $resultatFusion->ec_id)
+                        ->first();
+
+                    if ($resultatFinal) {
+                        $resultatFinal->decision = $resultatFusion->decision;
+                        $resultatFinal->save();
+
+                        $stats['transferes']++;
+                        if (isset($stats['decisions'][$resultatFusion->decision])) {
+                            $stats['decisions'][$resultatFusion->decision]++;
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $stats['erreurs']++;
+                    Log::error('Erreur lors du transfert d\'une décision', [
+                        'resultat_fusion_id' => $resultatFusion->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            Log::info('Transfert des décisions terminé', [
+                'session_id' => $sessionId,
+                'stats' => $stats
+            ]);
+
+            return [
+                'success' => true,
+                'message' => "Transfert terminé : {$stats['transferes']} décisions transférées sur {$stats['total_traites']} traitées",
+                'statistiques' => $stats
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors du transfert des décisions', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Erreur lors du transfert : ' . $e->getMessage(),
+                'statistiques' => []
+            ];
         }
     }
 }

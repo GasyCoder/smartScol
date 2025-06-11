@@ -26,10 +26,9 @@ class Etudiant extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
-        'date_naissance' => 'date', // Indique à Laravel de traiter ce champ comme une date
+        'date_naissance' => 'date',
     ];
 
-    // Définit les champs de type date qui seront gérés par Carbon
     protected $dates = [
         'date_naissance',
         'created_at',
@@ -39,7 +38,6 @@ class Etudiant extends Model
 
     /**
      * Accesseur/Mutateur pour la date de naissance
-     * Convertit automatiquement le format
      */
     protected function dateNaissance(): Attribute
     {
@@ -49,9 +47,10 @@ class Etudiant extends Model
         );
     }
 
-    /**
-     * Relations
-     */
+    // ======================================================
+    // RELATIONS EXISTANTES (corrigées)
+    // ======================================================
+
     public function niveau()
     {
         return $this->belongsTo(Niveau::class);
@@ -62,20 +61,196 @@ class Etudiant extends Model
         return $this->belongsTo(Parcour::class);
     }
 
-    public function placements()
+    /**
+     * CORRIGÉ : Relation avec ResultatFinal (pas Resultat)
+     */
+    public function resultatsFinaux()
     {
-        return $this->hasMany(Placement::class);
+        return $this->hasMany(ResultatFinal::class);
     }
 
-    public function resultats()
+    /**
+     * CORRIGÉ : Relation avec ResultatFusion
+     */
+    public function resultatsFusion()
     {
-        return $this->hasMany(Resultat::class);
+        return $this->hasMany(ResultatFusion::class);
     }
 
-    public function decisions()
+    /**
+     * NOUVEAU : Relation avec les manchettes
+     */
+    public function manchettes()
     {
-        return $this->hasMany(Decision::class);
+        return $this->hasMany(Manchette::class);
     }
+
+    // ======================================================
+    // NOUVELLES MÉTHODES POUR LA LOGIQUE DES SESSIONS
+    // ======================================================
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifie si l'étudiant peut passer en session rattrapage
+     * RÈGLE MÉTIER : Seuls les étudiants avec décision "RATTRAPAGE" en session normale
+     */
+    public function peutPasserRattrapage($niveauId, $parcoursId, $sessionNormaleId)
+    {
+        // Récupérer toutes les décisions de l'étudiant en session normale
+        $decisions = $this->resultatsFinaux()
+            ->where('session_exam_id', $sessionNormaleId)
+            ->whereHas('examen', function($q) use ($niveauId, $parcoursId) {
+                $q->where('niveau_id', $niveauId)
+                  ->where('parcours_id', $parcoursId);
+            })
+            ->where('statut', ResultatFinal::STATUT_PUBLIE)
+            ->pluck('decision')
+            ->unique()
+            ->toArray();
+
+        // Si l'étudiant a une décision ADMIS, il ne peut PAS passer en rattrapage
+        if (in_array(ResultatFinal::DECISION_ADMIS, $decisions)) {
+            return false;
+        }
+
+        // Si l'étudiant a une décision RATTRAPAGE, il PEUT passer en rattrapage
+        if (in_array(ResultatFinal::DECISION_RATTRAPAGE, $decisions)) {
+            return true;
+        }
+
+        // Autres cas : ne peut pas passer
+        return false;
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Récupère la décision finale de l'étudiant pour une session
+     */
+    public function getDecisionPourSession($sessionId, $niveauId = null, $parcoursId = null)
+    {
+        $query = $this->resultatsFinaux()
+            ->where('session_exam_id', $sessionId)
+            ->where('statut', ResultatFinal::STATUT_PUBLIE);
+
+        if ($niveauId) {
+            $query->whereHas('examen', function($q) use ($niveauId, $parcoursId) {
+                $q->where('niveau_id', $niveauId);
+                if ($parcoursId) {
+                    $q->where('parcours_id', $parcoursId);
+                }
+            });
+        }
+
+        $decisions = $query->pluck('decision')->unique()->toArray();
+
+        // Ordre de priorité pour la décision finale
+        if (in_array(ResultatFinal::DECISION_ADMIS, $decisions)) {
+            return ResultatFinal::DECISION_ADMIS;
+        } elseif (in_array(ResultatFinal::DECISION_RATTRAPAGE, $decisions)) {
+            return ResultatFinal::DECISION_RATTRAPAGE;
+        } elseif (in_array(ResultatFinal::DECISION_EXCLUS, $decisions)) {
+            return ResultatFinal::DECISION_EXCLUS;
+        } elseif (in_array(ResultatFinal::DECISION_REDOUBLANT, $decisions)) {
+            return ResultatFinal::DECISION_REDOUBLANT;
+        }
+
+        return null;
+    }
+
+    /**
+     * NOUVEAU SCOPE : Récupère les étudiants éligibles au rattrapage
+     */
+    public function scopeEligiblesRattrapage($query, $niveauId, $parcoursId, $sessionNormaleId)
+    {
+        return $query->where('niveau_id', $niveauId)
+            ->where('parcours_id', $parcoursId)
+            ->whereHas('resultatsFinaux', function($q) use ($sessionNormaleId) {
+                $q->where('session_exam_id', $sessionNormaleId)
+                  ->where('decision', ResultatFinal::DECISION_RATTRAPAGE)
+                  ->where('statut', ResultatFinal::STATUT_PUBLIE);
+            })
+            // IMPORTANT : Exclure ceux qui ont aussi une décision ADMIS
+            ->whereDoesntHave('resultatsFinaux', function($q) use ($sessionNormaleId) {
+                $q->where('session_exam_id', $sessionNormaleId)
+                  ->where('decision', ResultatFinal::DECISION_ADMIS)
+                  ->where('statut', ResultatFinal::STATUT_PUBLIE);
+            });
+    }
+
+    /**
+     * NOUVELLE MÉTHODE STATIQUE : Récupère les étudiants selon le type de session
+     */
+    public static function getEtudiantsSelonSession($niveauId, $parcoursId, $typeSession, $anneeUniversitaireId)
+    {
+        if ($typeSession === 'Normale') {
+            // Session normale : TOUS les étudiants du niveau/parcours
+            return self::where('niveau_id', $niveauId)
+                ->where('parcours_id', $parcoursId)
+                ->get();
+        } else {
+            // Session rattrapage : chercher la session normale correspondante
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $anneeUniversitaireId)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                return collect(); // Collection vide si pas de session normale
+            }
+
+            // Seuls les étudiants éligibles au rattrapage
+            return self::eligiblesRattrapage($niveauId, $parcoursId, $sessionNormale->id)->get();
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifie si l'étudiant a des résultats en session normale
+     */
+    public function hasResultatsSessionNormale($niveauId, $parcoursId, $anneeUniversitaireId)
+    {
+        $sessionNormale = SessionExam::where('annee_universitaire_id', $anneeUniversitaireId)
+            ->where('type', 'Normale')
+            ->first();
+
+        if (!$sessionNormale) {
+            return false;
+        }
+
+        return $this->resultatsFinaux()
+            ->where('session_exam_id', $sessionNormale->id)
+            ->whereHas('examen', function($q) use ($niveauId, $parcoursId) {
+                $q->where('niveau_id', $niveauId)
+                  ->where('parcours_id', $parcoursId);
+            })
+            ->where('statut', ResultatFinal::STATUT_PUBLIE)
+            ->exists();
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Récupère toutes les décisions de l'étudiant pour une session
+     */
+    public function getDecisionsSessionNormale($niveauId, $parcoursId, $anneeUniversitaireId)
+    {
+        $sessionNormale = SessionExam::where('annee_universitaire_id', $anneeUniversitaireId)
+            ->where('type', 'Normale')
+            ->first();
+
+        if (!$sessionNormale) {
+            return [];
+        }
+
+        return $this->resultatsFinaux()
+            ->where('session_exam_id', $sessionNormale->id)
+            ->whereHas('examen', function($q) use ($niveauId, $parcoursId) {
+                $q->where('niveau_id', $niveauId)
+                  ->where('parcours_id', $parcoursId);
+            })
+            ->where('statut', ResultatFinal::STATUT_PUBLIE)
+            ->pluck('decision')
+            ->unique()
+            ->toArray();
+    }
+
+    // ======================================================
+    // MÉTHODES EXISTANTES (inchangées)
+    // ======================================================
 
     /**
      * Nom complet de l'étudiant

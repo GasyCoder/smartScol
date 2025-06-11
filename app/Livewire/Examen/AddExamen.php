@@ -7,7 +7,6 @@ use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use App\Models\Salle;
-use App\Models\SessionExam;
 use App\Models\UE;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
@@ -15,7 +14,6 @@ use Livewire\Component;
 class AddExamen extends Component
 {
     // Propriétés de base pour l'examen
-    public $session_id;
     public $niveau_id;
     public $parcours_id;
     public $duree = 120;
@@ -44,12 +42,15 @@ class AddExamen extends Component
     public $showParcours = false;
     public $niveauInfo = null;
     public $parcoursInfo = null;
-    public $sessionInfo = null;
+
+    // Propriétés pour la gestion des conflits
+    public $conflitsSalles = [];      // Liste des conflits détectés
+    public $showConflitsModal = false; // Affichage du modal des conflits
+    public $creneauxLibres = [];      // Suggestions de créneaux libres
 
     protected $rules = [
         'selectedEcs' => 'required|array|min:1', // Au moins un EC doit être sélectionné
         'selectedEcs.*' => 'exists:ecs,id',
-        'session_id' => 'required|exists:session_exams,id',
         'niveau_id' => 'required|exists:niveaux,id',
         'parcours_id' => 'nullable|exists:parcours,id',
         'date_defaut' => 'required|date',
@@ -67,13 +68,11 @@ class AddExamen extends Component
         // Initialisation des valeurs par défaut
         $this->date_defaut = now()->format('Y-m-d');
         $this->heure_defaut = '08:00';
+        $this->duree = 120; // S'assurer que c'est un entier
 
         // Récupération de la première salle disponible
         $firstSalle = Salle::first();
         $this->salle_defaut = $firstSalle ? $firstSalle->id : null;
-
-        // Récupération automatique de la session active courante
-        $this->autoSelectSession();
 
         // Chargement du niveau
         if ($niveau) {
@@ -91,56 +90,6 @@ class AddExamen extends Component
         // Charger tous les ECs disponibles si un niveau est sélectionné
         if ($this->niveau_id) {
             $this->loadAvailableEcs();
-        }
-    }
-
-    /**
-     * Sélectionne automatiquement la session active courante
-     */
-    private function autoSelectSession()
-    {
-        try {
-            // Récupère la session active et courante de l'année universitaire active
-            $session = SessionExam::where('is_active', true)
-                            ->where('is_current', true)
-                            ->whereHas('anneeUniversitaire', function($q) {
-                                $q->where('is_active', true);
-                            })
-                            ->first();
-
-            // Si une session est trouvée, l'utiliser
-            if ($session) {
-                $this->session_id = $session->id;
-                $this->sessionInfo = [
-                    'id' => $session->id,
-                    'nom' => $session->nom ?? $session->type,
-                    'code' => $session->code ?? '',
-                    'date_start' => $session->date_start->format('d/m/Y'),
-                    'date_end' => $session->date_end->format('d/m/Y')
-                ];
-                return;
-            }
-
-            // Sinon, prendre la première session active de l'année active
-            $fallbackSession = SessionExam::where('is_active', true)
-                                    ->whereHas('anneeUniversitaire', function($q) {
-                                        $q->where('is_active', true);
-                                    })
-                                    ->orderBy('date_start', 'desc')
-                                    ->first();
-
-            if ($fallbackSession) {
-                $this->session_id = $fallbackSession->id;
-                $this->sessionInfo = [
-                    'id' => $fallbackSession->id,
-                    'nom' => $fallbackSession->nom ?? $fallbackSession->type,
-                    'code' => $fallbackSession->code ?? '',
-                    'date_start' => $fallbackSession->date_start->format('d/m/Y'),
-                    'date_end' => $fallbackSession->date_end->format('d/m/Y')
-                ];
-            }
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de la sélection automatique de la session: ' . $e->getMessage());
         }
     }
 
@@ -230,13 +179,13 @@ class AddExamen extends Component
                       ->orWhereNull('parcours_id');
                 });
             }
-            $ues = $ueQuery->orderBy('nom')->get();
+            $ues = $ueQuery->orderBy('id', 'asc')->get();
 
             // 3. Construire les groupes d'ECs par UE
             $this->groupedEcs = [];
             foreach ($ues as $ue) {
                 $ecs = EC::where('ue_id', $ue->id)
-                    ->orderBy('nom')
+                    ->orderBy('id', 'asc')
                     ->get();
 
                 // Ajouter ce groupe uniquement s'il y a des ECs
@@ -289,16 +238,119 @@ class AddExamen extends Component
 
     /**
      * Mettre à jour les dates/heures/salles pour tous les ECs sélectionnés
+     * LOGIQUE INTELLIGENTE : Si même date/salle, répartir automatiquement les heures
      */
     public function updateAllEcDatesHoursSalles()
     {
-        foreach ($this->selectedEcs as $ecId) {
-            if (!in_array($ecId, $this->usedEcIds)) {
-                $this->ecDates[$ecId] = $this->date_defaut;
-                $this->ecHours[$ecId] = $this->heure_defaut;
-                $this->ecSalles[$ecId] = $this->salle_defaut;
+        if (empty($this->selectedEcs)) {
+            return;
+        }
+
+        // Si on n'utilise pas les dates/salles spécifiques et qu'on a plusieurs ECs
+        if (!$this->useSpecificDates && !$this->useSpecificSalles && count($this->selectedEcs) > 1) {
+            $this->repartirAutomatiquementCreneaux();
+        } else {
+            // Logique classique pour un seul EC ou si spécifique activé
+            foreach ($this->selectedEcs as $ecId) {
+                if (!in_array($ecId, $this->usedEcIds)) {
+                    $this->ecDates[$ecId] = $this->date_defaut;
+                    $this->ecHours[$ecId] = $this->heure_defaut;
+                    $this->ecSalles[$ecId] = $this->salle_defaut;
+                }
             }
         }
+
+        // Vérifier les conflits après mise à jour
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    /**
+     * Répartit automatiquement les créneaux pour éviter les conflits
+     */
+    private function repartirAutomatiquementCreneaux()
+    {
+        $heureActuelle = \Carbon\Carbon::parse($this->heure_defaut);
+        $dureeMinutes = (int) $this->duree;
+        $pauseMinutes = 30; // Pause entre les examens
+
+        foreach ($this->selectedEcs as $index => $ecId) {
+            if (!in_array($ecId, $this->usedEcIds)) {
+                $this->ecDates[$ecId] = $this->date_defaut;
+                $this->ecSalles[$ecId] = $this->salle_defaut;
+
+                // Calculer l'heure pour cet EC
+                if ($index === 0) {
+                    // Premier EC : utiliser l'heure par défaut
+                    $this->ecHours[$ecId] = $this->heure_defaut;
+                } else {
+                    // ECs suivants : calculer l'heure en évitant les conflits
+                    $heureProposee = $this->calculerProchainCreneauLibre(
+                        $this->salle_defaut,
+                        $this->date_defaut,
+                        $heureActuelle->format('H:i'),
+                        $dureeMinutes
+                    );
+                    $this->ecHours[$ecId] = $heureProposee;
+                    $heureActuelle = \Carbon\Carbon::parse($this->date_defaut . ' ' . $heureProposee)->addMinutes($dureeMinutes + $pauseMinutes);
+                }
+            }
+        }
+    }
+
+    /**
+     * Calcule le prochain créneau libre pour une salle donnée
+     */
+    private function calculerProchainCreneauLibre($salleId, $date, $heureDebutSouhaitee, $dureeMinutes)
+    {
+        $heureActuelle = \Carbon\Carbon::parse($date . ' ' . $heureDebutSouhaitee);
+        $heureLimite = \Carbon\Carbon::parse($date . ' 18:00'); // Limite à 18h
+
+        while ($heureActuelle->copy()->addMinutes($dureeMinutes)->lte($heureLimite)) {
+            $heureTest = $heureActuelle->format('H:i');
+
+            // Vérifier si ce créneau est libre (en excluant les ECs déjà planifiés dans cette session)
+            if ($this->estCreneauLibreLocalement($salleId, $date, $heureTest, $dureeMinutes)) {
+                return $heureTest;
+            }
+
+            // Passer au créneau suivant (par tranches de 30 minutes)
+            $heureActuelle->addMinutes(30);
+        }
+
+        // Si aucun créneau libre trouvé, retourner l'heure souhaitée (il y aura un conflit détecté)
+        return $heureDebutSouhaitee;
+    }
+
+    /**
+     * Vérifie si un créneau est libre en tenant compte des planifications en cours
+     */
+    private function estCreneauLibreLocalement($salleId, $date, $heure, $dureeMinutes)
+    {
+        // 1. Vérifier contre les examens existants en base
+        if (!Examen::isSalleDisponible($salleId, $date, $heure, $dureeMinutes)) {
+            return false;
+        }
+
+        // 2. Vérifier contre les ECs déjà planifiés dans cette session
+        $heureDebut = \Carbon\Carbon::parse($date . ' ' . $heure);
+        $heureFin = $heureDebut->copy()->addMinutes($dureeMinutes);
+
+        foreach ($this->ecHours as $ecId => $ecHeure) {
+            if (in_array($ecId, $this->selectedEcs) &&
+                $this->ecSalles[$ecId] == $salleId &&
+                $this->ecDates[$ecId] == $date) {
+
+                $heureDebutExistant = \Carbon\Carbon::parse($date . ' ' . $ecHeure);
+                $heureFinExistant = $heureDebutExistant->copy()->addMinutes($dureeMinutes);
+
+                // Vérifier le chevauchement
+                if ($heureDebut->lt($heureFinExistant) && $heureFin->gt($heureDebutExistant)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -309,6 +361,7 @@ class AddExamen extends Component
         if (!$this->useSpecificDates) {
             $this->updateAllEcDatesHoursSalles();
         }
+        $this->verifierConflitsEnTempsReel();
     }
 
     /**
@@ -319,6 +372,7 @@ class AddExamen extends Component
         if (!$this->useSpecificDates) {
             $this->updateAllEcDatesHoursSalles();
         }
+        $this->verifierConflitsEnTempsReel();
     }
 
     /**
@@ -329,6 +383,7 @@ class AddExamen extends Component
         if (!$this->useSpecificSalles) {
             $this->updateAllEcDatesHoursSalles();
         }
+        $this->verifierConflitsEnTempsReel();
     }
 
     /**
@@ -342,6 +397,7 @@ class AddExamen extends Component
             // Si on désactive les dates spécifiques, on réinitialise toutes les dates
             $this->updateAllEcDatesHoursSalles();
         }
+        $this->verifierConflitsEnTempsReel();
     }
 
     /**
@@ -355,10 +411,12 @@ class AddExamen extends Component
             // Si on désactive les salles spécifiques, on réinitialise toutes les salles
             $this->updateAllEcDatesHoursSalles();
         }
+        $this->verifierConflitsEnTempsReel();
     }
 
     /**
      * Sélectionner tous les ECs disponibles (non utilisés)
+     * LOGIQUE INTELLIGENTE : Répartition automatique des créneaux
      */
     public function selectAllAvailableEcs()
     {
@@ -368,13 +426,57 @@ class AddExamen extends Component
             foreach ($group['ecs'] as $ec) {
                 if (!in_array($ec->id, $this->usedEcIds)) {
                     $this->selectedEcs[] = $ec->id;
+                }
+            }
+        }
 
-                    // Initialiser les dates/heures/salles
-                    if (!isset($this->ecDates[$ec->id])) {
-                        $this->ecDates[$ec->id] = $this->date_defaut;
-                        $this->ecHours[$ec->id] = $this->heure_defaut;
-                        $this->ecSalles[$ec->id] = $this->salle_defaut;
-                    }
+        // Répartition intelligente des créneaux
+        $this->repartirAutomatiquementTousLesEcs();
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    /**
+     * Répartit intelligemment tous les ECs sélectionnés
+     */
+    private function repartirAutomatiquementTousLesEcs()
+    {
+        if (empty($this->selectedEcs)) {
+            return;
+        }
+
+        $dureeMinutes = (int) $this->duree;
+        $pauseMinutes = 30;
+        $heureActuelle = \Carbon\Carbon::parse($this->heure_defaut);
+
+        // Si on n'utilise pas les paramètres spécifiques
+        if (!$this->useSpecificDates && !$this->useSpecificSalles) {
+            foreach ($this->selectedEcs as $index => $ecId) {
+                $this->ecDates[$ecId] = $this->date_defaut;
+                $this->ecSalles[$ecId] = $this->salle_defaut;
+
+                if ($index === 0) {
+                    // Premier EC : heure par défaut
+                    $this->ecHours[$ecId] = $this->heure_defaut;
+                } else {
+                    // ECs suivants : calcul automatique
+                    $heureProposee = $this->calculerProchainCreneauLibre(
+                        $this->salle_defaut,
+                        $this->date_defaut,
+                        $heureActuelle->format('H:i'),
+                        $dureeMinutes
+                    );
+                    $this->ecHours[$ecId] = $heureProposee;
+                    $heureActuelle = \Carbon\Carbon::parse($this->date_defaut . ' ' . $heureProposee)
+                                          ->addMinutes($dureeMinutes + $pauseMinutes);
+                }
+            }
+        } else {
+            // Si paramètres spécifiques activés, initialisation classique
+            foreach ($this->selectedEcs as $ecId) {
+                if (!isset($this->ecDates[$ecId])) {
+                    $this->ecDates[$ecId] = $this->date_defaut;
+                    $this->ecHours[$ecId] = $this->heure_defaut;
+                    $this->ecSalles[$ecId] = $this->salle_defaut;
                 }
             }
         }
@@ -386,20 +488,34 @@ class AddExamen extends Component
     public function deselectAllEcs()
     {
         $this->selectedEcs = [];
+        $this->conflitsSalles = [];
     }
 
     /**
      * Copier la date, l'heure et la salle à tous les ECs sélectionnés
+     * LOGIQUE INTELLIGENTE : Si même date/salle, répartir les heures automatiquement
      */
     public function copyDateTimeSalleToAllEcs()
     {
-        foreach ($this->selectedEcs as $ecId) {
-            if (!in_array($ecId, $this->usedEcIds)) {
-                $this->ecDates[$ecId] = $this->date_defaut;
-                $this->ecHours[$ecId] = $this->heure_defaut;
-                $this->ecSalles[$ecId] = $this->salle_defaut;
+        if (empty($this->selectedEcs)) {
+            return;
+        }
+
+        // Si plusieurs ECs et même date/salle, répartition intelligente
+        if (count($this->selectedEcs) > 1 && !$this->useSpecificDates && !$this->useSpecificSalles) {
+            $this->repartirAutomatiquementCreneaux();
+        } else {
+            // Logique classique : copie directe
+            foreach ($this->selectedEcs as $ecId) {
+                if (!in_array($ecId, $this->usedEcIds)) {
+                    $this->ecDates[$ecId] = $this->date_defaut;
+                    $this->ecHours[$ecId] = $this->heure_defaut;
+                    $this->ecSalles[$ecId] = $this->salle_defaut;
+                }
             }
         }
+
+        $this->verifierConflitsEnTempsReel();
     }
 
     /**
@@ -412,6 +528,7 @@ class AddExamen extends Component
         $this->ecDates = [];
         $this->ecHours = [];
         $this->ecSalles = [];
+        $this->conflitsSalles = [];
         $this->loadAvailableEcs();
     }
 
@@ -424,73 +541,305 @@ class AddExamen extends Component
         $this->ecDates = [];
         $this->ecHours = [];
         $this->ecSalles = [];
+        $this->conflitsSalles = [];
         $this->loadAvailableEcs();
     }
 
     /**
      * Méthode appelée quand les ECs sélectionnés changent
+     * LOGIQUE INTELLIGENTE : Répartition automatique pour éviter les conflits
      */
     public function updatedSelectedEcs()
     {
-        // Initialiser les dates/heures/salles pour les nouveaux ECs sélectionnés
+        // Nettoyer les données des ECs désélectionnés
+        $this->ecDates = array_intersect_key($this->ecDates, array_flip($this->selectedEcs));
+        $this->ecHours = array_intersect_key($this->ecHours, array_flip($this->selectedEcs));
+        $this->ecSalles = array_intersect_key($this->ecSalles, array_flip($this->selectedEcs));
+
+        // Initialiser les nouveaux ECs sélectionnés
+        $nouveauxEcs = [];
         foreach ($this->selectedEcs as $ecId) {
             if (!isset($this->ecDates[$ecId])) {
-                $this->ecDates[$ecId] = $this->date_defaut;
-                $this->ecHours[$ecId] = $this->heure_defaut;
-                $this->ecSalles[$ecId] = $this->salle_defaut;
+                $nouveauxEcs[] = $ecId;
             }
+        }
+
+        if (!empty($nouveauxEcs)) {
+            // Si plusieurs ECs et pas de paramètres spécifiques, répartition intelligente
+            if (count($this->selectedEcs) > 1 && !$this->useSpecificDates && !$this->useSpecificSalles) {
+                $this->repartirAutomatiquementTousLesEcs();
+            } else {
+                // Initialisation classique pour les nouveaux ECs
+                foreach ($nouveauxEcs as $ecId) {
+                    $this->ecDates[$ecId] = $this->date_defaut;
+                    $this->ecHours[$ecId] = $this->heure_defaut;
+                    $this->ecSalles[$ecId] = $this->salle_defaut;
+                }
+            }
+        }
+
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    /**
+     * =====================================
+     * GESTION DES CONFLITS DE SALLES
+     * =====================================
+     */
+
+    /**
+     * Vérification des conflits en temps réel
+     */
+    public function verifierConflitsEnTempsReel()
+    {
+        if (empty($this->selectedEcs)) {
+            $this->conflitsSalles = [];
+            return;
+        }
+
+        // Préparer les données des ECs
+        $ecsData = [];
+        foreach ($this->selectedEcs as $ecId) {
+            $salleId = $this->useSpecificSalles ? ($this->ecSalles[$ecId] ?? null) : $this->salle_defaut;
+            $date = $this->useSpecificDates ? ($this->ecDates[$ecId] ?? $this->date_defaut) : $this->date_defaut;
+            $heure = $this->useSpecificDates ? ($this->ecHours[$ecId] ?? $this->heure_defaut) : $this->heure_defaut;
+
+            if ($salleId && $date && $heure) {
+                $ecsData[] = [
+                    'ec_id' => $ecId,
+                    'salle_id' => $salleId,
+                    'date' => $date,
+                    'heure' => $heure,
+                ];
+            }
+        }
+
+        // Vérifier les conflits - Convertir la durée en entier
+        $dureeMinutes = (int) $this->duree;
+        $this->conflitsSalles = Examen::verifierConflitsSalles($ecsData, $dureeMinutes);
+    }
+
+    /**
+     * Méthodes appelées lors des changements de dates/heures/salles spécifiques
+     */
+    public function updatedEcDates()
+    {
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    public function updatedEcHours()
+    {
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    public function updatedEcSalles()
+    {
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    /**
+     * Méthode appelée quand la durée change
+     */
+    public function updatedDuree()
+    {
+        // S'assurer que la durée est un entier
+        $this->duree = (int) $this->duree;
+        $this->verifierConflitsEnTempsReel();
+    }
+
+    /**
+     * Afficher le modal des conflits avec suggestions
+     */
+    public function afficherModalConflits()
+    {
+        $this->showConflitsModal = true;
+        $this->genererSuggestionsCreneaux();
+    }
+
+    /**
+     * Fermer le modal des conflits
+     */
+    public function fermerModalConflits()
+    {
+        $this->showConflitsModal = false;
+        $this->creneauxLibres = [];
+    }
+
+    /**
+     * Générer des suggestions de créneaux libres pour les conflits
+     */
+    public function genererSuggestionsCreneaux()
+    {
+        $this->creneauxLibres = [];
+
+        foreach ($this->conflitsSalles as $conflit) {
+            $dureeMinutes = (int) $this->duree; // Conversion en entier
+            $suggestions = Examen::suggererCreneauxLibres(
+                $conflit['salle_id'],
+                $conflit['date'],
+                $dureeMinutes
+            );
+
+            $this->creneauxLibres[$conflit['ec_id']] = [
+                'ec_nom' => $conflit['ec_nom'],
+                'salle_nom' => $conflit['salle_nom'],
+                'date' => $conflit['date'],
+                'suggestions' => array_slice($suggestions, 0, 5) // Limite à 5 suggestions
+            ];
         }
     }
 
     /**
-     * Sauvegarder l'examen avec les ECs sélectionnés
+     * Appliquer une suggestion de créneau
+     */
+    public function appliquerSuggestion($ecId, $nouvelleHeure)
+    {
+        if ($this->useSpecificDates) {
+            $this->ecHours[$ecId] = $nouvelleHeure;
+        } else {
+            $this->heure_defaut = $nouvelleHeure;
+            $this->updateAllEcDatesHoursSalles();
+        }
+
+        $this->verifierConflitsEnTempsReel();
+
+        // Si plus de conflits, fermer le modal
+        if (empty($this->conflitsSalles)) {
+            $this->fermerModalConflits();
+            toastr()->success('Conflit résolu ! Nouveau créneau appliqué.');
+        }
+    }
+
+    /**
+     * Nouvelle méthode : Réorganiser automatiquement tous les créneaux
+     */
+    public function reorganiserCreneauxAutomatiquement()
+    {
+        if (empty($this->selectedEcs)) {
+            toastr()->warning('Aucun EC sélectionné pour la réorganisation.');
+            return;
+        }
+
+        $this->repartirAutomatiquementTousLesEcs();
+        $this->verifierConflitsEnTempsReel();
+
+        if (empty($this->conflitsSalles)) {
+            toastr()->success('Créneaux réorganisés automatiquement sans conflit !');
+        } else {
+            toastr()->info('Créneaux réorganisés, mais des conflits persistent. Veuillez les résoudre manuellement.');
+        }
+    }
+
+    /**
+     * Nouvelle méthode : Suggérer des salles alternatives pour résoudre les conflits
+     */
+    public function suggererSallesAlternatives()
+    {
+        $suggestions = [];
+
+        foreach ($this->conflitsSalles as $conflit) {
+            $sallesAlternatives = Salle::where('id', '!=', $conflit['salle_id'])->get();
+
+            foreach ($sallesAlternatives as $salle) {
+                if (Examen::isSalleDisponible($salle->id, $conflit['date'], $conflit['heure'], $this->duree)) {
+                    $suggestions[$conflit['ec_id']][] = [
+                        'salle_id' => $salle->id,
+                        'salle_nom' => $salle->nom,
+                        'capacite' => $salle->capacite ?? 'N/A'
+                    ];
+                }
+            }
+        }
+
+        return $suggestions;
+    }
+
+    /**
+     * Appliquer une salle alternative
+     */
+    public function appliquerSalleAlternative($ecId, $nouvelleSalleId)
+    {
+        if ($this->useSpecificSalles) {
+            $this->ecSalles[$ecId] = $nouvelleSalleId;
+        } else {
+            $this->salle_defaut = $nouvelleSalleId;
+            $this->updateAllEcDatesHoursSalles();
+        }
+
+        $this->verifierConflitsEnTempsReel();
+
+        if (empty($this->conflitsSalles)) {
+            $salle = Salle::find($nouvelleSalleId);
+            toastr()->success("Conflit résolu ! Salle changée pour : {$salle->nom}");
+        }
+    }
+
+    /**
+     * Sauvegarder l'examen - MESSAGES D'ERREUR OPTIMISÉS
      */
     public function save()
     {
         $this->validate();
 
         try {
-            // Vérifier si la session est définie
-            if (empty($this->session_id)) {
-                $this->autoSelectSession();
-                if (empty($this->session_id)) {
-                    throw new \Exception('Aucune session d\'examen active n\'a été trouvée.');
+            // Vérification finale des conflits
+            $this->verifierConflitsEnTempsReel();
+
+            if (!empty($this->conflitsSalles)) {
+                // MESSAGES OPTIMISÉS : Éviter les répétitions
+                $conflitsGroupes = [];
+                $conflitsInternes = 0;
+                $conflitsExistants = 0;
+
+                foreach ($this->conflitsSalles as $conflit) {
+                    if ($conflit['type'] === 'interne') {
+                        $conflitsInternes++;
+                    } else {
+                        $conflitsExistants++;
+                    }
                 }
+
+                // Message simplifié selon le type de conflit
+                if ($conflitsInternes > 0 && $conflitsExistants === 0) {
+                    // Seulement des conflits internes
+                    toastr()->error("❌ {$conflitsInternes} conflit(s) détecté(s) : Plusieurs matières ont la même heure dans la même salle. Utilisez 'Réorganiser automatiquement' ou modifiez les heures manuellement.");
+                } elseif ($conflitsExistants > 0 && $conflitsInternes === 0) {
+                    // Seulement des conflits avec examens existants
+                    toastr()->error("❌ {$conflitsExistants} conflit(s) avec des examens existants. Changez les heures ou salles.");
+                } else {
+                    // Mix des deux types
+                    toastr()->error("❌ {$conflitsInternes} conflit(s) interne(s) + {$conflitsExistants} conflit(s) avec examens existants. Réorganisez la planification.");
+                }
+
+                $this->afficherModalConflits();
+                return;
             }
 
             // Nettoyer les valeurs
-            $session_id = $this->cleanInputValue($this->session_id);
             $niveau_id = $this->cleanInputValue($this->niveau_id);
             $parcours_id = $this->cleanInputValue($this->parcours_id);
+            $note_eliminatoire = !empty($this->note_eliminatoire) ? $this->cleanInputValue($this->note_eliminatoire) : null;
 
-            // Traiter note_eliminatoire
-            $note_eliminatoire = null;
-            if (!empty($this->note_eliminatoire)) {
-                $note_eliminatoire = $this->cleanInputValue($this->note_eliminatoire);
-            }
-
-            // Vérifier que les ECs sélectionnés ne sont pas déjà utilisés
+            // Vérifier ECs déjà utilisés
             $alreadyUsedEcs = array_intersect($this->selectedEcs, $this->usedEcIds);
             if (!empty($alreadyUsedEcs)) {
                 $ecNames = EC::whereIn('id', $alreadyUsedEcs)->pluck('nom')->toArray();
-                throw new \Exception('Certains EC sont déjà utilisés dans d\'autres examens: ' . implode(', ', $ecNames));
+                throw new \Exception('Certains EC sont déjà utilisés : ' . implode(', ', $ecNames));
+            }
+
+            if (count($this->selectedEcs) === 0) {
+                throw new \Exception('Aucun EC sélectionné.');
             }
 
             // Créer l'examen
             $examen = Examen::create([
-                'session_id' => $session_id,
                 'niveau_id' => $niveau_id,
                 'parcours_id' => $parcours_id,
                 'duree' => (int)$this->duree,
                 'note_eliminatoire' => $note_eliminatoire,
             ]);
 
-            // Vérifier qu'il y a au moins un EC à attacher
-            if (count($this->selectedEcs) === 0) {
-                throw new \Exception('Aucun EC n\'a été sélectionné.');
-            }
-
-            // Attacher les ECs à l'examen avec leurs dates, heures et salles spécifiques
+            // Attacher les ECs
             foreach ($this->selectedEcs as $ecId) {
                 $date = $this->useSpecificDates ? $this->ecDates[$ecId] : $this->date_defaut;
                 $heure = $this->useSpecificDates ? $this->ecHours[$ecId] : $this->heure_defaut;
@@ -503,17 +852,15 @@ class AddExamen extends Component
                 ]);
             }
 
-            toastr()->success('Examen créé avec succès.');
+            toastr()->success('✅ Examen créé avec succès !');
 
-            // Redirection
             return redirect()->route('examens.index', [
                 'niveau' => $niveau_id,
                 'parcours' => $parcours_id,
                 'step' => 'examens'
             ]);
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la création de l\'examen: ' . $e->getMessage());
-            toastr()->error('Une erreur est survenue: ' . $e->getMessage());
+            toastr()->error('Erreur : ' . $e->getMessage());
             return null;
         }
     }
@@ -527,39 +874,10 @@ class AddExamen extends Component
         $parcours = $this->niveau_id ? Parcour::where('niveau_id', $this->cleanInputValue($this->niveau_id))->get() : [];
         $salles = Salle::orderBy('nom')->get();
 
-        // Requête pour les sessions d'examen
-        $sessions = SessionExam::where('is_active', true)
-                    ->whereHas('anneeUniversitaire', function($q) {
-                        $q->where('is_active', true);
-                    })
-                    ->orderBy('date_start', 'desc')
-                    ->get();
-
-        // Si sessionInfo n'est pas encore défini
-        if (empty($this->sessionInfo) && !empty($this->session_id)) {
-            $currentSession = $sessions->firstWhere('id', $this->session_id);
-            if ($currentSession) {
-                $this->sessionInfo = [
-                    'id' => $currentSession->id,
-                    'nom' => $currentSession->nom ?? $currentSession->type,
-                    'date_start' => $currentSession->date_start->format('d/m/Y'),
-                    'date_end' => $currentSession->date_end->format('d/m/Y')
-                ];
-            }
-        }
-
-        // Session courante
-        $currentSession = $sessions->where('is_current', true)->first();
-        if (!$currentSession && $sessions->isNotEmpty()) {
-            $currentSession = $sessions->first();
-        }
-
         return view('livewire.examen.add-examen', [
             'niveaux' => $niveaux,
             'parcours' => $parcours,
-            'sessions' => $sessions,
             'salles' => $salles,
-            'currentSession' => $currentSession,
         ]);
     }
 }

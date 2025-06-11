@@ -17,25 +17,6 @@
                             Manchettes d'examen
                         @endif
                     </h3>
-
-                    <!-- Statistiques rapides -->
-                    {{-- @if($ec_id && $ec_id !== 'all')
-                        <div class="flex mt-1 space-x-3 text-xs text-gray-500 dark:text-gray-400">
-                            <span class="inline-flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                                Progrès: {{ $manchettes->total() ?? 0 }}/{{ $totalEtudiantsCount }}
-                                (<span class="font-semibold">{{ $totalEtudiantsCount > 0 ? round(($manchettes->total() / $totalEtudiantsCount) * 100) : 0 }}%</span>)
-                            </span>
-                            <span class="inline-flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                {{ $totalEtudiantsCount - ($manchettes->total() ?? 0) }} étudiants sans manchette
-                            </span>
-                        </div>
-                    @endif --}}
                 </div>
 
                 <!-- Outils de recherche et statistiques -->
@@ -53,16 +34,6 @@
                             class="block w-full py-1.5 pl-10 pr-3 text-sm leading-5 placeholder-gray-500 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
                             placeholder="Rechercher code ou matricule...">
                     </div>
-
-                    <!-- Compteurs avec animations -->
-                    {{-- <div class="flex gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                        <span class="px-2 py-1 transition-all duration-300 ease-in-out rounded-md bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200 hover:shadow-sm">
-                            {{ $manchettes->total() ?? 0 }} total
-                        </span>
-                        <span class="px-2 py-1 transition-all duration-300 ease-in-out rounded-md bg-secondary-100 text-secondary-800 dark:bg-secondary-900 dark:text-secondary-200 hover:shadow-sm">
-                            {{ $userManchettesCount ?? 0 }} par vous
-                        </span>
-                    </div> --}}
 
                     <!-- Menu d'actions rapides -->
                     <div class="relative" x-data="{ open: false }">

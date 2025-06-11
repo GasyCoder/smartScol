@@ -24,6 +24,7 @@ class ResultatFusion extends Model
     protected $fillable = [
         'etudiant_id',
         'examen_id',
+        'session_exam_id',
         'code_anonymat_id',
         'ec_id',
         'note',
@@ -43,6 +44,26 @@ class ResultatFusion extends Model
     ];
 
     /**
+     * Remplissage automatique du session_exam_id lors de la création
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($resultat) {
+            if (empty($resultat->session_exam_id)) {
+                $resultat->session_exam_id = Manchette::getCurrentSessionId();
+            }
+
+            // Générer un operation_id unique si pas défini
+            if (empty($resultat->operation_id)) {
+                $resultat->operation_id = \Illuminate\Support\Str::uuid();
+            }
+        });
+    }
+
+
+    /**
      * Relations
      */
     public function etudiant()
@@ -55,6 +76,11 @@ class ResultatFusion extends Model
         return $this->belongsTo(Examen::class);
     }
 
+    public function sessionExam()
+    {
+        return $this->belongsTo(SessionExam::class, 'session_exam_id');
+    }
+
     public function codeAnonymat()
     {
         return $this->belongsTo(CodeAnonymat::class);
@@ -65,6 +91,44 @@ class ResultatFusion extends Model
         return $this->belongsTo(EC::class);
     }
 
+    // Scopes pour filtrer par session
+    public function scopeForCurrentSession($query)
+    {
+        $sessionId = Manchette::getCurrentSessionId();
+        return $query->where('session_exam_id', $sessionId);
+    }
+
+    public function scopeForSession($query, $sessionId)
+    {
+        return $query->where('session_exam_id', $sessionId);
+    }
+
+    public function scopeSessionNormale($query)
+    {
+        return $query->whereHas('sessionExam', function($q) {
+            $q->where('type', 'Normale');
+        });
+    }
+
+    public function scopeSessionRattrapage($query)
+    {
+        return $query->whereHas('sessionExam', function($q) {
+            $q->where('type', 'Rattrapage');
+        });
+    }
+
+    // Méthodes utilitaires
+    public function getSessionTypeAttribute()
+    {
+        return $this->sessionExam ? strtolower($this->sessionExam->type) : 'normale';
+    }
+
+    public function getSessionLibelleAttribute()
+    {
+        return $this->sessionExam ? $this->sessionExam->type : 'Inconnue';
+    }
+
+
     public function utilisateurGeneration()
     {
         return $this->belongsTo(User::class, 'genere_par');
@@ -74,6 +138,9 @@ class ResultatFusion extends Model
     {
         return $this->belongsTo(User::class, 'modifie_par');
     }
+
+
+
 
     /**
      * Libellés des statuts

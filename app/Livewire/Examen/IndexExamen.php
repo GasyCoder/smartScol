@@ -5,7 +5,6 @@ namespace App\Livewire\Examen;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\SessionExam;
 use App\Models\Salle;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -22,7 +21,6 @@ class IndexExamen extends Component
         'niveauId' => ['except' => '', 'as' => 'niveau'],
         'parcoursId' => ['except' => '', 'as' => 'parcours'],
         'search' => ['except' => ''],
-        'session_id' => ['except' => ''],
         'date_from' => ['except' => ''],
         'date_to' => ['except' => ''],
         'salle_id' => ['except' => ''],
@@ -36,13 +34,12 @@ class IndexExamen extends Component
     public $niveauId = '';
     public $parcoursId = '';
     public $search = '';
-    public $session_id = '';
     public $date_from = '';
     public $date_to = '';
     public $salle_id = '';
     public $perPage = 10;
     public $sortField = 'created_at';
-    public $sortDirection = 'desc';
+    public $sortDirection = 'asc';
 
     // Modaux
     public $showDeleteModal = false;
@@ -68,11 +65,6 @@ class IndexExamen extends Component
         $this->resetPage();
     }
 
-    public function updatingSessionId()
-    {
-        $this->resetPage();
-    }
-
     public function updatingSalleId()
     {
         $this->resetPage();
@@ -85,7 +77,7 @@ class IndexExamen extends Component
 
     public function resetFilters()
     {
-        $this->reset(['search', 'session_id', 'date_from', 'date_to', 'salle_id']);
+        $this->reset(['search', 'date_from', 'date_to', 'salle_id']);
         $this->resetPage();
     }
 
@@ -156,7 +148,7 @@ class IndexExamen extends Component
     {
         $this->reset([
             'step', 'niveauId', 'parcoursId', 'niveauInfo', 'parcoursInfo',
-            'search', 'session_id', 'date_from', 'date_to', 'salle_id'
+            'search', 'date_from', 'date_to', 'salle_id'
         ]);
         $this->step = 'niveau';
         $this->resetPage();
@@ -364,29 +356,12 @@ class IndexExamen extends Component
         // Récupérer les salles pour les filtres
         $salles = Salle::orderBy('nom')->get();
 
-        // Récupérer la session courante
-        $currentSession = null;
-        $sessions = SessionExam::whereHas('anneeUniversitaire', function($q) {
-            $q->where('is_active', true);
-        })->get();
-
-        // Obtenir la session active et courante
-        $currentSession = $sessions->where('is_active', true)
-                                ->where('is_current', true)
-                                ->first();
-
-        // Si aucune session courante n'est trouvée, prendre la première session active
-        if (!$currentSession && $sessions->isNotEmpty()) {
-            $currentSession = $sessions->where('is_active', true)->first();
-        }
-
         // Charger les examens si nous sommes à cette étape
         $examens = collect();
         if ($this->step === 'examens' && $this->niveauId && $this->parcoursId) {
             $baseQuery = Examen::with([
                 'ecs.ue',
                 'niveau',
-                'session',
                 'parcours',
                 'copies',
                 'manchettes',
@@ -401,13 +376,7 @@ class IndexExamen extends Component
                         $subQ->where('nom', 'like', '%' . $this->search . '%')
                           ->orWhere('abr', 'like', '%' . $this->search . '%');
                     });
-                    // On a supprimé la recherche sur le code car il n'existe plus
                 });
-            }
-
-            // Appliquer le filtre de session
-            if ($this->session_id) {
-                $baseQuery->where('session_id', $this->session_id);
             }
 
             // Appliquer les filtres de date
@@ -434,7 +403,7 @@ class IndexExamen extends Component
             if ($this->sortField === 'date') {
                 // Pour le tri par date, nous utilisons la table pivot
                 $columns = [
-                    'examens.id', 'examens.session_id',
+                    'examens.id',
                     'examens.niveau_id', 'examens.parcours_id', 'examens.duree',
                     'examens.note_eliminatoire', 'examens.created_at',
                     'examens.updated_at', 'examens.deleted_at'
@@ -458,9 +427,7 @@ class IndexExamen extends Component
             'niveaux' => $niveaux,
             'parcours' => $parcours,
             'examens' => $examens,
-            'sessions' => $sessions,
             'salles' => $salles,
-            'currentSession' => $currentSession,
         ]);
     }
 }

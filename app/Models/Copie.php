@@ -15,6 +15,7 @@ class Copie extends Model
 
     protected $fillable = [
         'examen_id',
+        'session_exam_id', // AJOUTÉ
         'ec_id',
         'code_anonymat_id',
         'note',
@@ -30,6 +31,21 @@ class Copie extends Model
         'is_checked' => 'boolean',
     ];
 
+    /**
+     * AJOUTÉ : Remplissage automatique du session_exam_id lors de la création
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($copie) {
+            if (empty($copie->session_exam_id)) {
+                $copie->session_exam_id = Manchette::getCurrentSessionId();
+            }
+        });
+    }
+
+    // Relations
     public function examen()
     {
         return $this->belongsTo(Examen::class);
@@ -50,6 +66,14 @@ class Copie extends Model
         return $this->belongsTo(EC::class);
     }
 
+    /**
+     * AJOUTÉ : Relation avec la session d'examen
+     */
+    public function sessionExam()
+    {
+        return $this->belongsTo(SessionExam::class, 'session_exam_id');
+    }
+
     public function resultatFusion()
     {
         return $this->hasOne(ResultatFusion::class, 'code_anonymat_id', 'code_anonymat_id')
@@ -64,6 +88,7 @@ class Copie extends Model
             ->where('ec_id', $this->ec_id);
     }
 
+    // Attributs existants (inchangés)
     public function getCodeCompletAttribute()
     {
         return optional($this->codeAnonymat)->code_complet;
@@ -89,6 +114,9 @@ class Copie extends Model
         return isset($matches[1]) ? (int)$matches[1] : null;
     }
 
+    /**
+     * CORRIGÉ : Trouve l'étudiant via la manchette correspondante à la même session
+     */
     public function getEtudiantAttribute()
     {
         $manchette = $this->findCorrespondingManchette();
@@ -103,19 +131,76 @@ class Copie extends Model
             ->exists();
     }
 
+    /**
+     * CORRIGÉ : Trouve la manchette correspondante dans la même session
+     */
     public function findCorrespondingManchette()
     {
-        if (!$this->code_anonymat_id) {
+        if (!$this->code_anonymat_id || !$this->session_exam_id) {
             return null;
         }
 
         return Manchette::where('code_anonymat_id', $this->code_anonymat_id)
+                       ->where('session_exam_id', $this->session_exam_id) // CORRIGÉ
                        ->whereHas('codeAnonymat', function($q) {
                            $q->where('ec_id', $this->ec_id);
                        })
                        ->first();
     }
 
+    /**
+     * AJOUTÉ : Récupère le type de session via la relation
+     */
+    public function getSessionTypeAttribute()
+    {
+        return $this->sessionExam ? strtolower($this->sessionExam->type) : 'normale';
+    }
+
+    /**
+     * AJOUTÉ : Vérifie si c'est une copie de session normale
+     */
+    public function isSessionNormale()
+    {
+        return $this->sessionExam && $this->sessionExam->type === 'Normale';
+    }
+
+    /**
+     * AJOUTÉ : Vérifie si c'est une copie de session rattrapage
+     */
+    public function isSessionRattrapage()
+    {
+        return $this->sessionExam && $this->sessionExam->type === 'Rattrapage';
+    }
+
+    /**
+     * AJOUTÉ : Scopes pour filtrer par session
+     */
+    public function scopeSessionNormale($query)
+    {
+        return $query->whereHas('sessionExam', function($q) {
+            $q->where('type', 'Normale');
+        });
+    }
+
+    public function scopeSessionRattrapage($query)
+    {
+        return $query->whereHas('sessionExam', function($q) {
+            $q->where('type', 'Rattrapage');
+        });
+    }
+
+    public function scopeCurrentSession($query)
+    {
+        $sessionId = Manchette::getCurrentSessionId();
+        return $query->where('session_exam_id', $sessionId);
+    }
+
+    public function scopeForSession($query, $sessionId)
+    {
+        return $query->where('session_exam_id', $sessionId);
+    }
+
+    // Méthodes existantes (inchangées)
     public function marquerCommeModifiee($nouvelleNote, $commentaire = null)
     {
         if ($this->note != $nouvelleNote) {
@@ -155,6 +240,7 @@ class Copie extends Model
         return $this->is_checked;
     }
 
+    // Scopes existants (inchangés)
     public function scopeVerifiees($query)
     {
         return $query->where('is_checked', true);
@@ -175,6 +261,7 @@ class Copie extends Model
         return $query->whereNull('note_old');
     }
 
+    // Méthodes existantes (inchangées)
     public function getStatutTexte()
     {
         if (!$this->is_checked) {
@@ -333,11 +420,12 @@ class Copie extends Model
         });
     }
 
+    /**
+     * CORRIGÉ : Scope par session utilisant session_exam_id
+     */
     public function scopeParSession($query, $sessionId)
     {
-        return $query->whereHas('examen', function($q) use ($sessionId) {
-            $q->where('session_id', $sessionId);
-        });
+        return $query->where('session_exam_id', $sessionId);
     }
 
     public function scopeParNiveau($query, $niveauId)

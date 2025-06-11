@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('etudiant_id')->comment('Étudiant concerné');
             $table->unsignedBigInteger('examen_id')->comment('Examen concerné');
+            $table->unsignedBigInteger('session_exam_id')->nullable();
             $table->unsignedBigInteger('code_anonymat_id')->comment('Code d\'anonymat utilisé');
             $table->unsignedBigInteger('ec_id');
             $table->decimal('note', 5, 2)->comment('Note finale');
@@ -35,9 +36,10 @@ return new class extends Migration
             $table->timestamp('date_fusion')->nullable()->comment('Date du transfert depuis fusion');
             $table->timestamps();
 
-            // Contraintes étrangères
+            // Contraintes étrangères (identiques)
             $table->foreign('etudiant_id')->references('id')->on('etudiants')->onDelete('cascade');
             $table->foreign('examen_id')->references('id')->on('examens')->onDelete('cascade');
+            $table->foreign('session_exam_id')->references('id')->on('session_exams')->onDelete('set null');
             $table->foreign('code_anonymat_id')->references('id')->on('codes_anonymat')->onDelete('cascade');
             $table->foreign('ec_id')->references('id')->on('ecs');
             $table->foreign('genere_par')->references('id')->on('users')->onDelete('cascade');
@@ -50,13 +52,18 @@ return new class extends Migration
             $table->foreign('reactive_par')->references('id')->on('users')
                 ->onDelete('set null')
                 ->name('fk_resultats_finaux_reactive_par');
-            // Contrainte d'unicité
-            $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_final_etudiant');
 
-            // Index pour optimisation
+            // CONTRAINTE D'UNICITÉ CORRIGÉE - SEUL CHANGEMENT !
+            // AVANT (INCORRECT) :
+            // $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_final_etudiant');
+
+            // APRÈS (CORRECT) :
+            $table->unique(['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'], 'unique_resultat_final_etudiant');
+
+            // Index pour optimisation (identiques)
             $table->index(['statut', 'date_reactivation'], 'idx_statut_reactivation');
             $table->index(['date_annulation'], 'idx_date_annulation');
-            $table->index(['examen_id', 'statut'], 'idx_final_examen_statut');
+            $table->index(['examen_id', 'statut', 'session_exam_id', 'ec_id', 'etudiant_id'], 'idx_resultats_fusion_session');
             $table->index(['etudiant_id', 'statut'], 'idx_final_etudiant_statut');
             $table->index(['deliberation_id'], 'idx_final_deliberation');
             $table->index(['decision'], 'idx_final_decision');

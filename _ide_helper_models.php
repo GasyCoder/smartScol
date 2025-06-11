@@ -52,6 +52,9 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property-read \App\Models\Copie|null $copie
+ * @property-read \App\Models\Copie|null $copieCurrentSession
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Copie> $copies
+ * @property-read int|null $copies_count
  * @property-read \App\Models\EC|null $ec
  * @property-read \App\Models\Examen $examen
  * @property-read mixed $code_salle
@@ -59,10 +62,17 @@ namespace App\Models{
  * @property-read mixed $numero
  * @property-read mixed $salle
  * @property-read \App\Models\Manchette|null $manchette
+ * @property-read \App\Models\Manchette|null $manchetteCurrentSession
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Manchette> $manchettes
+ * @property-read int|null $manchettes_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat complete($sessionId = null)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat forCurrentSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat forSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat onlyTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat unused($sessionId = null)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereCodeComplet($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereDeletedAt($value)
@@ -71,6 +81,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereSequence($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withManchetteOnly($sessionId = null)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withoutTrashed()
  */
@@ -83,6 +94,7 @@ namespace App\Models{
  *
  * @property int $id
  * @property int $examen_id Examen concerné
+ * @property int|null $session_exam_id Référence à la session d'examen
  * @property int $ec_id Élément constitutif concerné
  * @property int $code_anonymat_id Référence au code d'anonymat
  * @property numeric $note Note obtenue
@@ -101,9 +113,13 @@ namespace App\Models{
  * @property-read mixed $code_salle
  * @property-read mixed $etudiant
  * @property-read mixed $numero
+ * @property-read mixed $session_type
  * @property-read \App\Models\ResultatFinal|null $resultatFinal
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
+ * @property-read \App\Models\SessionExam|null $sessionExam
  * @property-read \App\Models\User $utilisateurSaisie
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie currentSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie forSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie modifiees()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie newQuery()
@@ -115,6 +131,8 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie parParcours($parcoursId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie parSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie sessionNormale()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie sessionRattrapage()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie verifiees()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereCommentaire($value)
@@ -128,6 +146,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNote($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNoteOld($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSaisiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie withoutTrashed()
@@ -218,17 +237,30 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\CodeAnonymat> $codesAnonymat
+ * @property-read int|null $codes_anonymat_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ExamenEc> $examenEc
  * @property-read int|null $examen_ec_count
  * @property-read \App\Models\ExamenEc|null $pivot
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Examen> $examens
  * @property-read int|null $examens_count
+ * @property-read mixed $libelle_court
  * @property-read mixed $niveau
+ * @property-read mixed $nom_complet
  * @property-read mixed $parcours
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFinal> $resultatsFinaux
+ * @property-read int|null $resultats_finaux_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFusion> $resultatsFusion
+ * @property-read int|null $resultats_fusion_count
  * @property-read \App\Models\UE $ue
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC actif()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC avecResultatsSession($sessionId, $useResultatFinal = false)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC parNiveau($niveauId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC parParcours($parcoursId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC parUE($ueId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereAbr($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereCoefficient($value)
@@ -262,8 +294,15 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property-read mixed $full_name
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Manchette> $manchettes
+ * @property-read int|null $manchettes_count
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\Parcour|null $parcours
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFinal> $resultatsFinaux
+ * @property-read int|null $resultats_finaux_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFusion> $resultatsFusion
+ * @property-read int|null $resultats_fusion_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant eligiblesRattrapage($niveauId, $parcoursId, $sessionNormaleId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant onlyTrashed()
@@ -293,7 +332,6 @@ namespace App\Models{
  * 
  *
  * @property int $id
- * @property int $session_id Session à laquelle appartient l'examen
  * @property int $niveau_id Niveau concerné
  * @property int|null $parcours_id Parcours concerné (uniquement pour PACES/L1)
  * @property int $duree Durée en minutes
@@ -319,7 +357,6 @@ namespace App\Models{
  * @property-read int|null $manchettes_count
  * @property-read \App\Models\Niveau $niveau
  * @property-read \App\Models\Parcour|null $parcours
- * @property-read \App\Models\SessionExam $session
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen onlyTrashed()
@@ -331,7 +368,6 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereNoteEliminatoire($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereParcoursId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereSessionId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen withoutTrashed()
@@ -373,10 +409,11 @@ namespace App\Models{
  *
  * @property int $id
  * @property int $examen_id Examen concerné
+ * @property int|null $session_exam_id Référence à la session d'examen
  * @property int $code_anonymat_id Référence au code d'anonymat
  * @property int $etudiant_id Référence à l'étudiant
  * @property int $saisie_par Utilisateur ayant saisi la manchette
- * @property string $date_saisie
+ * @property \Illuminate\Support\Carbon $date_saisie
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
@@ -388,12 +425,20 @@ namespace App\Models{
  * @property-read mixed $ec
  * @property-read mixed $matricule_etudiant
  * @property-read mixed $numero
- * @property-read mixed $salle
+ * @property-read mixed $session_libelle
+ * @property-read mixed $session_type
+ * @property-read \App\Models\SessionExam|null $sessionExam
  * @property-read \App\Models\User $utilisateurSaisie
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette currentSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette forEcAndSession($ecId, $sessionId = null)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette forEtudiantAndSession($etudiantId, $sessionId = null)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette forExamenAndSession($examenId, $sessionId = null)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette onlyTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette sessionNormale()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette sessionRattrapage()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereDateSaisie($value)
@@ -402,6 +447,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereSaisiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette withoutTrashed()
@@ -524,12 +570,19 @@ namespace App\Models{
  * @property int $id
  * @property int $etudiant_id Étudiant concerné
  * @property int $examen_id Examen concerné
+ * @property int|null $session_exam_id
  * @property int $code_anonymat_id Code d'anonymat utilisé
  * @property int $ec_id
  * @property numeric $note Note finale
  * @property int $genere_par Utilisateur ayant généré le résultat
  * @property int|null $modifie_par
  * @property string $statut
+ * @property array<array-key, mixed>|null $status_history
+ * @property string|null $motif_annulation
+ * @property \Illuminate\Support\Carbon|null $date_annulation
+ * @property int|null $annule_par
+ * @property \Illuminate\Support\Carbon|null $date_reactivation
+ * @property int|null $reactive_par
  * @property string|null $decision
  * @property \Illuminate\Support\Carbon|null $date_publication
  * @property string|null $hash_verification
@@ -540,39 +593,48 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\CodeAnonymat $codeAnonymat
  * @property-read \App\Models\Deliberation|null $deliberation
- * @property-read \App\Models\ResultatFinalHistorique|null $derniereAnnulation
- * @property-read \App\Models\ResultatFinalHistorique|null $derniereReactivation
  * @property-read \App\Models\EC $ec
  * @property-read \App\Models\Etudiant $etudiant
  * @property-read \App\Models\Examen $examen
- * @property-read mixed $annule_par
- * @property-read mixed $date_annulation
- * @property-read mixed $date_reactivation
+ * @property-read mixed $annule_par_actuel
+ * @property-read mixed $date_annulation_actuelle
+ * @property-read mixed $date_reactivation_actuelle
+ * @property-read mixed $derniere_annulation
+ * @property-read mixed $derniere_reactivation
  * @property-read mixed $est_eliminatoire
  * @property-read mixed $est_modifie
  * @property-read mixed $est_reussie
+ * @property-read mixed $historique
  * @property-read mixed $libelle_decision
  * @property-read mixed $libelle_statut
- * @property-read mixed $motif_annulation
- * @property-read mixed $reactive_par
- * @property-read mixed $status_history
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFinalHistorique> $historique
- * @property-read int|null $historique_count
+ * @property-read mixed $motif_annulation_actuel
+ * @property-read mixed $reactive_par_actuel
+ * @property-read mixed $session_libelle
+ * @property-read mixed $session_type
+ * @property-read mixed $status_history_formatted
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
+ * @property-read \App\Models\SessionExam|null $sessionExam
+ * @property-read \App\Models\User|null $utilisateurAnnulation
  * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
+ * @property-read \App\Models\User|null $utilisateurReactivation
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal annule()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal avecDeliberation()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal echoue()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal eliminatoire()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal enAttente()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal entreSessions($sessionIds)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal etudiantsMultiSessions($examenId, $sessionIds)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal exclus()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal forCurrentSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal forSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parAnneeUniversitaire($anneeId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parNiveau($niveauId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parParcours($parcoursId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal pourSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal premiereSession()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal publie()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal publieDans($joursRecents)
@@ -582,10 +644,15 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal redoublant()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sansDeliberation()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sessionNormale()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal sessionRattrapage()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereAnnulePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCodeAnonymatId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateAnnulation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateFusion($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDatePublication($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateReactivation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDecision($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDeliberationId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEcId($value)
@@ -596,7 +663,11 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereHashVerification($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereModifiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereMotifAnnulation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereNote($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereReactivePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereSessionExamId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatusHistory($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereStatut($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereUpdatedAt($value)
  */
@@ -652,6 +723,7 @@ namespace App\Models{
  * @property int $id
  * @property int $etudiant_id Étudiant concerné
  * @property int $examen_id Examen concerné
+ * @property int|null $session_exam_id
  * @property int $code_anonymat_id Code d'anonymat utilisé
  * @property int $ec_id
  * @property numeric $note Note à vérifier
@@ -670,10 +742,15 @@ namespace App\Models{
  * @property-read \App\Models\Examen $examen
  * @property-read mixed $est_eliminatoire
  * @property-read mixed $est_reussie
+ * @property-read mixed $session_libelle
+ * @property-read mixed $session_type
+ * @property-read \App\Models\SessionExam|null $sessionExam
  * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion echoue()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion eliminatoire()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion forCurrentSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion forSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion necessiteVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion newQuery()
@@ -682,6 +759,8 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion reussi()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion secondeVerification()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion sessionNormale()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion sessionRattrapage()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion troisiemeVerification()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion valide()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereCodeAnonymatId($value)
@@ -696,6 +775,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereModifiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereNote($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereOperationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereStatusHistory($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereStatut($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion whereUpdatedAt($value)

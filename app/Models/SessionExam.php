@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class SessionExam extends Model
 {
@@ -26,6 +27,25 @@ class SessionExam extends Model
         'is_active' => 'boolean',
         'is_current' => 'boolean'
     ];
+
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saving(function ($session) {
+            if ($session->is_active && $session->is_current) {
+                // Désactiver toutes les autres sessions pour la même année universitaire
+                DB::table('session_exams')
+                    ->where('annee_universitaire_id', $session->annee_universitaire_id)
+                    ->where('id', '!=', $session->id)
+                    ->update([
+                        'is_active' => false,
+                        'is_current' => false
+                    ]);
+            }
+        });
+    }
 
     /**
      * Relations

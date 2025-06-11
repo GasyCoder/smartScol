@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Services\CalculAcademiqueService;
 use App\Exports\ResultatsVerificationExport;
+
 /**
  * @property \Illuminate\Support\Collection $niveaux
  * @property \Illuminate\Support\Collection $parcours
@@ -63,7 +64,9 @@ class ResultatVerification extends Component
     public function mount($examenId)
     {
         $this->examenId = $examenId;
-        $this->examen = Examen::with(['niveau', 'parcours', 'session'])->find($this->examenId);
+
+        // CORRECTION : Suppression de la relation 'session' qui n'existe plus
+        $this->examen = Examen::with(['niveau', 'parcours'])->find($this->examenId);
 
         if (!$this->examen) {
             $this->noExamenFound = true;
@@ -81,7 +84,7 @@ class ResultatVerification extends Component
             return;
         }
 
-        $this->niveaux = Niveau::where('is_active', true)->orderBy('abr', 'desc')->get();
+        $this->niveaux = Niveau::where('is_active', true)->orderBy('id', 'asc')->get();
         $this->niveau_id = $this->examen->niveau_id;
         $this->parcours_id = $this->examen->parcours_id;
 
@@ -96,7 +99,7 @@ class ResultatVerification extends Component
         if ($this->niveau_id) {
             $this->parcours = Parcour::where('niveau_id', $this->niveau_id)
                 ->where('is_active', true)
-                ->orderBy('abr')
+                ->orderBy('id', 'asc')
                 ->get();
         } else {
             $this->parcours = collect();
@@ -115,13 +118,13 @@ class ResultatVerification extends Component
                 $query->where('niveau_id', $this->niveau_id)
                       ->where('parcours_id', $this->parcours_id);
             })
-            ->orderBy('nom')
+            ->orderBy('id', 'asc')
             ->get();
         } elseif ($this->niveau_id) {
             $this->ecs = EC::whereHas('ue', function($query) {
                 $query->where('niveau_id', $this->niveau_id);
             })
-            ->orderBy('nom')
+            ->orderBy('id', 'asc')
             ->get();
         } else {
             $this->ecs = collect();
@@ -134,7 +137,9 @@ class ResultatVerification extends Component
 
     public function checkEtapeFusion()
     {
+        // CORRECTION : Filtrer par session active pour éviter les conflits entre sessions
         $this->etapeFusion = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
             ->max('etape_fusion') ?? 0;
 
         $this->showVerification = $this->etapeFusion >= 1;
@@ -151,10 +156,11 @@ class ResultatVerification extends Component
     {
         $moyennesUE = [];
 
-        // Récupérer tous les résultats de l'étudiant pour cet examen
+        // CORRECTION : Filtrer par session active
         $resultatsEtudiant = ResultatFusion::where('examen_id', $this->examenId)
             ->where('etudiant_id', $etudiantId)
             ->where('etape_fusion', $this->etapeFusion)
+            ->where('session_exam_id', $this->sessionActive->id)
             ->with(['ec', 'ec.ue'])
             ->get();
 
@@ -199,7 +205,6 @@ class ResultatVerification extends Component
         return $moyennesUE;
     }
 
-
     /**
      * Calcule la moyenne générale d'un étudiant
      */
@@ -232,9 +237,9 @@ class ResultatVerification extends Component
         $this->resultats = [];
 
         if ($this->niveau_id && $this->parcours_id) {
+            // CORRECTION : Suppression de la condition sur session_id
             $examenExists = Examen::where('niveau_id', $this->niveau_id)
                 ->where('parcours_id', $this->parcours_id)
-                ->where('session_id', $this->sessionActive->id)
                 ->exists();
 
             if (!$examenExists) {
@@ -250,7 +255,9 @@ class ResultatVerification extends Component
             return;
         }
 
+        // CORRECTION : Ajout du filtre par session active
         $query = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
             ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
             ->where('etape_fusion', $this->etapeFusion)
             ->with(['etudiant', 'ec', 'ec.ue']);
@@ -273,9 +280,11 @@ class ResultatVerification extends Component
                 $ec = $resultat->ec;
                 $ue = $ec->ue;
 
+                // CORRECTION : Filtrer les copies par session active
                 $copie = Copie::where('examen_id', $resultat->examen_id)
                     ->where('ec_id', $resultat->ec_id)
                     ->where('code_anonymat_id', $resultat->code_anonymat_id)
+                    ->where('session_exam_id', $this->sessionActive->id)
                     ->first();
 
                 $noteAffichee = $resultat->note;
@@ -292,6 +301,7 @@ class ResultatVerification extends Component
                     try {
                         $resultatsUE = ResultatFusion::where('examen_id', $this->examenId)
                             ->where('etudiant_id', $etudiant->id)
+                            ->where('session_exam_id', $this->sessionActive->id)
                             ->whereHas('ec', function ($q) use ($ue) {
                                 $q->where('ue_id', $ue->id);
                             })
@@ -311,6 +321,7 @@ class ResultatVerification extends Component
 
                 // Calcul de la moyenne générale pour cet étudiant
                 $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiant->id);
+
                 return [
                     'id' => $resultat->id,
                     'unique_key' => "rf_{$resultat->id}",
@@ -331,8 +342,8 @@ class ResultatVerification extends Component
                     'code_anonymat_id' => $resultat->code_anonymat_id,
                     'ue_id' => $ue->id ?? null,
                     'ue_nom' => $ue->nom ?? 'N/A',
-                    'ue_abr' => $ue->abr ?? 'UE',  // AJOUT
-                    'ue_credits' => $ue->credits ?? 0,  // AJOUT
+                    'ue_abr' => $ue->abr ?? 'UE',
+                    'ue_credits' => $ue->credits ?? 0,
                     'moyenne_ue' => $moyenneUE,
                     'moyenne_generale' => $moyenneGenerale,
                     'created_at' => $copie->created_at ?? null,
@@ -383,7 +394,9 @@ class ResultatVerification extends Component
             return;
         }
 
+        // CORRECTION : Ajout du filtre par session active
         $totalQuery = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
             ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
             ->where('etape_fusion', $this->etapeFusion);
 
@@ -432,7 +445,10 @@ class ResultatVerification extends Component
                 }
 
                 $copiesIds = $resultatsNonVerifies->pluck('copie_id')->unique();
+
+                // CORRECTION : Ajouter le filtre session_exam_id
                 Copie::whereIn('id', $copiesIds)
+                    ->where('session_exam_id', $this->sessionActive->id)
                     ->update([
                         'is_checked' => true,
                         'updated_at' => now()
@@ -454,6 +470,7 @@ class ResultatVerification extends Component
                     'nb_resultats_verifies' => count($resultatsIds),
                     'nb_copies_verifiees' => count($copiesIds),
                     'examen_id' => $this->examenId,
+                    'session_exam_id' => $this->sessionActive->id,
                     'utilisateur_id' => Auth::id(),
                     'prochaine_etape_possible' => $this->getProchineEtapeAction(),
                     'timestamp' => now()->toISOString()
@@ -483,6 +500,7 @@ class ResultatVerification extends Component
                 'trace' => $e->getTraceAsString(),
                 'etape_fusion' => $this->etapeFusion,
                 'examen_id' => $this->examenId,
+                'session_exam_id' => $this->sessionActive->id,
                 'utilisateur_id' => Auth::id()
             ]);
             toastr()->error('Erreur lors de la vérification: ' . $e->getMessage());
@@ -543,7 +561,8 @@ class ResultatVerification extends Component
             'etudiant' => $resultat['nom'] . ' ' . $resultat['prenom'],
             'matiere' => $resultat['matiere'],
             'note_actuelle' => $resultat['note'],
-            'etape_fusion' => $this->etapeFusion
+            'etape_fusion' => $this->etapeFusion,
+            'session_exam_id' => $this->sessionActive->id
         ]);
     }
 
@@ -567,7 +586,9 @@ class ResultatVerification extends Component
                 throw new \Exception("La note doit être un nombre entre 0 et 20");
             }
 
-            $resultatFusion = ResultatFusion::with(['etudiant', 'ec'])->findOrFail($resultatData['id']);
+            $resultatFusion = ResultatFusion::with(['etudiant', 'ec'])
+                ->where('session_exam_id', $this->sessionActive->id)
+                ->findOrFail($resultatData['id']);
 
             if (!$resultatFusion) {
                 throw new \Exception("ResultatFusion non trouvé avec l'ID: {$resultatData['id']}");
@@ -584,12 +605,14 @@ class ResultatVerification extends Component
                 'code_anonymat_id' => $resultatFusion->code_anonymat_id,
                 'nouvelle_note' => $this->newNote,
                 'ancienne_note' => $resultatData['note'],
-                'observation' => $this->observation
+                'observation' => $this->observation,
+                'session_exam_id' => $this->sessionActive->id
             ]);
 
             $copie = Copie::where('examen_id', $resultatFusion->examen_id)
                 ->where('ec_id', $resultatFusion->ec_id)
                 ->where('code_anonymat_id', $resultatFusion->code_anonymat_id)
+                ->where('session_exam_id', $this->sessionActive->id)
                 ->first();
 
             if (!$copie) {
@@ -597,6 +620,7 @@ class ResultatVerification extends Component
                     'examen_id' => $resultatFusion->examen_id,
                     'ec_id' => $resultatFusion->ec_id,
                     'code_anonymat_id' => $resultatFusion->code_anonymat_id,
+                    'session_exam_id' => $this->sessionActive->id,
                     'note' => $this->newNote,
                     'saisie_par' => Auth::id(),
                     'is_checked' => true,
@@ -606,7 +630,8 @@ class ResultatVerification extends Component
                 Log::info('Création nouvelle copie lors de la modification', [
                     'resultat_fusion_id' => $resultatFusion->id,
                     'nouvelle_note' => $this->newNote,
-                    'raison' => 'Copie inexistante pour ce triplet (examen_id, ec_id, code_anonymat_id)'
+                    'session_exam_id' => $this->sessionActive->id,
+                    'raison' => 'Copie inexistante pour ce triplet (examen_id, ec_id, code_anonymat_id, session_exam_id)'
                 ]);
             }
 
@@ -620,6 +645,7 @@ class ResultatVerification extends Component
                     'resultat_fusion_id' => $resultatFusion->id,
                     'note_appliquee' => $this->newNote,
                     'statut_applique' => $resultatFusion->statut,
+                    'session_exam_id' => $this->sessionActive->id,
                     'user_id' => Auth::id()
                 ]);
             });
@@ -637,6 +663,7 @@ class ResultatVerification extends Component
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
                 'etape_fusion' => $this->etapeFusion,
+                'session_exam_id' => $this->sessionActive->id,
                 'nouvelle_note' => $this->newNote
             ]);
             toastr()->error('Erreur lors de la modification: ' . $e->getMessage());
@@ -717,6 +744,13 @@ class ResultatVerification extends Component
             );
 
         } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'export Excel', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'examen_id' => $this->examenId,
+                'session_exam_id' => $this->sessionActive->id,
+                'user_id' => Auth::id()
+            ]);
             toastr()->error('Erreur lors de l\'export Excel : ' . $e->getMessage());
         }
     }
@@ -730,6 +764,7 @@ class ResultatVerification extends Component
             $data = [
                 'resultats' => $resultatsEnrichis,
                 'examen' => $this->examen,
+                'sessionActive' => $this->sessionActive,
                 'afficherMoyennesUE' => $this->afficherMoyennesUE,
                 'statistiques' => [
                     'total' => $this->totalResultats,
@@ -751,22 +786,28 @@ class ResultatVerification extends Component
             }, $filename, ['Content-Type' => 'application/pdf']);
 
         } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'export PDF', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'examen_id' => $this->examenId,
+                'session_exam_id' => $this->sessionActive->id,
+                'user_id' => Auth::id()
+            ]);
             toastr()->error('Erreur lors de l\'export PDF : ' . $e->getMessage());
         }
     }
-
 
     private function generateFilename($extension)
     {
         $niveau = $this->examen->niveau->abr ?? 'NIV';
         $parcours = $this->examen->parcours->abr ?? 'PARC';
+        $sessionType = $this->sessionActive->type ?? 'SESSION';
         $date = now()->format('Y-m-d_Hi');
 
         $suffixe = $this->afficherMoyennesUE ? '-avec-moyennes-UE' : '-sans-moyennes';
 
-        return "resultats-verification-{$niveau}-{$parcours}{$suffixe}-{$date}.{$extension}";
+        return "resultats-verification-{$niveau}-{$parcours}-{$sessionType}{$suffixe}-{$date}.{$extension}";
     }
-
 
     private function prepareDataForExport()
     {
@@ -802,6 +843,129 @@ class ResultatVerification extends Component
         return $resultatsEnrichis;
     }
 
+    /**
+     * CORRECTION : Méthode pour obtenir les statistiques détaillées par session
+     */
+    public function getStatistiquesDetaillees()
+    {
+        if (!$this->sessionActive || !$this->examen) {
+            return [];
+        }
+
+        $stats = [
+            'session' => [
+                'type' => $this->sessionActive->type,
+                'annee_universitaire' => $this->sessionActive->anneeUniversitaire->nom ?? 'N/A',
+                'is_active' => $this->sessionActive->is_active,
+                'is_current' => $this->sessionActive->is_current
+            ],
+            'examen' => [
+                'nom' => $this->examen->nom,
+                'niveau' => $this->examen->niveau->nom ?? 'N/A',
+                'parcours' => $this->examen->parcours->nom ?? 'N/A'
+            ],
+            'fusion' => [
+                'etape_actuelle' => $this->etapeFusion,
+                'verification_possible' => $this->showVerification
+            ],
+            'resultats' => [
+                'total' => $this->totalResultats,
+                'verifies' => $this->resultatsVerifies,
+                'non_verifies' => $this->resultatsNonVerifies,
+                'pourcentage' => $this->pourcentageVerification
+            ]
+        ];
+
+        return $stats;
+    }
+
+    /**
+     * CORRECTION : Méthode pour vérifier la cohérence des données par session
+     */
+    public function verifierCoherenceSession()
+    {
+        if (!$this->sessionActive || !$this->examen) {
+            return false;
+        }
+
+        try {
+            // Vérifier que les ResultatFusion correspondent à la session active
+            $resultatsIncorrects = ResultatFusion::where('examen_id', $this->examenId)
+                ->where('session_exam_id', '!=', $this->sessionActive->id)
+                ->count();
+
+            // Vérifier que les Copies correspondent à la session active
+            $copiesIncorrectes = Copie::where('examen_id', $this->examenId)
+                ->where('session_exam_id', '!=', $this->sessionActive->id)
+                ->count();
+
+            if ($resultatsIncorrects > 0 || $copiesIncorrectes > 0) {
+                Log::warning('Incohérence détectée dans les données de session', [
+                    'examen_id' => $this->examenId,
+                    'session_active_id' => $this->sessionActive->id,
+                    'resultats_incorrects' => $resultatsIncorrects,
+                    'copies_incorrectes' => $copiesIncorrectes
+                ]);
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification de cohérence', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'session_active_id' => $this->sessionActive->id
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * CORRECTION : Méthode pour nettoyer les données orphelines
+     */
+    public function nettoyerDonneesOrphelines()
+    {
+        if (!Auth::user()->hasPermissionTo('resultats.admin')) {
+            toastr()->error('Permission insuffisante pour cette action');
+            return;
+        }
+
+        try {
+            DB::transaction(function () {
+                // Supprimer les ResultatFusion sans session valide
+                $orphelinesResultats = ResultatFusion::where('examen_id', $this->examenId)
+                    ->whereDoesntHave('sessionExam')
+                    ->delete();
+
+                // Supprimer les Copies sans session valide
+                $orphelinesCopies = Copie::where('examen_id', $this->examenId)
+                    ->whereDoesntHave('sessionExam')
+                    ->delete();
+
+                Log::info('Nettoyage données orphelines effectué', [
+                    'examen_id' => $this->examenId,
+                    'resultats_supprimes' => $orphelinesResultats,
+                    'copies_supprimees' => $orphelinesCopies,
+                    'user_id' => Auth::id()
+                ]);
+
+                if ($orphelinesResultats > 0 || $orphelinesCopies > 0) {
+                    toastr()->success("Nettoyage effectué : {$orphelinesResultats} résultats et {$orphelinesCopies} copies orphelines supprimés.");
+                } else {
+                    toastr()->info('Aucune donnée orpheline trouvée.');
+                }
+            });
+
+            $this->loadResultats();
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du nettoyage', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'user_id' => Auth::id()
+            ]);
+            toastr()->error('Erreur lors du nettoyage : ' . $e->getMessage());
+        }
+    }
 
     public function render()
     {

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('etudiant_id')->comment('Étudiant concerné');
             $table->unsignedBigInteger('examen_id')->comment('Examen concerné');
+            $table->unsignedBigInteger('session_exam_id')->nullable();
             $table->unsignedBigInteger('code_anonymat_id')->comment('Code d\'anonymat utilisé');
             $table->unsignedBigInteger('ec_id');
             $table->decimal('note', 5, 2)->comment('Note à vérifier');
@@ -30,16 +31,19 @@ return new class extends Migration
             // Contraintes étrangères
             $table->foreign('etudiant_id')->references('id')->on('etudiants')->onDelete('cascade');
             $table->foreign('examen_id')->references('id')->on('examens')->onDelete('cascade');
+            $table->foreign('session_exam_id')->references('id')->on('session_exams')->onDelete('set null');
             $table->foreign('code_anonymat_id')->references('id')->on('codes_anonymat')->onDelete('cascade');
             $table->foreign('ec_id')->references('id')->on('ecs');
             $table->foreign('genere_par')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('modifie_par')->references('id')->on('users')->onDelete('set null');
 
-            // Contrainte d'unicité
-            $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_fusion_etudiant');
+            // CONTRAINTE D'UNICITÉ CORRIGÉE - SEUL CHANGEMENT ICI !!!
+            // AVANT (INCORRECT) : $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_fusion_etudiant');
+            // APRÈS (CORRECT) :
+            $table->unique(['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'], 'unique_resultat_fusion_etudiant');
 
             // Index pour optimisation
-            $table->index(['examen_id', 'statut'], 'idx_fusion_examen_statut');
+            $table->index(['examen_id', 'statut', 'session_exam_id', 'ec_id', 'etudiant_id'], 'idx_resultats_fusion_session');
             $table->index(['etudiant_id', 'statut'], 'idx_fusion_etudiant_statut');
             $table->index(['operation_id'], 'idx_fusion_operation');
         });

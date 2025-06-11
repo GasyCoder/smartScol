@@ -12,9 +12,12 @@ use Livewire\Component;
 use App\Models\Etudiant;
 use App\Models\Manchette;
 use App\Models\CodeAnonymat;
+use App\Models\SessionExam;
+use App\Models\AnneeUniversitaire;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 /**
  * @property \Illuminate\Support\Collection $niveaux
@@ -27,17 +30,18 @@ class CopiesIndex extends Component
     use WithPagination;
 
     // Variables de filtrage et contexte
+    public $ecSearch = '';
+    public $ec_id = null;
     public $niveau_id;
     public $parcours_id;
     public $salle_id;
-    public $ec_id;
     public $examen_id;
+    public $session_exam_id;
     public $noteFilter = 'all';
     public $sortField = 'created_at';
     public $sortDirection = 'asc';
     public $perPage = 25;
     public $totalEtudiantsPerEc = [];
-
 
     // Liste des données pour les sélecteurs
     public $niveaux = [];
@@ -59,10 +63,18 @@ class CopiesIndex extends Component
     public $currentSalleName = '';
     public $currentEcDate = '';
     public $currentEcHeure = '';
+    public $currentSessionType = '';
     public $totalCopiesCount = 0;
     public $userCopiesCount = 0;
     public $totalEtudiantsCount = 0;
     public $etudiantsSansNote = [];
+
+    // Gestion des sessions
+    public $sessionActive = null;
+    public $sessionActiveId = null;
+    public $sessionType = null;
+    public $sessionInfo = '';
+    public $canAddCopies = true;
 
     // Messages de statut
     public $message = '';
@@ -72,11 +84,12 @@ class CopiesIndex extends Component
     public $showDeleteModal = false;
     public $copieToDelete = null;
 
-    // Mise à jour des règles de validation pour inclure ec_id
+    // Mise à jour des règles de validation pour inclure session_exam_id
     protected $rules = [
         'code_anonymat' => 'required|string|max:20',
         'note' => 'required|numeric|min:0|max:20',
         'ec_id' => 'required|exists:ecs,id',
+        'session_exam_id' => 'required|exists:session_exams,id',
     ];
 
     public function sortBy($field)
@@ -100,6 +113,7 @@ class CopiesIndex extends Component
             'salle_id' => $this->salle_id,
             'ec_id' => $this->ec_id,
             'examen_id' => $this->examen_id,
+            'session_exam_id' => $this->session_exam_id,
         ]);
     }
 
@@ -122,6 +136,9 @@ class CopiesIndex extends Component
 
                     if (isset($filtres['ec_id'])) {
                         $this->ec_id = $filtres['ec_id'];
+                        if (isset($filtres['session_exam_id'])) {
+                            $this->session_exam_id = $filtres['session_exam_id'];
+                        }
                         $this->updatedEcId();
                     }
                 }
@@ -129,29 +146,313 @@ class CopiesIndex extends Component
         }
     }
 
-    // Méthode pour charger la liste des étudiants traités/non traités
-    public function chargerEtatEtudiants()
+    /**
+     * NOUVELLE MÉTHODE : Charger TOUS les ECs depuis tous les examens du niveau/parcours
+     */
+    private function loadAllEcsFromExamens()
     {
-        if (!$this->examen_id || !$this->ec_id || $this->ec_id === 'all') {
+        if (!$this->niveau_id || !$this->salle_id) {
+            $this->ecs = collect();
             return;
         }
 
-        // Récupérer tous les étudiants pour ce niveau/parcours
-        $etudiants = Etudiant::where('niveau_id', $this->niveau_id)
-            ->where('parcours_id', $this->parcours_id)
-            ->get();
+        $sessionId = $this->getCurrentSessionId();
+        $sessionType = $this->getCurrentSessionType();
 
-        // Récupérer les IDs des étudiants qui ont déjà une copie pour cette matière
-        $etudiantsAvecCopiesIds = Manchette::join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
-            ->join('copies', 'manchettes.code_anonymat_id', '=', 'copies.code_anonymat_id')
-            ->where('manchettes.examen_id', $this->examen_id)
-            ->where('codes_anonymat.ec_id', $this->ec_id)
-            ->pluck('manchettes.etudiant_id')
+        // Récupérer TOUS les examens pour ce niveau/parcours
+        $examens = DB::table('examens')
+            ->where('niveau_id', $this->niveau_id)
+            ->where('parcours_id', $this->parcours_id)
+            ->whereNull('deleted_at')
+            ->pluck('id')
             ->toArray();
 
-        // Diviser les étudiants en deux groupes
-        $this->etudiantsAvecCopies = $etudiants->whereIn('id', $etudiantsAvecCopiesIds)->values();
+        \Log::info('Examens trouvés pour niveau/parcours (CopiesIndex)', [
+            'niveau_id' => $this->niveau_id,
+            'parcours_id' => $this->parcours_id,
+            'examens_ids' => $examens
+        ]);
+
+        if (empty($examens)) {
+            $this->ecs = collect();
+            return;
+        }
+
+        // Récupérer TOUS les ECs associés à ces examens pour cette salle
+        $ecsData = DB::table('ecs')
+            ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+            ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
+            ->join('ues', 'ecs.ue_id', '=', 'ues.id')
+            ->whereIn('examen_ec.examen_id', $examens)
+            ->where('examen_ec.salle_id', $this->salle_id)
+            ->whereNull('ecs.deleted_at')
+            ->whereNull('examens.deleted_at')
+            ->select(
+                'ecs.*',
+                'ues.nom as ue_nom',
+                'ues.abr as ue_abr',
+                'examen_ec.examen_id',
+                'examen_ec.date_specifique',
+                'examen_ec.heure_specifique'
+            )
+            ->distinct()
+            ->orderBy('ues.nom')
+            ->orderBy('ecs.nom')
+            ->get();
+
+        \Log::info('ECs trouvés depuis tous les examens (CopiesIndex)', [
+            'count' => $ecsData->count(),
+            'salle_id' => $this->salle_id,
+            'examens_checked' => $examens,
+            'ecs_found' => $ecsData->pluck('nom')->toArray()
+        ]);
+
+        if ($ecsData->isEmpty()) {
+            $this->ecs = collect();
+            return;
+        }
+
+        // Grouper par EC (car un EC peut être dans plusieurs examens)
+        $ecsGrouped = $ecsData->groupBy('id')->map(function($group) use ($sessionType) {
+            $firstEc = $group->first();
+
+            // Prendre le premier examen comme référence si pas encore défini
+            if (!$this->examen_id) {
+                $this->examen_id = $firstEc->examen_id;
+            }
+
+            return (object) [
+                'id' => $firstEc->id,
+                'nom' => $firstEc->nom,
+                'abr' => $firstEc->abr,
+                'coefficient' => $firstEc->coefficient,
+                'ue_id' => $firstEc->ue_id,
+                'ue_nom' => $firstEc->ue_nom,
+                'ue_abr' => $firstEc->ue_abr,
+                'enseignant' => $firstEc->enseignant,
+                'examen_id' => $firstEc->examen_id,
+                'date_specifique' => $firstEc->date_specifique,
+                'heure_specifique' => $firstEc->heure_specifique,
+                'date_formatted' => $firstEc->date_specifique ?
+                    \Carbon\Carbon::parse($firstEc->date_specifique)->format('d/m/Y') : null,
+                'heure_formatted' => $firstEc->heure_specifique ?
+                    \Carbon\Carbon::parse($firstEc->heure_specifique)->format('H:i') : null,
+                'has_copies' => false, // Sera calculé après
+                'copies_count' => 0,  // Sera calculé après
+                'user_copies_count' => 0,
+                'pourcentage' => 0,
+                'session_libelle' => ucfirst($sessionType)
+            ];
+        })->values();
+
+        $this->ecs = $ecsGrouped;
+
+        // Calculer les compteurs de copies pour tous les ECs
+        $this->calculateCopiesCountsForAllEcs();
+
+        \Log::info('ECs finaux chargés (CopiesIndex)', [
+            'count' => $this->ecs->count(),
+            'examen_id_used' => $this->examen_id,
+            'ecs_names' => $this->ecs->pluck('nom')->toArray()
+        ]);
+
+        // Sélectionner automatiquement si une seule EC
+        if ($this->ecs->count() == 1) {
+            $this->ec_id = $this->ecs->first()->id;
+            $this->updatedEcId();
+        }
+    }
+
+    /**
+     * Calculer les compteurs de copies pour tous les ECs chargés
+     */
+    private function calculateCopiesCountsForAllEcs()
+    {
+        if ($this->ecs->isEmpty()) {
+            return;
+        }
+
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return;
+        }
+
+        $ecIds = $this->ecs->pluck('id')->toArray();
+
+        // Compter les copies par EC pour la session active
+        $copiesCounts = DB::table('copies')
+            ->where('session_exam_id', $sessionId)
+            ->whereIn('ec_id', $ecIds)
+            ->whereNull('deleted_at')
+            ->select('ec_id', DB::raw('count(*) as total'))
+            ->groupBy('ec_id')
+            ->pluck('total', 'ec_id')
+            ->toArray();
+
+        // Compter les copies de l'utilisateur
+        $userCopiesCounts = DB::table('copies')
+            ->where('session_exam_id', $sessionId)
+            ->where('saisie_par', Auth::id())
+            ->whereIn('ec_id', $ecIds)
+            ->whereNull('deleted_at')
+            ->select('ec_id', DB::raw('count(*) as total'))
+            ->groupBy('ec_id')
+            ->pluck('total', 'ec_id')
+            ->toArray();
+
+        // Mettre à jour les compteurs
+        $this->ecs = $this->ecs->map(function($ec) use ($copiesCounts, $userCopiesCounts) {
+            $copiesCount = $copiesCounts[$ec->id] ?? 0;
+            $userCount = $userCopiesCounts[$ec->id] ?? 0;
+
+            $ec->copies_count = $copiesCount;
+            $ec->user_copies_count = $userCount;
+            $ec->has_copies = $copiesCount > 0;
+            $ec->pourcentage = $this->totalEtudiantsCount > 0 ?
+                round(($copiesCount / $this->totalEtudiantsCount) * 100, 1) : 0;
+
+            return $ec;
+        });
+
+        \Log::info('Compteurs mis à jour pour tous les ECs (CopiesIndex)', [
+            'copies_counts' => $copiesCounts,
+            'user_counts' => $userCopiesCounts
+        ]);
+    }
+
+    /**
+     * Met à jour les informations de session
+     */
+    private function updateSessionInfo()
+    {
+        try {
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) {
+                throw new \Exception('Aucune année universitaire active trouvée.');
+            }
+
+            $sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                ->where('is_active', true)
+                ->where('is_current', true)
+                ->first();
+
+            if (!$sessionActive) {
+                throw new \Exception('Aucune session active et courante trouvée.');
+            }
+
+            $this->sessionActive = $sessionActive;
+            $this->sessionActiveId = $sessionActive->id;
+            $this->session_exam_id = $sessionActive->id;
+            $this->sessionType = strtolower($sessionActive->type);
+            $this->currentSessionType = $sessionActive->type;
+            $this->canAddCopies = true;
+            $this->sessionInfo = "Session {$sessionActive->type} active - Année {$anneeActive->libelle}";
+
+            \Log::info('Session active mise à jour (CopiesIndex)', [
+                'session_id' => $this->session_exam_id,
+                'type' => $this->sessionType,
+                'annee_universitaire' => $anneeActive->libelle,
+            ]);
+        } catch (\Exception $e) {
+            $this->sessionInfo = 'Erreur : ' . $e->getMessage();
+            $this->sessionActive = null;
+            $this->sessionActiveId = null;
+            $this->session_exam_id = null;
+            $this->currentSessionType = '';
+            $this->canAddCopies = false;
+            \Log::error('Erreur lors de la mise à jour de la session (CopiesIndex)', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    /**
+     * Récupère l'ID de la session actuelle
+     */
+    private function getCurrentSessionId()
+    {
+        if (!$this->sessionActiveId) {
+            $this->updateSessionInfo();
+        }
+        return $this->sessionActiveId;
+    }
+
+    /**
+     * Récupère le type de session actuel
+     */
+    private function getCurrentSessionType()
+    {
+        return $this->sessionActive ? strtolower($this->sessionActive->type) : 'normale';
+    }
+
+    // CORRIGÉ : Méthode pour charger les étudiants sans copie pour la session sélectionnée
+    public function chargerEtatEtudiants()
+    {
+        if (!$this->examen_id || !$this->ec_id || $this->ec_id === 'all' || !$this->session_exam_id) {
+            $this->etudiantsSansCopies = collect();
+            return;
+        }
+
+        // NOUVELLE LOGIQUE : Récupérer la session actuelle
+        $session = SessionExam::find($this->session_exam_id);
+        if (!$session) {
+            $this->etudiantsSansCopies = collect();
+            return;
+        }
+
+        // LOGIQUE DIFFÉRENTE SELON LE TYPE DE SESSION
+        if ($session->type === 'Normale') {
+            // Session normale : TOUS les étudiants du niveau/parcours
+            $etudiants = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->get();
+
+        } else {
+            // Session rattrapage : SEULS les étudiants éligibles
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                $this->etudiantsSansCopies = collect();
+                return;
+            }
+
+            // Utiliser la nouvelle méthode du modèle Etudiant
+            $etudiants = Etudiant::eligiblesRattrapage(
+                $this->niveau_id,
+                $this->parcours_id,
+                $sessionNormale->id
+            )->get();
+        }
+
+        // Récupérer les IDs des étudiants qui ont déjà une copie pour cette EC dans cette session
+        $etudiantsAvecCopiesIds = Copie::where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereHas('codeAnonymat.manchette', function($query) {
+                $query->where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $this->session_exam_id);
+            })
+            ->with('codeAnonymat.manchette')
+            ->get()
+            ->pluck('codeAnonymat.manchette.etudiant_id')
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        // Étudiants SANS copie pour cette EC dans cette session
         $this->etudiantsSansCopies = $etudiants->whereNotIn('id', $etudiantsAvecCopiesIds)->values();
+
+        // Log pour debug
+        \Log::info('État étudiants chargé avec nouvelle logique (Copies)', [
+            'session_type' => $session->type,
+            'total_etudiants_disponibles' => $etudiants->count(),
+            'avec_copies' => count($etudiantsAvecCopiesIds),
+            'sans_copies' => $this->etudiantsSansCopies->count(),
+            'ec_id' => $this->ec_id,
+            'session_id' => $this->session_exam_id
+        ]);
     }
 
     public function clearFilter($filterName)
@@ -165,13 +466,16 @@ class CopiesIndex extends Component
             $this->salle_id = null;
             $this->ec_id = null;
             $this->examen_id = null;
+            $this->session_exam_id = null;
         } elseif ($filterName === 'parcours_id') {
             $this->salle_id = null;
             $this->ec_id = null;
             $this->examen_id = null;
+            $this->session_exam_id = null;
         } elseif ($filterName === 'salle_id') {
             $this->ec_id = null;
             $this->examen_id = null;
+            $this->session_exam_id = null;
         }
 
         // Réinitialiser les informations associées
@@ -181,6 +485,7 @@ class CopiesIndex extends Component
             $this->currentSalleName = '';
             $this->currentEcDate = '';
             $this->currentEcHeure = '';
+            $this->currentSessionType = '';
         }
 
         $this->storeFiltres();
@@ -192,14 +497,13 @@ class CopiesIndex extends Component
         $this->resetPage();
     }
 
-
     // Pour réinitialiser les filtres
     public function resetFiltres()
     {
         $this->reset([
-            'niveau_id', 'parcours_id', 'salle_id', 'ec_id', 'examen_id',
+            'niveau_id', 'parcours_id', 'salle_id', 'ec_id', 'examen_id', 'session_exam_id',
             'selectedSalleCode', 'currentEcName', 'currentSalleName',
-            'currentEcDate', 'currentEcHeure'
+            'currentEcDate', 'currentEcHeure', 'currentSessionType'
         ]);
         session()->forget('copies.filtres');
 
@@ -212,17 +516,55 @@ class CopiesIndex extends Component
 
     public function mount()
     {
-        // Charger les niveaux
-        $this->niveaux = Niveau::where('is_active', true)
-            ->orderBy('abr', 'desc')
-            ->get();
-
-        // Initialiser avec des collections vides
+        $this->niveaux = Niveau::where('is_active', true)->orderBy('id', 'asc')->get();
         $this->parcours = collect();
         $this->salles = collect();
         $this->ecs = collect();
 
-        // Charger les filtres enregistrés
+        try {
+            // Tenter de récupérer la session active
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) {
+                throw new \Exception('Aucune année universitaire active trouvée.');
+            }
+
+            $sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                ->where('is_active', true)
+                ->where('is_current', true)
+                ->first();
+
+            if (!$sessionActive) {
+                throw new \Exception('Aucune session active et courante trouvée.');
+            }
+
+            $this->sessionActive = $sessionActive;
+            $this->sessionActiveId = $sessionActive->id;
+            $this->session_exam_id = $sessionActive->id;
+            $this->currentSessionType = $sessionActive->type;
+            $this->sessionType = strtolower($sessionActive->type);
+            $this->canAddCopies = true;
+            $this->sessionInfo = "Session {$sessionActive->type} active - Année {$anneeActive->libelle}";
+
+            \Log::info('Session active initialisée dans CopiesIndex', [
+                'session_id' => $this->session_exam_id,
+                'type' => $this->currentSessionType,
+                'is_active' => $sessionActive->is_active,
+                'is_current' => $sessionActive->is_current,
+            ]);
+        } catch (\Exception $e) {
+            $this->sessionInfo = 'Erreur : ' . $e->getMessage();
+            $this->sessionActive = null;
+            $this->sessionActiveId = null;
+            $this->session_exam_id = null;
+            $this->currentSessionType = '';
+            $this->canAddCopies = false;
+            \Log::error('Erreur lors de l\'initialisation de la session dans CopiesIndex', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            toastr()->error($this->sessionInfo);
+        }
+
         $this->loadFiltres();
     }
 
@@ -256,58 +598,20 @@ class CopiesIndex extends Component
             }
         }
 
+        $this->updateSessionInfo();
         $this->storeFiltres();
         $this->resetPage();
     }
 
-
     public function exportNotes()
     {
-        // Implémentez l'export selon vos besoins
         toastr()->info('Fonctionnalité d\'export en cours de développement');
     }
 
     public function printNotes()
     {
-        // Implémentez l'impression selon vos besoins
         toastr()->info('Fonctionnalité d\'impression en cours de développement');
     }
-
-    public function openCopieModalForEtudiant($etudiantId)
-    {
-        // Trouvez l'étudiant
-        $etudiant = Etudiant::find($etudiantId);
-        if (!$etudiant) {
-            toastr()->error('Étudiant introuvable');
-            return;
-        }
-
-        // Ouvrez la modal normale d'abord
-        $this->openCopieModal();
-
-        if ($this->showCopieModal) {
-            // Logique spécifique à implémenter selon votre contexte
-            toastr()->info('Saisie pour l\'étudiant : ' . $etudiant->nom . ' ' . $etudiant->prenom);
-        }
-    }
-
-
-    public function openCopieModalForAll()
-    {
-        if (count($this->etudiantsSansCopies) === 0) {
-            toastr()->info('Tous les étudiants ont déjà une note pour cette matière');
-            return;
-        }
-
-        // Ouvrez la modal normale d'abord
-        $this->openCopieModal();
-
-        if ($this->showCopieModal) {
-            // Logique spécifique à implémenter selon votre contexte
-            toastr()->info('Prêt à saisir les ' . count($this->etudiantsSansCopies) . ' notes manquantes');
-        }
-    }
-
 
     public function updatedParcoursId()
     {
@@ -352,8 +656,6 @@ class CopiesIndex extends Component
         $this->resetPage();
     }
 
-
-
     public function updatedSalleId()
     {
         $this->ecs = collect();
@@ -366,96 +668,132 @@ class CopiesIndex extends Component
         $this->currentEcHeure = '';
 
         if ($this->salle_id) {
-            // Récupérer le code et le nom de la salle
             $salle = Salle::find($this->salle_id);
             if ($salle) {
                 $this->selectedSalleCode = $salle->code_base ?? '';
                 $this->currentSalleName = $salle->nom ?? '';
             }
 
-            // Récupérer l'ID de l'examen
-            $examens = DB::table('examens')
-                ->join('examen_ec', 'examens.id', '=', 'examen_ec.examen_id')
+            // APPROCHE SIMPLE : Charger les ECs directement sans doublons
+            $ecsUniques = DB::table('ecs')
+                ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+                ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
+                ->join('ues', 'ecs.ue_id', '=', 'ues.id')
                 ->where('examens.niveau_id', $this->niveau_id)
                 ->where('examens.parcours_id', $this->parcours_id)
                 ->where('examen_ec.salle_id', $this->salle_id)
-                ->select('examens.id')
-                ->distinct()
-                ->get()
-                ->pluck('id');
+                ->whereNull('ecs.deleted_at')
+                ->whereNull('examens.deleted_at')
+                ->select(
+                    'ecs.id',
+                    'ecs.nom',
+                    'ecs.abr',
+                    'ecs.coefficient',
+                    'ecs.ue_id',
+                    'ecs.enseignant',
+                    'ues.nom as ue_nom',
+                    'ues.abr as ue_abr',
+                    // IMPORTANT : Prendre le premier examen trouvé
+                    DB::raw('MIN(examen_ec.examen_id) as examen_id'),
+                    DB::raw('MIN(examen_ec.date_specifique) as date_specifique'),
+                    DB::raw('MIN(examen_ec.heure_specifique) as heure_specifique')
+                )
+                ->groupBy(
+                    'ecs.id',
+                    'ecs.nom',
+                    'ecs.abr',
+                    'ecs.coefficient',
+                    'ecs.ue_id',
+                    'ecs.enseignant',
+                    'ues.nom',
+                    'ues.abr'
+                )
+                ->orderBy('ues.nom')
+                ->orderBy('ecs.nom')
+                ->get();
 
-            if ($examens->count() > 0) {
-                $this->examen_id = $examens->first();
+            if ($ecsUniques->isNotEmpty()) {
+                // Définir l'examen de référence (le premier trouvé)
+                $this->examen_id = $ecsUniques->first()->examen_id;
 
-                // Récupérer les matières avec leurs dates et heures
-                $ecData = DB::table('ecs')
-                    ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
-                    ->where('examen_ec.examen_id', $this->examen_id)
-                    ->where('examen_ec.salle_id', $this->salle_id)
-                    ->whereNull('ecs.deleted_at')
-                    ->select(
-                        'ecs.*',
-                        'examen_ec.examen_id',
-                        'examen_ec.date_specifique',
-                        'examen_ec.heure_specifique'
-                    )
-                    ->distinct()
-                    ->get();
-
-                // Compter les copies pour chaque matière
-                $ecIds = $ecData->pluck('id')->toArray();
-
-                // Compter le total des copies par EC
-                $copiesCounts = DB::table('copies')
-                    ->where('examen_id', $this->examen_id)
-                    ->whereIn('ec_id', $ecIds)
-                    ->select('ec_id', DB::raw('count(*) as total'))
-                    ->groupBy('ec_id')
-                    ->pluck('total', 'ec_id')
-                    ->toArray();
-
-                // Compter les copies saisies par l'utilisateur actuel pour chaque EC
-                $currentUserCopiesCounts = DB::table('copies')
-                    ->where('examen_id', $this->examen_id)
-                    ->whereIn('ec_id', $ecIds)
-                    ->where('saisie_par', Auth::id())
-                    ->select('ec_id', DB::raw('count(*) as total'))
-                    ->groupBy('ec_id')
-                    ->pluck('total', 'ec_id')
-                    ->toArray();
-
-                // Transformer en collection d'objets avec dates formatées
-                $this->ecs = $ecData->map(function($item) use ($copiesCounts, $currentUserCopiesCounts) {
-                    $ec = new \stdClass();
-                    foreach ((array)$item as $key => $value) {
-                        $ec->$key = $value;
-                    }
-
-                    // Formatage des dates
-                    $ec->date_formatted = $ec->date_specifique ? \Carbon\Carbon::parse($ec->date_specifique)->format('d/m/Y') : null;
-                    $ec->heure_formatted = $ec->heure_specifique ? \Carbon\Carbon::parse($ec->heure_specifique)->format('H:i') : null;
-
-                    // Statistiques
-                    $ec->has_copies = isset($copiesCounts[$ec->id]) && $copiesCounts[$ec->id] > 0;
-                    $ec->copies_count = $copiesCounts[$ec->id] ?? 0;
-                    $ec->user_copies_count = $currentUserCopiesCounts[$ec->id] ?? 0;
-                    $ec->pourcentage = $this->totalEtudiantsCount > 0
-                        ? round(($ec->copies_count / $this->totalEtudiantsCount) * 100, 1)
-                        : 0;
-
-                    return $ec;
+                // Formater les ECs
+                $this->ecs = $ecsUniques->map(function($ec) {
+                    return (object) [
+                        'id' => $ec->id,
+                        'nom' => $ec->nom,
+                        'abr' => $ec->abr,
+                        'coefficient' => $ec->coefficient,
+                        'ue_id' => $ec->ue_id,
+                        'ue_nom' => $ec->ue_nom,
+                        'ue_abr' => $ec->ue_abr,
+                        'enseignant' => $ec->enseignant,
+                        'examen_id' => $this->examen_id,
+                        'original_examen_id' => $ec->examen_id,
+                        'date_specifique' => $ec->date_specifique,
+                        'heure_specifique' => $ec->heure_specifique,
+                        'date_formatted' => $ec->date_specifique ?
+                            \Carbon\Carbon::parse($ec->date_specifique)->format('d/m/Y') : null,
+                        'heure_formatted' => $ec->heure_specifique ?
+                            \Carbon\Carbon::parse($ec->heure_specifique)->format('H:i') : null,
+                        'has_copies' => false,
+                        'copies_count' => 0,
+                        'user_copies_count' => 0,
+                        'pourcentage' => 0,
+                        'session_libelle' => ucfirst($this->getCurrentSessionType())
+                    ];
                 });
 
-                // S'il n'y a qu'une seule EC, la sélectionner automatiquement
-                if ($this->ecs->count() == 1) {
-                    $this->ec_id = $this->ecs->first()->id;
-                    $this->updatedEcId();
-                }
+                // Calculer les compteurs
+                $this->calculateCopiesCountsForAllEcs();
+
+                \Log::info('ECs chargés sans doublons (méthode simple)', [
+                    'count' => $this->ecs->count(),
+                    'examen_id' => $this->examen_id,
+                    'ecs_names' => $this->ecs->pluck('nom')->toArray()
+                ]);
             }
+
+            $this->storeFiltres();
+            $this->resetPage();
+        }
+    }
+
+
+    /**
+     * NOUVELLE MÉTHODE : S'assurer que les codes d'anonymat existent pour l'examen de référence
+     */
+    private function ensureCodesAnonymatForReferenceExam()
+    {
+        if (!$this->examen_id || $this->ecs->isEmpty()) {
+            return;
         }
 
-        $this->storeFiltres();
-        $this->resetPage();
+        foreach ($this->ecs as $ec) {
+            // Vérifier si des codes d'anonymat existent déjà pour cette EC dans l'examen de référence
+            $existingCodesCount = CodeAnonymat::where('examen_id', $this->examen_id)
+                ->where('ec_id', $ec->id)
+                ->count();
+
+            if ($existingCodesCount == 0) {
+                // Si aucun code n'existe, en créer quelques-uns de base
+                $baseCode = $this->selectedSalleCode;
+                for ($i = 1; $i <= 4; $i++) {
+                    CodeAnonymat::firstOrCreate([
+                        'examen_id' => $this->examen_id,
+                        'ec_id' => $ec->id,
+                        'code_complet' => $baseCode . $i,
+                    ], [
+                        'sequence' => $i,
+                    ]);
+                }
+
+                \Log::info('Codes d\'anonymat créés pour EC', [
+                    'ec_id' => $ec->id,
+                    'examen_id' => $this->examen_id,
+                    'codes_crees' => 4
+                ]);
+            }
+        }
     }
 
     public function updatedEcId()
@@ -468,14 +806,35 @@ class CopiesIndex extends Component
         // Charger l'état des étudiants
         $this->chargerEtatEtudiants();
 
-        // Recalculer le nombre total d'étudiants de base (toujours commencer par la vraie valeur)
-        $baseEtudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
-            ->where('parcours_id', $this->parcours_id)
-            ->count();
+        // NOUVELLE LOGIQUE : Calculer le nombre d'étudiants selon la session
+        $session = SessionExam::find($this->session_exam_id);
+        $baseEtudiantsCount = 0;
+
+        if ($session) {
+            if ($session->type === 'Normale') {
+                // Session normale : TOUS les étudiants du niveau/parcours
+                $baseEtudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
+                    ->where('parcours_id', $this->parcours_id)
+                    ->count();
+            } else {
+                // Session rattrapage : SEULS les étudiants éligibles
+                $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                    ->where('type', 'Normale')
+                    ->first();
+
+                if ($sessionNormale) {
+                    $baseEtudiantsCount = Etudiant::eligiblesRattrapage(
+                        $this->niveau_id,
+                        $this->parcours_id,
+                        $sessionNormale->id
+                    )->count();
+                }
+            }
+        }
 
         // Cas spécial: "Toutes les matières"
         if ($this->ec_id === 'all') {
-            if ($this->examen_id && $this->salle_id) {
+            if ($this->examen_id && $this->salle_id && $this->session_exam_id) {
                 // Récupérer les informations sur les matières
                 $ecInfo = DB::table('ecs')
                     ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
@@ -488,20 +847,20 @@ class CopiesIndex extends Component
                 $ecIds = $ecInfo->pluck('id')->toArray();
                 $this->currentEcName = 'Toutes les matières (' . implode(', ', $ecNames) . ')';
 
-                // Calculer le nombre total de copies pour toutes les matières
+                // Calculer le nombre total de copies pour toutes les matières DANS LA SESSION ACTIVE
                 $this->totalCopiesCount = Copie::where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $this->session_exam_id)
                     ->count();
 
-                // Copies saisies par l'utilisateur actuel
+                // Copies saisies par l'utilisateur actuel dans la session active
                 $this->userCopiesCount = Copie::where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $this->session_exam_id)
                     ->where('saisie_par', Auth::id())
                     ->count();
 
-                // Important : ajuster le nombre total d'étudiants × matières pour le calcul du pourcentage
-                // CORRIGÉ : Calcul direct sans accumulation
+                // Calculer le nombre total d'étudiants × matières
                 $nombreMatieres = count($ecIds);
                 if ($nombreMatieres > 0) {
-                    // Calculer directement le nombre total d'étudiants × matières
                     $this->totalEtudiantsCount = $baseEtudiantsCount * $nombreMatieres;
                 } else {
                     $this->totalEtudiantsCount = $baseEtudiantsCount;
@@ -509,48 +868,69 @@ class CopiesIndex extends Component
             }
         }
         // Cas normal: une matière spécifique
-        else if ($this->ec_id && $this->salle_id) {
-            // Réinitialiser le nombre total d'étudiants à sa valeur de base
+        else if ($this->ec_id && $this->salle_id && $this->session_exam_id) {
+            // Utiliser le nombre d'étudiants calculé selon la session
             $this->totalEtudiantsCount = $baseEtudiantsCount;
 
-            // Rechercher les informations sur l'examen
-            $examenEc = DB::table('examen_ec')
-                ->where('ec_id', $this->ec_id)
-                ->where('salle_id', $this->salle_id)
-                ->first();
-
-            if ($examenEc) {
-                $this->examen_id = $examenEc->examen_id;
-
-                // Récupérer les informations de l'EC sélectionnée
-                $ecInfo = DB::table('ecs')
-                    ->join('examen_ec', function($join) {
-                        $join->on('ecs.id', '=', 'examen_ec.ec_id')
-                            ->where('examen_ec.examen_id', '=', $this->examen_id)
-                            ->where('examen_ec.salle_id', '=', $this->salle_id);
-                    })
-                    ->where('ecs.id', $this->ec_id)
-                    ->select('ecs.nom', 'examen_ec.date_specifique', 'examen_ec.heure_specifique')
+            // Essayer de trouver l'EC dans la collection chargée
+            $ec = $this->ecs->firstWhere('id', $this->ec_id);
+            if ($ec) {
+                $this->currentEcName = $ec->nom;
+                $this->currentEcDate = $ec->date_formatted ?? '';
+                $this->currentEcHeure = $ec->heure_formatted ?? '';
+                $this->examen_id = $ec->examen_id;
+            } else {
+                // Fallback: rechercher dans la base de données
+                $examenEc = DB::table('examen_ec')
+                    ->where('ec_id', $this->ec_id)
+                    ->where('salle_id', $this->salle_id)
                     ->first();
 
-                if ($ecInfo) {
-                    $this->currentEcName = $ecInfo->nom;
-                    $this->currentEcDate = $ecInfo->date_specifique ? \Carbon\Carbon::parse($ecInfo->date_specifique)->format('d/m/Y') : '';
-                    $this->currentEcHeure = $ecInfo->heure_specifique ? \Carbon\Carbon::parse($ecInfo->heure_specifique)->format('H:i') : '';
+                if ($examenEc) {
+                    $this->examen_id = $examenEc->examen_id;
+
+                    // Récupérer les informations de l'EC sélectionnée
+                    $ecInfo = DB::table('ecs')
+                        ->join('examen_ec', function($join) {
+                            $join->on('ecs.id', '=', 'examen_ec.ec_id')
+                                ->where('examen_ec.examen_id', '=', $this->examen_id)
+                                ->where('examen_ec.salle_id', '=', $this->salle_id);
+                        })
+                        ->where('ecs.id', $this->ec_id)
+                        ->select('ecs.nom', 'examen_ec.date_specifique', 'examen_ec.heure_specifique')
+                        ->first();
+
+                    if ($ecInfo) {
+                        $this->currentEcName = $ecInfo->nom;
+                        $this->currentEcDate = $ecInfo->date_specifique ? \Carbon\Carbon::parse($ecInfo->date_specifique)->format('d/m/Y') : '';
+                        $this->currentEcHeure = $ecInfo->heure_specifique ? \Carbon\Carbon::parse($ecInfo->heure_specifique)->format('H:i') : '';
+                    }
                 }
-
-                // Calculer le nombre de copies pour cette EC
-                $this->totalCopiesCount = Copie::where('examen_id', $this->examen_id)
-                    ->where('ec_id', $this->ec_id)
-                    ->count();
-
-                // Copies saisies par l'utilisateur actuel
-                $this->userCopiesCount = Copie::where('examen_id', $this->examen_id)
-                    ->where('ec_id', $this->ec_id)
-                    ->where('saisie_par', Auth::id())
-                    ->count();
             }
+
+            // Calculer le nombre de copies pour cette EC DANS LA SESSION ACTIVE
+            $this->totalCopiesCount = Copie::where('examen_id', $this->examen_id)
+                ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
+                ->count();
+
+            // Copies saisies par l'utilisateur actuel dans la session active
+            $this->userCopiesCount = Copie::where('examen_id', $this->examen_id)
+                ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
+                ->where('saisie_par', Auth::id())
+                ->count();
         }
+
+        // Log pour debug
+        \Log::info('updatedEcId - Compteurs mis à jour', [
+            'session_type' => $session ? $session->type : 'inconnue',
+            'base_etudiants_count' => $baseEtudiantsCount,
+            'total_etudiants_count' => $this->totalEtudiantsCount,
+            'total_copies_count' => $this->totalCopiesCount,
+            'user_copies_count' => $this->userCopiesCount,
+            'ec_id' => $this->ec_id
+        ]);
 
         // Effacer tout message précédent lors du changement d'EC
         $this->message = '';
@@ -579,34 +959,76 @@ class CopiesIndex extends Component
             return;
         }
 
-        // Vérifier le nombre de copies déjà saisies
-        $copiesCount = Copie::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->whereNull('deleted_at')
-            ->count();
-
-        // Compter le nombre d'étudiants pour ce niveau et parcours
-        $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
-            ->where('parcours_id', $this->parcours_id)
-            ->count();
-
-        // Vérifier que le nombre total d'étudiants est défini
-        if ($etudiantsCount === 0) {
-            $this->message = 'Aucun étudiant trouvé pour ce niveau et parcours. Veuillez vérifier vos filtres.';
+        // NOUVELLE LOGIQUE : Récupérer la session actuelle
+        $session = SessionExam::find($this->session_exam_id);
+        if (!$session) {
+            $this->message = 'Session introuvable';
             $this->messageType = 'error';
             toastr()->error($this->message);
             return;
         }
 
-        // Empêcher la saisie si le maximum est atteint
+        // Vérifier le nombre de copies déjà saisies POUR CETTE SESSION
+        $copiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id) // IMPORTANT : pour cette session
+            ->whereNull('deleted_at')
+            ->count();
+
+        // NOUVELLE LOGIQUE : Compter les étudiants selon le type de session
+        if ($session->type === 'Normale') {
+            // Session normale : TOUS les étudiants du niveau/parcours
+            $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->count();
+        } else {
+            // Session rattrapage : SEULS les étudiants éligibles
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                $this->message = 'Aucune session normale trouvée pour calculer les étudiants éligibles au rattrapage';
+                $this->messageType = 'error';
+                toastr()->error($this->message);
+                return;
+            }
+
+            $etudiantsCount = Etudiant::eligiblesRattrapage(
+                $this->niveau_id,
+                $this->parcours_id,
+                $sessionNormale->id
+            )->count();
+        }
+
+        // Log pour debug
+        \Log::info('openCopieModal - Compteurs calculés', [
+            'session_type' => $session->type,
+            'session_id' => $this->session_exam_id,
+            'etudiants_count' => $etudiantsCount,
+            'copies_count' => $copiesCount,
+            'ec_id' => $this->ec_id
+        ]);
+
+        // Vérifier que des étudiants sont disponibles
+        if ($etudiantsCount === 0) {
+            $sessionType = $session->type === 'Normale' ? 'normale' : 'rattrapage';
+            $this->message = "Aucun étudiant éligible trouvé pour la session {$sessionType}. Veuillez vérifier vos filtres.";
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
+        // Vérifier la limite UNIQUEMENT pour cette session
         if ($copiesCount >= $etudiantsCount) {
-            $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} copies pour {$etudiantsCount} étudiants.";
+            $sessionType = $session->type === 'Normale' ? 'normale' : 'rattrapage';
+            $this->message = "Limite atteinte pour la session {$sessionType} : Vous avez déjà saisi {$copiesCount} copies pour {$etudiantsCount} étudiants éligibles.";
             $this->messageType = 'warning';
             toastr()->warning($this->message);
             return;
         }
 
-        // Charger la liste des étudiants sans copie pour cette matière
+        // Charger la liste des étudiants sans copie pour cette matière dans cette session
         $this->etudiantsSansNote = $this->etudiantsSansCopies;
 
         // S'assurer que le code de salle est défini
@@ -621,15 +1043,15 @@ class CopiesIndex extends Component
         // Définir le code de base
         $baseCode = $this->selectedSalleCode;
 
-        // Commencer toujours à 1 et chercher le prochain code disponible
+        // Commencer toujours à 1 et chercher le prochain code disponible POUR CETTE SESSION
         $nextNumber = 1;
         $proposedCode = $baseCode . $nextNumber;
 
-        // Vérifier uniquement les codes déjà utilisés dans les COPIES (pas les manchettes)
-        // pour cette matière spécifique
+        // Vérifier uniquement les codes déjà utilisés dans les COPIES pour cette matière ET cette session
         while (Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
             ->where('copies.examen_id', $this->examen_id)
             ->where('copies.ec_id', $this->ec_id)
+            ->where('copies.session_exam_id', $this->session_exam_id) // IMPORTANT : pour cette session
             ->where('codes_anonymat.code_complet', $proposedCode)
             ->whereNull('copies.deleted_at')
             ->exists()) {
@@ -642,9 +1064,10 @@ class CopiesIndex extends Component
         $this->note = '';
         $this->editingCopieId = null;
 
-        // Afficher une alerte informative sur le nombre de notes restantes
+        // Message informatif adapté au type de session
         $remainingNotes = $etudiantsCount - $copiesCount;
-        $this->message = "Vous avez saisi {$copiesCount} notes sur {$etudiantsCount} étudiants. Il reste {$remainingNotes} notes à saisir pour cette matière.";
+        $sessionType = $session->type === 'Normale' ? 'normale' : 'rattrapage';
+        $this->message = "Session {$sessionType} : {$copiesCount} notes saisies sur {$etudiantsCount} étudiants éligibles. Il reste {$remainingNotes} notes à saisir.";
         $this->messageType = 'info';
         toastr()->info($this->message);
 
@@ -653,18 +1076,77 @@ class CopiesIndex extends Component
     }
 
 
-    public function saveCopie()
+    // méthode savecopie
+    public function saveCopie(): void
     {
         $this->validate();
 
         try {
-            // Vérifier si l'examen existe
+            // Vérifier que session_exam_id est défini, actif et courant
+            if (!$this->session_exam_id) {
+                throw new \Exception('Aucune session d\'examen sélectionnée.');
+            }
+
+            $sessionExam = SessionExam::where('id', $this->session_exam_id)
+                ->where('is_active', true)
+                ->where('is_current', true)
+                ->first();
+
+            if (!$sessionExam) {
+                \Log::error('Tentative de sauvegarde avec une session non active ou non courante', [
+                    'session_id' => $this->session_exam_id,
+                ]);
+                throw new \Exception('La session d\'examen sélectionnée n\'est pas active ou courante.');
+            }
+
+            // S'assurer que l'examen_id est cohérent avec les manchettes
+            if (!$this->examen_id) {
+                throw new \Exception('Aucun examen sélectionné.');
+            }
+
+            // Vérifier l'examen
             $examen = Examen::find($this->examen_id);
             if (!$examen) {
                 throw new \Exception("L'examen sélectionné n'existe pas.");
             }
 
-            // Vérifier si l'EC est bien associé à l'examen
+            // NOUVELLE VÉRIFICATION : Si l'EC vient d'un autre examen, gérer la correspondance
+            $ecInfo = $this->ecs->firstWhere('id', $this->ec_id);
+            if ($ecInfo && isset($ecInfo->original_examen_id) && $ecInfo->original_examen_id != $this->examen_id) {
+                \Log::info('EC provient d\'un autre examen, vérification de correspondance', [
+                    'ec_id' => $this->ec_id,
+                    'examen_reference' => $this->examen_id,
+                    'examen_original' => $ecInfo->original_examen_id
+                ]);
+
+                // Vérifier que l'association examen_ec existe dans la table pour l'examen de référence
+                $associationExists = DB::table('examen_ec')
+                    ->where('examen_id', $this->examen_id)
+                    ->where('ec_id', $this->ec_id)
+                    ->where('salle_id', $this->salle_id)
+                    ->exists();
+
+                if (!$associationExists) {
+                    // Créer l'association manquante
+                    DB::table('examen_ec')->insert([
+                        'examen_id' => $this->examen_id,
+                        'ec_id' => $this->ec_id,
+                        'salle_id' => $this->salle_id,
+                        'date_specifique' => $ecInfo->date_specifique,
+                        'heure_specifique' => $ecInfo->heure_specifique,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    \Log::info('Association examen_ec créée', [
+                        'examen_id' => $this->examen_id,
+                        'ec_id' => $this->ec_id,
+                        'salle_id' => $this->salle_id
+                    ]);
+                }
+            }
+
+            // VÉRIFICATION CRITIQUE : L'EC appartient-elle bien à cet examen dans cette salle ?
             $ecBelongsToExamen = DB::table('examen_ec')
                 ->where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
@@ -672,193 +1154,258 @@ class CopiesIndex extends Component
                 ->exists();
 
             if (!$ecBelongsToExamen) {
-                throw new \Exception("La matière sélectionnée n'est pas associée à cet examen et cette salle.");
+                throw new \Exception("Incohérence détectée : La matière (EC {$this->ec_id}) n'est pas associée à l'examen {$this->examen_id} dans la salle {$this->salle_id}.");
             }
 
-            // Vérifier le nombre de copies déjà saisies pour cette matière
+            // Vérifier le nombre de copies pour cette session
             $copiesCount = Copie::where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
                 ->whereNull('deleted_at')
                 ->count();
 
-            // Compter le nombre d'étudiants pour ce niveau et parcours
-            $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
-                ->where('parcours_id', $this->parcours_id)
-                ->count();
+            // CORRECTION PRINCIPALE : Calculer le nombre d'étudiants selon la logique de session
+            if ($sessionExam->type === 'Normale') {
+                // Session normale : TOUS les étudiants du niveau/parcours
+                $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
+                    ->where('parcours_id', $this->parcours_id)
+                    ->count();
+            } else {
+                // Session rattrapage : SEULS les étudiants éligibles
+                $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionExam->annee_universitaire_id)
+                    ->where('type', 'Normale')
+                    ->first();
 
-            // Vérifier la limite avant de sauvegarder
-            if ($copiesCount >= $etudiantsCount) {
-                $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} notes pour {$etudiantsCount} étudiants dans cette matière.";
+                if (!$sessionNormale) {
+                    throw new \Exception('Aucune session normale trouvée pour calculer les étudiants éligibles au rattrapage');
+                }
+
+                $etudiantsCount = Etudiant::eligiblesRattrapage(
+                    $this->niveau_id,
+                    $this->parcours_id,
+                    $sessionNormale->id
+                )->count();
+            }
+
+            // Log pour debug
+            \Log::info('Calcul du nombre d\'étudiants pour saveCopie', [
+                'session_type' => $sessionExam->type,
+                'etudiants_count' => $etudiantsCount,
+                'copies_count' => $copiesCount,
+                'niveau_id' => $this->niveau_id,
+                'parcours_id' => $this->parcours_id
+            ]);
+
+            // Vérifier la limite avant de sauvegarder (sauf en mode édition)
+            if (!isset($this->editingCopieId) && $copiesCount >= $etudiantsCount) {
+                $sessionType = $sessionExam->type === 'Normale' ? 'normale' : 'rattrapage';
+                $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} notes pour {$etudiantsCount} étudiants éligibles en session {$sessionType}.";
                 $this->messageType = 'warning';
                 toastr()->warning($this->message);
                 $this->showCopieModal = false;
                 return;
             }
 
-            // Rechercher ou créer le code d'anonymat avec l'EC
+            // Créer ou récupérer le code d'anonymat AVEC LE BON EXAMEN_ID (cohérent avec manchettes)
             $codeAnonymat = CodeAnonymat::firstOrCreate(
                 [
-                    'examen_id' => $this->examen_id,
+                    'examen_id' => $this->examen_id, // COHÉRENT avec les manchettes
                     'ec_id' => $this->ec_id,
                     'code_complet' => $this->code_anonymat,
                 ],
                 [
-                    'sequence' => null, // Sera extrait automatiquement dans le modèle
+                    'sequence' => null,
                 ]
             );
 
-            // Vérifier si une copie supprimée existe avec ce code
+            \Log::info('Code d\'anonymat traité', [
+                'code_id' => $codeAnonymat->id,
+                'examen_id' => $this->examen_id,
+                'ec_id' => $this->ec_id,
+                'code_complet' => $this->code_anonymat,
+                'was_created' => $codeAnonymat->wasRecentlyCreated
+            ]);
+
+            // Vérifier si une copie supprimée existe pour cette session
             $existingDeletedCopie = Copie::withTrashed()
                 ->where('examen_id', $this->examen_id)
                 ->where('code_anonymat_id', $codeAnonymat->id)
                 ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
                 ->whereNotNull('deleted_at')
                 ->first();
 
             if ($existingDeletedCopie) {
-                // Restaurer et mettre à jour la copie supprimée
+                // Restaurer une copie supprimée
                 $existingDeletedCopie->restore();
                 $existingDeletedCopie->update([
                     'note' => $this->note,
                     'saisie_par' => Auth::id(),
+                    'session_exam_id' => $this->session_exam_id,
+                    'updated_at' => now(),
                 ]);
                 $this->message = 'Note restaurée et mise à jour avec succès';
-            } else if (isset($this->editingCopieId)) {
-                // Mode édition
-                $copie = Copie::find($this->editingCopieId);
+                \Log::info('Copie restaurée', [
+                    'copie_id' => $existingDeletedCopie->id,
+                    'examen_id' => $this->examen_id
+                ]);
 
+            } else if (isset($this->editingCopieId)) {
+                // Modifier une copie existante
+                $copie = Copie::find($this->editingCopieId);
                 if (!$copie) {
                     throw new \Exception('La copie à modifier est introuvable.');
                 }
 
-                // Vérifier que la copie correspond à l'EC actuellement sélectionné
-                if ($copie->ec_id != $this->ec_id) {
-                    throw new \Exception('Cette copie appartient à une autre matière.');
+                // Vérifier que la copie appartient bien au bon contexte
+                if ($copie->ec_id != $this->ec_id || $copie->session_exam_id != $this->session_exam_id || $copie->examen_id != $this->examen_id) {
+                    throw new \Exception('Cette copie appartient à une autre matière, session ou examen.');
                 }
 
-                // Mise à jour de la copie existante
                 $copie->update([
                     'code_anonymat_id' => $codeAnonymat->id,
                     'note' => $this->note,
                     'saisie_par' => Auth::id(),
+                    'session_exam_id' => $this->session_exam_id,
+                    'updated_at' => now(),
+                ]);
+                $this->message = 'Copie modifiée avec succès';
+                \Log::info('Copie modifiée', [
+                    'copie_id' => $copie->id,
+                    'examen_id' => $this->examen_id
                 ]);
 
-                $this->message = 'Copie modifiée avec succès';
             } else {
-                // Vérifier si une copie existe déjà pour ce code et cette matière (non supprimée)
+                // Vérifier qu'une copie n'existe pas déjà pour cette session
                 $existingCopie = Copie::where('examen_id', $this->examen_id)
                     ->where('code_anonymat_id', $codeAnonymat->id)
                     ->where('ec_id', $this->ec_id)
+                    ->where('session_exam_id', $this->session_exam_id)
                     ->first();
 
                 if ($existingCopie) {
-                    throw new \Exception("Ce code d'anonymat est déjà utilisé pour cette matière. Veuillez utiliser un autre code.");
+                    throw new \Exception("Ce code d'anonymat est déjà utilisé pour cette matière dans cette session.");
                 }
 
-                // Mode création - Créer une nouvelle copie
-                Copie::create([
-                    'examen_id' => $this->examen_id,
+                // Créer une nouvelle copie
+                $nouvelleCopie = Copie::create([
+                    'examen_id' => $this->examen_id, // COHÉRENT avec manchettes et codes
+                    'session_exam_id' => $this->session_exam_id,
                     'code_anonymat_id' => $codeAnonymat->id,
                     'ec_id' => $this->ec_id,
                     'note' => $this->note,
                     'saisie_par' => Auth::id(),
+                    'date_saisie' => now(),
                 ]);
 
                 $this->message = 'Note enregistrée avec succès';
+                \Log::info('Nouvelle copie créée', [
+                    'copie_id' => $nouvelleCopie->id,
+                    'examen_id' => $this->examen_id,
+                    'ec_id' => $this->ec_id,
+                    'session_id' => $this->session_exam_id
+                ]);
             }
 
-            // Mettre à jour les compteurs globaux
+            // Mettre à jour les compteurs pour cette session
             $this->totalCopiesCount = Copie::where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
                 ->count();
 
             $this->userCopiesCount = Copie::where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
                 ->where('saisie_par', Auth::id())
                 ->count();
 
-            // Maintenir la modale ouverte si on est en mode création
+            // Gestion de la modale après sauvegarde
             if (!isset($this->editingCopieId)) {
-                // Réinitialiser seulement la note
+                // Mode ajout : préparer pour la prochaine saisie
                 $this->note = '';
 
-                // Définir le code de base à partir de la salle
+                // Générer le prochain code d'anonymat pour cette session
                 $baseCode = $this->selectedSalleCode;
-
-                // Trouver tous les codes existants pour cet examen et EC dans les copies
                 $existingCodes = Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
                     ->where('copies.examen_id', $this->examen_id)
                     ->where('copies.ec_id', $this->ec_id)
+                    ->where('copies.session_exam_id', $this->session_exam_id)
                     ->where('codes_anonymat.code_complet', 'like', $baseCode . '%')
                     ->whereNull('copies.deleted_at')
                     ->pluck('codes_anonymat.code_complet')
                     ->toArray();
 
-                // Extraire les numéros des codes existants
+                // Extraire les numéros pour trouver le suivant
                 $numbers = [];
                 foreach ($existingCodes as $code) {
                     if (preg_match('/^([A-Za-z]+)(\d+)$/', $code, $matches)) {
                         $numbers[] = (int)$matches[2];
                     }
                 }
-
-                // Trouver le dernier numéro utilisé
                 $lastNumber = !empty($numbers) ? max($numbers) : 0;
-
-                // Déterminer le prochain numéro en commençant par lastNumber + 1
-                $prefix = $baseCode;
                 $nextNumber = $lastNumber + 1;
+                $proposedCode = $baseCode . $nextNumber;
 
-                // Proposer le prochain code
-                $proposedCode = $prefix . $nextNumber;
-
-                // Vérifier si ce code existe déjà dans codes_anonymat mais n'est pas utilisé dans copies
-                // On ne veut incrémenter que si le code est réellement utilisé dans copies
+                // Vérifier que le nouveau code n'existe pas déjà
                 while (CodeAnonymat::where('examen_id', $this->examen_id)
                     ->where('ec_id', $this->ec_id)
                     ->where('code_complet', $proposedCode)
                     ->exists()) {
-                    // Vérifier si ce code est utilisé dans une copie active
                     $codeUsedInCopie = Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
                         ->where('copies.examen_id', $this->examen_id)
                         ->where('copies.ec_id', $this->ec_id)
+                        ->where('copies.session_exam_id', $this->session_exam_id)
                         ->where('codes_anonymat.code_complet', $proposedCode)
                         ->whereNull('copies.deleted_at')
                         ->exists();
 
                     if ($codeUsedInCopie) {
-                        // Si le code est utilisé dans une copie active, incrémenter
                         $nextNumber++;
-                        $proposedCode = $prefix . $nextNumber;
+                        $proposedCode = $baseCode . $nextNumber;
                     } else {
-                        // Si le code existe dans codes_anonymat mais n'est pas utilisé dans copies, on peut l'utiliser
                         break;
                     }
                 }
 
-                // Mettre à jour le code d'anonymat pour la prochaine saisie
                 $this->code_anonymat = $proposedCode;
-
-                // Garder la modale ouverte et mettre le focus sur le champ note
                 $this->showCopieModal = true;
                 $this->dispatch('focus-note-field');
             } else {
-                // Si on était en mode édition, on ferme la modale
+                // Mode édition : fermer la modale
                 $this->reset(['code_anonymat', 'note', 'editingCopieId']);
                 $this->showCopieModal = false;
             }
 
             $this->messageType = 'success';
-
-            // Notification
             toastr()->success($this->message);
+
+            // Rafraîchir la liste des matières
+            $this->calculateCopiesCountsForAllEcs();
+
+            \Log::info('Copie sauvée avec examen_id cohérent', [
+                'examen_id' => $this->examen_id,
+                'ec_id' => $this->ec_id,
+                'code_anonymat' => $this->code_anonymat,
+                'session_exam_id' => $this->session_exam_id,
+                'total_copies' => $this->totalCopiesCount,
+                'user_copies' => $this->userCopiesCount
+            ]);
 
         } catch (\Exception $e) {
             $this->message = 'Erreur: ' . $e->getMessage();
             $this->messageType = 'error';
             toastr()->error($this->message);
+
+            \Log::error('Erreur dans saveCopie', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examen_id,
+                'ec_id' => $this->ec_id,
+                'session_id' => $this->session_exam_id,
+                'trace' => $e->getTraceAsString()
+            ]);
         }
     }
+
     public function editCopie($id)
     {
         $copie = Copie::with('codeAnonymat')->find($id);
@@ -870,9 +1417,9 @@ class CopiesIndex extends Component
             return;
         }
 
-        // Vérifier que la copie correspond à l'EC actuellement sélectionné
-        if ($copie->ec_id != $this->ec_id) {
-            $this->message = 'Cette copie appartient à une autre matière. Veuillez sélectionner la bonne matière avant de modifier.';
+        // Vérifier que la copie correspond à l'EC et session actuellement sélectionnés
+        if ($copie->ec_id != $this->ec_id || $copie->session_exam_id != $this->session_exam_id) {
+            $this->message = 'Cette copie appartient à une autre matière ou session. Veuillez sélectionner la bonne matière et session avant de modifier.';
             $this->messageType = 'error';
             toastr()->error($this->message);
             return;
@@ -893,9 +1440,9 @@ class CopiesIndex extends Component
     {
         $this->copieToDelete = Copie::with('codeAnonymat')->find($id);
 
-        // Vérifier que la copie correspond à l'EC actuellement sélectionné
-        if ($this->copieToDelete && $this->copieToDelete->ec_id != $this->ec_id) {
-            $this->message = 'Cette copie appartient à une autre matière. Veuillez sélectionner la bonne matière avant de supprimer.';
+        // Vérifier que la copie correspond à l'EC et session actuellement sélectionnés
+        if ($this->copieToDelete && ($this->copieToDelete->ec_id != $this->ec_id || $this->copieToDelete->session_exam_id != $this->session_exam_id)) {
+            $this->message = 'Cette copie appartient à une autre matière ou session. Veuillez sélectionner la bonne matière et session avant de supprimer.';
             $this->messageType = 'error';
             toastr()->error($this->message);
             return;
@@ -945,13 +1492,15 @@ class CopiesIndex extends Component
             $this->message = 'Copie supprimée avec succès';
             $this->messageType = 'success';
 
-            // Mettre à jour les compteurs globaux
+            // Mettre à jour les compteurs globaux pour la session active
             $this->totalCopiesCount = Copie::where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
                 ->count();
 
             $this->userCopiesCount = Copie::where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
+                ->where('session_exam_id', $this->session_exam_id)
                 ->where('saisie_par', Auth::id())
                 ->count();
 
@@ -972,10 +1521,63 @@ class CopiesIndex extends Component
         $this->resetPage();
     }
 
+    /**
+     * Méthode pour changer de session d'examen
+     */
+    public function changeSession($sessionId)
+    {
+        try {
+            $session = SessionExam::find($sessionId);
+            if (!$session) {
+                throw new \Exception('Session d\'examen introuvable.');
+            }
+
+            // Mettre à jour la session active
+            $this->session_exam_id = $sessionId;
+            $this->currentSessionType = $session->type;
+
+            // Sauvegarder dans les filtres
+            $this->storeFiltres();
+
+            // Recharger les données pour la nouvelle session
+            if ($this->ec_id) {
+                $this->updatedEcId();
+            }
+
+            // Message de confirmation
+            $this->message = "Session changée vers : {$session->type}";
+            $this->messageType = 'success';
+            toastr()->success($this->message);
+
+            // Émettre un événement pour le JavaScript
+            $this->dispatch('session-changed', ['sessionType' => $session->type]);
+
+        } catch (\Exception $e) {
+            $this->message = 'Erreur lors du changement de session : ' . $e->getMessage();
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+        }
+    }
+
     public function render()
     {
-        if ($this->niveau_id && $this->parcours_id && $this->salle_id && $this->examen_id) {
-            $query = Copie::where('examen_id', $this->examen_id);
+        // Mise à jour des informations de session
+        $this->updateSessionInfo();
+
+        Log::debug('Rendering CopiesIndex', [
+            'niveau_id' => $this->niveau_id,
+            'parcours_id' => $this->parcours_id,
+            'salle_id' => $this->salle_id,
+            'examen_id' => $this->examen_id,
+            'ec_id' => $this->ec_id,
+            'search' => $this->search,
+            'session_id' => $this->getCurrentSessionId(),
+            'session_type' => $this->getCurrentSessionType(),
+        ]);
+
+        if ($this->niveau_id && $this->parcours_id && $this->salle_id && $this->examen_id && $this->session_exam_id) {
+            $query = Copie::where('examen_id', $this->examen_id)
+                          ->where('session_exam_id', $this->session_exam_id); // Filtrer par session
 
             // Si une EC spécifique est sélectionnée (et ce n'est pas "all")
             if ($this->ec_id && $this->ec_id !== 'all') {
@@ -1008,15 +1610,45 @@ class CopiesIndex extends Component
                 $query->orderBy($this->sortField, $this->sortDirection);
             }
 
-            $copies = $query->with(['codeAnonymat', 'ec', 'utilisateurSaisie'])
+            $copies = $query->with(['codeAnonymat', 'ec', 'utilisateurSaisie', 'sessionExam'])
                 ->paginate($this->perPage);
+
+            Log::debug('Copies retrieved', [
+                'examen_id' => $this->examen_id,
+                'ec_id' => $this->ec_id,
+                'session_id' => $this->session_exam_id,
+                'total' => $copies->total(),
+            ]);
         } else {
             // Toujours retourner un objet de pagination (vide)
             $copies = Copie::where('id', 0)->paginate($this->perPage);
+            Log::debug('No copies retrieved due to missing filters', [
+                'niveau_id' => $this->niveau_id,
+                'parcours_id' => $this->parcours_id,
+                'salle_id' => $this->salle_id,
+                'examen_id' => $this->examen_id,
+                'ec_id' => $this->ec_id,
+                'session_id' => $this->session_exam_id,
+            ]);
         }
+
+        if ($this->ec_id && $this->ec_id !== 'all' && $this->examen_id) {
+            $this->chargerEtatEtudiants();
+        }
+
+        // Créer un tableau complet pour sessionInfo
+        $sessionInfo = [
+            'message' => $this->sessionInfo,
+            'active' => $this->sessionActive,
+            'active_id' => $this->sessionActiveId,
+            'type' => $this->sessionType,
+            'can_add' => $this->canAddCopies,
+            'session_libelle' => $this->sessionActive ? $this->sessionActive->type : null
+        ];
 
         return view('livewire.copie.copies-index', [
             'copies' => $copies,
+            'sessionInfo' => $sessionInfo
         ]);
     }
 }
