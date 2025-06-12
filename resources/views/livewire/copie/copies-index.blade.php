@@ -1,3 +1,4 @@
+<!-- Vue Principale -->
 <div>
     <div class="container px-4 py-6 mx-auto">
     <!-- En-tête fixe avec titre et actions globales -->

@@ -18,7 +18,10 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Services\CalculAcademiqueService;
 
 /**
- * Composant pour afficher les résultats finaux avec sessions distinctes
+ * @property \Illuminate\Support\Collection $niveaux
+ * @property \Illuminate\Support\Collection $parcours
+ * @property \Illuminate\Support\Collection $salles
+ * @property \Illuminate\Support\Collection $ecs
  */
 class ResultatsFinale extends Component
 {
@@ -40,10 +43,19 @@ class ResultatsFinale extends Component
     public $sessionRattrapage;
     public $showSession2 = false;
 
-    // Paramètres simulation
+    // Paramètres simulation AMÉLIORÉS pour toutes les sessions
     public $simulationParams = [
-        'credits_requis_session2' => 40,
-        'appliquer_note_eliminatoire' => true,
+        // Type de session à simuler
+        'session_type' => 'session1', // 'session1' ou 'session2'
+
+        // Paramètres Session 1 (Normale)
+        'credits_admission_session1' => 60, // Crédits pour admission directe
+        'appliquer_note_eliminatoire_s1' => false, // Bloquer admission si note 0
+
+        // Paramètres Session 2 (Rattrapage)
+        'credits_admission_session2' => 40, // Crédits minimum pour admission
+        'credits_redoublement_session2' => 20, // En dessous = exclusion
+        'appliquer_note_eliminatoire_s2' => true, // Note 0 = exclusion automatique
     ];
 
     // Résultats et statistiques
@@ -55,15 +67,25 @@ class ResultatsFinale extends Component
     public $uesStructure = [];
 
     protected $rules = [
-        'simulationParams.credits_requis_session2' => 'required|integer|min:0|max:60',
-        'simulationParams.appliquer_note_eliminatoire' => 'boolean',
+        'simulationParams.session_type' => 'required|in:session1,session2',
+        'simulationParams.credits_admission_session1' => 'required|integer|min:40|max:60',
+        'simulationParams.appliquer_note_eliminatoire_s1' => 'boolean',
+        'simulationParams.credits_admission_session2' => 'required|integer|min:30|max:60',
+        'simulationParams.credits_redoublement_session2' => 'required|integer|min:0|max:40',
+        'simulationParams.appliquer_note_eliminatoire_s2' => 'boolean',
     ];
 
     protected $messages = [
-        'simulationParams.credits_requis_session2.required' => 'Le nombre de crédits requis est obligatoire.',
-        'simulationParams.credits_requis_session2.integer' => 'Le nombre de crédits doit être un nombre entier.',
-        'simulationParams.credits_requis_session2.min' => 'Le nombre de crédits ne peut pas être négatif.',
-        'simulationParams.credits_requis_session2.max' => 'Le nombre de crédits ne peut pas dépasser 60.',
+        'simulationParams.session_type.required' => 'Veuillez sélectionner le type de session à simuler.',
+        'simulationParams.credits_admission_session1.required' => 'Le nombre de crédits pour admission en session 1 est obligatoire.',
+        'simulationParams.credits_admission_session1.min' => 'Le minimum est 40 crédits.',
+        'simulationParams.credits_admission_session1.max' => 'Le maximum est 60 crédits.',
+        'simulationParams.credits_admission_session2.required' => 'Le nombre de crédits pour admission en session 2 est obligatoire.',
+        'simulationParams.credits_admission_session2.min' => 'Le minimum est 30 crédits.',
+        'simulationParams.credits_admission_session2.max' => 'Le maximum est 60 crédits.',
+        'simulationParams.credits_redoublement_session2.required' => 'Le seuil de redoublement est obligatoire.',
+        'simulationParams.credits_redoublement_session2.min' => 'Le minimum est 0 crédit.',
+        'simulationParams.credits_redoublement_session2.max' => 'Le maximum est 40 crédits.',
     ];
 
     public function mount()
@@ -97,6 +119,9 @@ class ResultatsFinale extends Component
                 $this->selectedNiveau = $this->niveaux->first()->id;
                 $this->updatedSelectedNiveau();
             }
+
+            // Session par défaut pour simulation
+            $this->simulationParams['session_type'] = 'session1';
 
             // Charger les sessions
             $this->loadSessions();
@@ -180,7 +205,7 @@ class ResultatsFinale extends Component
     }
 
     /**
-     * LOGIQUE CORRIGÉE : Vérification de disponibilité session 2
+     * LOGIQUE AMÉLIORÉE : Vérification de disponibilité session 2
      */
     private function checkSession2Availability()
     {
@@ -215,6 +240,42 @@ class ResultatsFinale extends Component
             Log::error('Erreur lors de la vérification de la session 2: ' . $e->getMessage());
             $this->showSession2 = false;
         }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Gestion du changement de type de session pour simulation
+     */
+    public function updatedSimulationParamsSessionType()
+    {
+        // Réinitialiser les résultats de simulation si on change de session
+        $this->simulationResults = [];
+
+        // Ajuster les paramètres par défaut selon le type de session
+        if ($this->simulationParams['session_type'] === 'session1') {
+            // Valeurs par défaut pour session 1
+            if (!isset($this->simulationParams['credits_admission_session1'])) {
+                $this->simulationParams['credits_admission_session1'] = 60;
+            }
+            if (!isset($this->simulationParams['appliquer_note_eliminatoire_s1'])) {
+                $this->simulationParams['appliquer_note_eliminatoire_s1'] = false;
+            }
+        } elseif ($this->simulationParams['session_type'] === 'session2') {
+            // Valeurs par défaut pour session 2
+            if (!isset($this->simulationParams['credits_admission_session2'])) {
+                $this->simulationParams['credits_admission_session2'] = 40;
+            }
+            if (!isset($this->simulationParams['credits_redoublement_session2'])) {
+                $this->simulationParams['credits_redoublement_session2'] = 20;
+            }
+            if (!isset($this->simulationParams['appliquer_note_eliminatoire_s2'])) {
+                $this->simulationParams['appliquer_note_eliminatoire_s2'] = true;
+            }
+        }
+
+        Log::info('Type de session simulation changé', [
+            'nouveau_type' => $this->simulationParams['session_type'],
+            'parametres' => $this->simulationParams
+        ]);
     }
 
     private function loadUEStructure()
@@ -267,6 +328,13 @@ class ResultatsFinale extends Component
                 $this->resultatsSession2 = $this->loadResultatsForSession($this->sessionRattrapage);
             } else {
                 $this->resultatsSession2 = [];
+            }
+
+            // Ajuster le type de session par défaut pour la simulation
+            if (empty($this->resultatsSession1) && !empty($this->resultatsSession2)) {
+                $this->simulationParams['session_type'] = 'session2';
+            } elseif (!empty($this->resultatsSession1)) {
+                $this->simulationParams['session_type'] = 'session1';
             }
 
             $this->calculateStatistics();
@@ -411,7 +479,6 @@ class ResultatsFinale extends Component
         ];
     }
 
-
     /**
      * DÉCISIONS selon votre logique métier exacte
      */
@@ -500,6 +567,105 @@ class ResultatsFinale extends Component
         }
     }
 
+    /**
+     * NOUVELLE MÉTHODE AMÉLIORÉE : Simulation de délibération pour toutes les sessions
+     */
+    public function simulerDeliberation()
+    {
+        $this->validate();
+
+        // Vérifier qu'on a des résultats pour la session sélectionnée
+        $resultatsSession = $this->simulationParams['session_type'] === 'session1'
+            ? $this->resultatsSession1
+            : $this->resultatsSession2;
+
+        if (empty($resultatsSession)) {
+            $this->addError('simulation', 'Aucun résultat disponible pour la session sélectionnée.');
+            return;
+        }
+
+        try {
+            $this->simulationResults = collect($resultatsSession)->map(function($resultat) {
+                $creditsValides = $resultat['credits_valides'];
+                $hasNoteEliminatoire = $resultat['has_note_eliminatoire'];
+                $moyenneGenerale = $resultat['moyenne_generale'];
+
+                $decisionActuelle = $resultat['decision'];
+                $decisionSimulee = $this->determinerDecisionSimulation($creditsValides, $hasNoteEliminatoire);
+
+                return [
+                    'etudiant' => $resultat['etudiant'],
+                    'credits_valides' => $creditsValides,
+                    'moyenne_generale' => $moyenneGenerale,
+                    'has_note_eliminatoire' => $hasNoteEliminatoire,
+                    'decision_actuelle' => $decisionActuelle,
+                    'decision_simulee' => $decisionSimulee,
+                    'changement' => $decisionActuelle !== $decisionSimulee,
+                    'details_ue' => $resultat['details_ue'] ?? []
+                ];
+            })->toArray();
+
+            // Calculer les statistiques de simulation
+            $statsSimulation = [
+                'total' => count($this->simulationResults),
+                'changements' => count(array_filter($this->simulationResults, fn($r) => $r['changement'])),
+                'decisions_simulees' => array_count_values(array_column($this->simulationResults, 'decision_simulee'))
+            ];
+
+            $sessionName = $this->simulationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
+
+            toastr()->success(
+                "Simulation {$sessionName} terminée : {$statsSimulation['changements']} changements détectés sur {$statsSimulation['total']} étudiants."
+            );
+
+            $this->dispatch('simulation-complete', $statsSimulation);
+
+            Log::info('Simulation délibération terminée', [
+                'session_type' => $this->simulationParams['session_type'],
+                'parametres' => $this->simulationParams,
+                'statistiques' => $statsSimulation
+            ]);
+
+        } catch (\Exception $e) {
+            $this->addError('simulation', 'Erreur lors de la simulation: ' . $e->getMessage());
+            Log::error('Erreur simulation délibération: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Détermine la décision selon les paramètres de simulation
+     */
+    private function determinerDecisionSimulation($creditsValides, $hasNoteEliminatoire)
+    {
+        if ($this->simulationParams['session_type'] === 'session1') {
+            // SIMULATION SESSION 1
+            // Vérifier la règle note éliminatoire si activée
+            if ($this->simulationParams['appliquer_note_eliminatoire_s1'] && $hasNoteEliminatoire) {
+                return ResultatFinal::DECISION_RATTRAPAGE; // Forcer rattrapage si note 0
+            }
+
+            // Critère principal : crédits
+            return $creditsValides >= $this->simulationParams['credits_admission_session1'] ?
+                ResultatFinal::DECISION_ADMIS :
+                ResultatFinal::DECISION_RATTRAPAGE;
+
+        } else {
+            // SIMULATION SESSION 2
+            // Règle note éliminatoire prioritaire
+            if ($this->simulationParams['appliquer_note_eliminatoire_s2'] && $hasNoteEliminatoire) {
+                return ResultatFinal::DECISION_EXCLUS;
+            }
+
+            // Critères basés sur les crédits
+            if ($creditsValides >= $this->simulationParams['credits_admission_session2']) {
+                return ResultatFinal::DECISION_ADMIS;
+            } elseif ($creditsValides >= $this->simulationParams['credits_redoublement_session2']) {
+                return ResultatFinal::DECISION_REDOUBLANT;
+            } else {
+                return ResultatFinal::DECISION_EXCLUS;
+            }
+        }
+    }
 
     public function appliquerDecisionsLogiqueMedecine($sessionType)
     {
@@ -582,86 +748,6 @@ class ResultatsFinale extends Component
         }
     }
 
-
-    /**
-     * SIMULATION avec paramètres personnalisables
-     */
-    public function simulerDeliberation()
-    {
-        $this->validate();
-
-        if (!$this->showSession2 || empty($this->resultatsSession2)) {
-            $this->addError('simulation', 'La simulation nécessite une session de rattrapage avec des résultats.');
-            return;
-        }
-
-        try {
-            $this->simulationResults = collect($this->resultatsSession2)->map(function($resultat) {
-                $creditsValides = $resultat['credits_valides'];
-                $hasNoteEliminatoire = $resultat['has_note_eliminatoire'];
-
-                $decisionActuelle = $resultat['decision'];
-                $decisionSimulee = $this->determinerDecisionSimulation($creditsValides, $hasNoteEliminatoire);
-
-                return [
-                    'etudiant' => $resultat['etudiant'],
-                    'credits_valides' => $creditsValides,
-                    'moyenne_generale' => $resultat['moyenne_generale'],
-                    'has_note_eliminatoire' => $hasNoteEliminatoire,
-                    'decision_actuelle' => $decisionActuelle,
-                    'decision_simulee' => $decisionSimulee,
-                    'changement' => $decisionActuelle !== $decisionSimulee,
-                    'details_ue' => $resultat['details_ue'] ?? []
-                ];
-            })->toArray();
-
-            // Calculer les statistiques de simulation
-            $statsSimulation = [
-                'total' => count($this->simulationResults),
-                'changements' => count(array_filter($this->simulationResults, fn($r) => $r['changement'])),
-                'decisions_simulees' => array_count_values(array_column($this->simulationResults, 'decision_simulee'))
-            ];
-
-            toastr()->success(
-                "Simulation terminée : {$statsSimulation['changements']} changements détectés sur {$statsSimulation['total']} étudiants."
-            );
-
-            $this->dispatch('simulation-complete', $statsSimulation);
-
-        } catch (\Exception $e) {
-            $this->addError('simulation', 'Erreur lors de la simulation: ' . $e->getMessage());
-            Log::error('Erreur simulation délibération médecine: ' . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * NOUVELLE MÉTHODE : Détermine la décision selon les paramètres de simulation
-     */
-    private function determinerDecisionSimulation($creditsValides, $hasNoteEliminatoire)
-    {
-        // Appliquer la logique médecine avec paramètres personnalisables
-        if ($this->simulationParams['appliquer_note_eliminatoire'] && $hasNoteEliminatoire) {
-            return ResultatFinal::DECISION_EXCLUS;
-        }
-
-        return $creditsValides >= $this->simulationParams['credits_requis_session2'] ?
-            ResultatFinal::DECISION_ADMIS :
-            ResultatFinal::DECISION_REDOUBLANT;
-    }
-
-
-    private function determinerDecisionAvecParametres($creditsValides, $hasNoteEliminatoire)
-    {
-        if ($this->simulationParams['appliquer_note_eliminatoire'] && $hasNoteEliminatoire) {
-            return ResultatFinal::DECISION_EXCLUS;
-        }
-
-        return $creditsValides >= $this->simulationParams['credits_requis_session2'] ?
-            ResultatFinal::DECISION_ADMIS :
-            ResultatFinal::DECISION_REDOUBLANT;
-    }
-
     /**
      * EXPORT Excel
      */
@@ -691,7 +777,7 @@ class ResultatsFinale extends Component
         }
     }
 
-        /**
+    /**
      * NOUVELLE MÉTHODE : Exporte les résultats avec détails logique médecine
      */
     public function exportResultatsDetaillesMedecine($sessionType)
@@ -738,218 +824,63 @@ class ResultatsFinale extends Component
         }
     }
 
-
-
     /**
-     * NOUVELLE MÉTHODE : Obtient un rapport détaillé selon logique médecine
+     * NOUVELLE MÉTHODE : Export des résultats de simulation
      */
-    public function genererRapportDetailleLogiqueMedecine($sessionType)
+    public function exportSimulation()
     {
-        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-            return null;
+        if (empty($this->simulationResults)) {
+            $this->addError('export', 'Aucun résultat de simulation à exporter.');
+            return;
         }
 
         try {
+            $sessionType = $this->simulationParams['session_type'];
             $session = $this->getSessionForType($sessionType);
-            $resultats = $sessionType === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
-            $statistiques = $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2;
 
-            if (empty($resultats)) {
-                return null;
-            }
-
-            // Analyser selon logique médecine
-            $analyseMedecine = [
-                'methode_calcul' => 'Logique Faculté de Médecine',
-                'regles_appliquees' => [
-                    'moyenne_ue' => 'Moyenne UE = (Somme des notes EC) / (Nombre d\'EC)',
-                    'validation_ue' => 'UE validée si moyenne >= 10 ET aucune note = 0',
-                    'note_eliminatoire' => 'Une note de 0 dans un EC élimine toute l\'UE',
-                    'moyenne_generale' => 'Moyenne générale = (Somme moyennes UE) / (Nombre d\'UE)',
-                    'decision_session1' => 'Admis si 60 crédits, sinon Rattrapage',
-                    'decision_session2' => 'Exclu si note 0, Admis si >= 40 crédits, sinon Redoublant'
-                ],
-                'statistiques_detaillees' => $this->calculerStatistiquesDetailleesLogiqueMedecine($resultats),
-                'coherence_calculs' => $this->verifierCoherenceLogiqueMedecine($resultats, $session)
-            ];
-
-            return [
-                'session' => $session,
-                'resultats' => $resultats,
-                'statistiques' => $statistiques,
-                'analyse_medecine' => $analyseMedecine,
-                'date_generation' => now(),
-                'parametres' => [
-                    'niveau' => Niveau::find($this->selectedNiveau),
-                    'parcours' => $this->selectedParcours ? Parcour::find($this->selectedParcours) : null,
-                    'annee_universitaire' => AnneeUniversitaire::find($this->selectedAnneeUniversitaire)
-                ]
-            ];
-
-        } catch (\Exception $e) {
-            Log::error('Erreur génération rapport détaillé médecine: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-
-    /**
-     * NOUVELLE MÉTHODE : Calcule des statistiques détaillées selon logique médecine
-     */
-    private function calculerStatistiquesDetailleesLogiqueMedecine($resultats)
-    {
-        try {
-            $stats = [
-                'ues_analysis' => [],
-                'notes_distribution' => [
-                    'eliminatoires' => 0,
-                    'insuffisantes' => 0, // < 10
-                    'passables' => 0,     // 10-12
-                    'assez_bien' => 0,    // 12-14
-                    'bien' => 0,          // 14-16
-                    'tres_bien' => 0      // >= 16
-                ],
-                'credits_analysis' => [
-                    'distribution' => [],
-                    'moyenne_credits' => 0,
-                    'mediane_credits' => 0
-                ]
-            ];
-
-            // Analyser chaque UE
-            $uesData = [];
-            foreach ($resultats as $resultat) {
-                foreach ($resultat['details_ue'] as $ue) {
-                    if (!isset($uesData[$ue['ue_id']])) {
-                        $uesData[$ue['ue_id']] = [
-                            'nom' => $ue['ue_nom'],
-                            'moyennes' => [],
-                            'validees' => 0,
-                            'eliminees' => 0,
-                            'total' => 0
-                        ];
-                    }
-
-                    $uesData[$ue['ue_id']]['moyennes'][] = $ue['moyenne_ue'];
-                    $uesData[$ue['ue_id']]['total']++;
-
-                    if ($ue['eliminee']) {
-                        $uesData[$ue['ue_id']]['eliminees']++;
-                    } elseif ($ue['validee']) {
-                        $uesData[$ue['ue_id']]['validees']++;
-                    }
-                }
-
-                // Distribution des crédits
-                $credits = $resultat['credits_valides'];
-                $stats['credits_analysis']['distribution'][] = $credits;
-
-                // Distribution des moyennes générales
-                $moyenne = $resultat['moyenne_generale'];
-                if ($moyenne == 0 && $resultat['has_note_eliminatoire']) {
-                    $stats['notes_distribution']['eliminatoires']++;
-                } elseif ($moyenne < 10) {
-                    $stats['notes_distribution']['insuffisantes']++;
-                } elseif ($moyenne < 12) {
-                    $stats['notes_distribution']['passables']++;
-                } elseif ($moyenne < 14) {
-                    $stats['notes_distribution']['assez_bien']++;
-                } elseif ($moyenne < 16) {
-                    $stats['notes_distribution']['bien']++;
-                } else {
-                    $stats['notes_distribution']['tres_bien']++;
-                }
-            }
-
-            // Finaliser les statistiques UE
-            foreach ($uesData as $ueId => $data) {
-                $stats['ues_analysis'][] = [
-                    'ue_nom' => $data['nom'],
-                    'moyenne_ue' => round(array_sum($data['moyennes']) / count($data['moyennes']), 2),
-                    'taux_validation' => round(($data['validees'] / $data['total']) * 100, 2),
-                    'taux_elimination' => round(($data['eliminees'] / $data['total']) * 100, 2),
-                    'total_etudiants' => $data['total']
+            // Préparer les données d'export avec informations de simulation
+            $donneesExport = collect($this->simulationResults)->map(function($resultat) use ($sessionType) {
+                return [
+                    'etudiant' => $resultat['etudiant'],
+                    'resultats_simulation' => $resultat,
+                    'parametres_simulation' => [
+                        'session_simulee' => ucfirst($sessionType),
+                        'criteres_appliques' => $this->getParametresSimulationDescription(),
+                        'date_simulation' => now()->format('Y-m-d H:i:s')
+                    ]
                 ];
-            }
+            })->toArray();
 
-            // Finaliser les statistiques crédits
-            $credits = $stats['credits_analysis']['distribution'];
-            if (!empty($credits)) {
-                $stats['credits_analysis']['moyenne_credits'] = round(array_sum($credits) / count($credits), 2);
-                sort($credits);
-                $count = count($credits);
-                $stats['credits_analysis']['mediane_credits'] = $count % 2 == 0
-                    ? ($credits[$count/2 - 1] + $credits[$count/2]) / 2
-                    : $credits[floor($count/2)];
-            }
+            $export = new ResultatsExport($donneesExport, $this->uesStructure, $session);
+            $filename = $this->generateExportFilename('simulation_' . $sessionType);
 
-            return $stats;
+            return Excel::download($export, $filename);
 
         } catch (\Exception $e) {
-            Log::error('Erreur calcul statistiques détaillées médecine: ' . $e->getMessage());
-            return [];
+            $this->addError('export', 'Erreur lors de l\'export de simulation: ' . $e->getMessage());
+            Log::error('Erreur export simulation: ' . $e->getMessage());
         }
     }
 
-
     /**
-     * NOUVELLE MÉTHODE : Vérifie la cohérence des calculs selon logique médecine
+     * NOUVELLE MÉTHODE : Description des paramètres de simulation
      */
-    private function verifierCoherenceLogiqueMedecine($resultats, $session)
+    private function getParametresSimulationDescription()
     {
-        $erreurs = [];
-        $warnings = [];
-
-        try {
-            foreach ($resultats as $resultat) {
-                $etudiant = $resultat['etudiant'];
-
-                // Vérifier cohérence moyenne générale
-                if (!empty($resultat['details_ue'])) {
-                    $moyennesUE = array_column(
-                        array_filter($resultat['details_ue'], fn($ue) => !$ue['eliminee']),
-                        'moyenne_ue'
-                    );
-
-                    $moyenneAttendue = count($moyennesUE) > 0 ?
-                        round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
-
-                    if ($resultat['has_note_eliminatoire']) {
-                        $moyenneAttendue = 0;
-                    }
-
-                    if (abs($resultat['moyenne_generale'] - $moyenneAttendue) > 0.01) {
-                        $erreurs[] = "Étudiant {$etudiant->nom}: Moyenne générale incohérente ({$resultat['moyenne_generale']} vs {$moyenneAttendue} attendu)";
-                    }
-                }
-
-                // Vérifier cohérence décision selon logique médecine
-                $decisionAttendue = $this->determinerDecision($resultat, $session);
-                if ($resultat['decision'] !== $decisionAttendue) {
-                    $erreurs[] = "Étudiant {$etudiant->nom}: Décision incohérente ({$resultat['decision']} vs {$decisionAttendue} attendu selon logique médecine)";
-                }
-
-                // Vérifier cohérence crédits
-                $creditsCalcules = array_sum(array_column(
-                    array_filter($resultat['details_ue'], fn($ue) => $ue['validee'] && !$ue['eliminee']),
-                    'credits'
-                ));
-
-                if ($creditsCalcules !== $resultat['credits_valides']) {
-                    $erreurs[] = "Étudiant {$etudiant->nom}: Crédits incohérents ({$resultat['credits_valides']} vs {$creditsCalcules} calculés)";
-                }
-            }
-
-        } catch (\Exception $e) {
-            $erreurs[] = "Erreur lors de la vérification: " . $e->getMessage();
+        if ($this->simulationParams['session_type'] === 'session1') {
+            return [
+                'credits_admission' => $this->simulationParams['credits_admission_session1'],
+                'note_eliminatoire_bloque_admission' => $this->simulationParams['appliquer_note_eliminatoire_s1'],
+                'regle' => 'Si ≥ X crédits → Admis, sinon → Rattrapage'
+            ];
+        } else {
+            return [
+                'credits_admission' => $this->simulationParams['credits_admission_session2'],
+                'credits_redoublement' => $this->simulationParams['credits_redoublement_session2'],
+                'note_eliminatoire_exclusion' => $this->simulationParams['appliquer_note_eliminatoire_s2'],
+                'regle' => 'Note 0 → Exclu, ≥ X crédits → Admis, < Y crédits → Exclu, autre → Redoublant'
+            ];
         }
-
-        return [
-            'erreurs' => $erreurs,
-            'warnings' => $warnings,
-            'est_coherent' => empty($erreurs),
-            'nb_verifications' => count($resultats)
-        ];
     }
 
     /**
@@ -1020,7 +951,7 @@ class ResultatsFinale extends Component
 
             $parts = [
                 'resultats',
-                $sessionType === 'session1' ? 'session1' : 'session2',
+                $sessionType,
                 $niveau?->abr ?? $niveau?->nom ?? 'niveau',
                 $parcours?->abr ?? $parcours?->nom,
                 str_replace(['/', ' '], '_', $annee?->libelle ?? 'annee'),
@@ -1143,6 +1074,10 @@ class ResultatsFinale extends Component
             // États des sessions
             'sessionNormale' => $this->sessionNormale,
             'sessionRattrapage' => $this->sessionRattrapage,
+
+            // Informations sur la simulation
+            'simulationDisponible' => !empty($this->resultatsSession1) || !empty($this->resultatsSession2),
+            'parametresSimulation' => $this->simulationParams,
         ]);
     }
 
@@ -1158,7 +1093,8 @@ class ResultatsFinale extends Component
                 'total_ues' => count($this->uesStructure),
                 'total_ecs' => collect($this->uesStructure)->sum(function($ue) {
                     return count($ue['ecs']);
-                })
+                }),
+                'simulations_disponibles' => 0
             ];
 
             // Compteurs spécifiques aux résultats
@@ -1166,12 +1102,14 @@ class ResultatsFinale extends Component
                 $compteurs['notes_session1'] = collect($this->resultatsSession1)->sum(function($resultat) {
                     return count($resultat['notes']);
                 });
+                $compteurs['simulations_disponibles']++;
             }
 
             if (!empty($this->resultatsSession2)) {
                 $compteurs['notes_session2'] = collect($this->resultatsSession2)->sum(function($resultat) {
                     return count($resultat['notes']);
                 });
+                $compteurs['simulations_disponibles']++;
             }
 
             return $compteurs;
@@ -1182,167 +1120,24 @@ class ResultatsFinale extends Component
     }
 
     /**
-     * NOUVELLE MÉTHODE : Étudiants éligibles au rattrapage depuis session 1
-     */
-    public function getEtudiantsEligiblesRattrapage()
-    {
-        if (empty($this->resultatsSession1)) {
-            return collect();
-        }
-
-        try {
-            return collect($this->resultatsSession1)
-                ->filter(function($resultat) {
-                    return $resultat['decision'] === ResultatFinal::DECISION_RATTRAPAGE;
-                })
-                ->map(function($resultat) {
-                    return [
-                        'etudiant' => $resultat['etudiant'],
-                        'credits_valides' => $resultat['credits_valides'],
-                        'total_credits' => $resultat['total_credits'],
-                        'moyenne_generale' => $resultat['moyenne_generale'],
-                        'has_note_eliminatoire' => $resultat['has_note_eliminatoire'],
-                        'details_ue' => $resultat['details_ue']
-                    ];
-                });
-        } catch (\Exception $e) {
-            Log::error('Erreur récupération étudiants éligibles: ' . $e->getMessage());
-            return collect();
-        }
-    }
-
-    /**
-     * NOUVELLE MÉTHODE : Analyse comparative des sessions
-     */
-    public function getAnalyseComparative()
-    {
-        if (empty($this->resultatsSession1) || empty($this->resultatsSession2)) {
-            return null;
-        }
-
-        try {
-            $etudiantsSession1 = collect($this->resultatsSession1)->keyBy('etudiant.id');
-            $etudiantsSession2 = collect($this->resultatsSession2)->keyBy('etudiant.id');
-
-            $analyse = [
-                'etudiants_communs' => 0,
-                'progressions' => [],
-                'regressions' => [],
-                'stables' => []
-            ];
-
-            foreach ($etudiantsSession2 as $etudiantId => $resultatS2) {
-                if (isset($etudiantsSession1[$etudiantId])) {
-                    $resultatS1 = $etudiantsSession1[$etudiantId];
-                    $analyse['etudiants_communs']++;
-
-                    $moyenneS1 = $resultatS1['moyenne_generale'];
-                    $moyenneS2 = $resultatS2['moyenne_generale'];
-                    $difference = $moyenneS2 - $moyenneS1;
-
-                    $comparaison = [
-                        'etudiant' => $resultatS2['etudiant'],
-                        'moyenne_s1' => $moyenneS1,
-                        'moyenne_s2' => $moyenneS2,
-                        'difference' => round($difference, 2),
-                        'decision_s1' => $resultatS1['decision'],
-                        'decision_s2' => $resultatS2['decision']
-                    ];
-
-                    if ($difference > 0.5) {
-                        $analyse['progressions'][] = $comparaison;
-                    } elseif ($difference < -0.5) {
-                        $analyse['regressions'][] = $comparaison;
-                    } else {
-                        $analyse['stables'][] = $comparaison;
-                    }
-                }
-            }
-
-            return $analyse;
-        } catch (\Exception $e) {
-            Log::error('Erreur analyse comparative: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * NOUVELLE MÉTHODE : Validation des données de cohérence
-     */
-    public function validateCoherence()
-    {
-        $erreurs = [];
-
-        try {
-            // Vérification 1: Tous les étudiants de session 2 doivent être éligibles depuis session 1
-            if (!empty($this->resultatsSession1) && !empty($this->resultatsSession2)) {
-                $eligiblesS1 = collect($this->resultatsSession1)
-                    ->filter(fn($r) => $r['decision'] === ResultatFinal::DECISION_RATTRAPAGE)
-                    ->pluck('etudiant.id');
-
-                $participantsS2 = collect($this->resultatsSession2)->pluck('etudiant.id');
-
-                $intrus = $participantsS2->diff($eligiblesS1);
-                if ($intrus->isNotEmpty()) {
-                    $erreurs[] = "Des étudiants en session 2 n'étaient pas éligibles depuis la session 1";
-                }
-
-                $absents = $eligiblesS1->diff($participantsS2);
-                if ($absents->isNotEmpty()) {
-                    $erreurs[] = count($absents) . " étudiant(s) éligible(s) n'ont pas participé au rattrapage";
-                }
-            }
-
-            // Vérification 2: Cohérence des crédits par UE
-            foreach ([$this->resultatsSession1, $this->resultatsSession2] as $session => $resultats) {
-                foreach ($resultats as $resultat) {
-                    $creditsCalcules = collect($resultat['details_ue'])
-                        ->where('validee', true)
-                        ->sum('credits');
-
-                    if ($creditsCalcules !== $resultat['credits_valides']) {
-                        $erreurs[] = "Incohérence crédits pour " . $resultat['etudiant']->nom .
-                                   " (session " . ($session + 1) . ")";
-                    }
-                }
-            }
-
-            // Vérification 3: Cohérence des décisions
-            foreach ([$this->resultatsSession1, $this->resultatsSession2] as $session => $resultats) {
-                foreach ($resultats as $resultat) {
-                    $sessionObj = $session === 0 ? $this->sessionNormale : $this->sessionRattrapage;
-                    $decisionAttendue = $this->determinerDecision([
-                        'credits_valides' => $resultat['credits_valides'],
-                        'total_credits' => $resultat['total_credits'],
-                        'has_note_eliminatoire' => $resultat['has_note_eliminatoire']
-                    ], $sessionObj);
-
-                    if ($decisionAttendue !== $resultat['decision']) {
-                        $erreurs[] = "Décision incorrecte pour " . $resultat['etudiant']->nom .
-                                   " (session " . ($session + 1) . ")";
-                    }
-                }
-            }
-
-        } catch (\Exception $e) {
-            $erreurs[] = "Erreur lors de la validation: " . $e->getMessage();
-        }
-
-        return $erreurs;
-    }
-
-    /**
-     * NOUVELLE MÉTHODE : Mise à jour du tab actif avec validation
+     * NOUVELLE MÉTHODE : Mise à jour du tab actif avec validation améliorée
      */
     public function setActiveTab($tab)
     {
         $tabsValides = ['session1', 'session2', 'simulation'];
 
         if (in_array($tab, $tabsValides)) {
-            // Vérifier la disponibilité pour les tabs session2 et simulation
-            if (($tab === 'session2' || $tab === 'simulation') && !$this->showSession2) {
+            // Vérifier la disponibilité pour le tab session2
+            if ($tab === 'session2' && !$this->showSession2) {
                 $this->activeTab = 'session1';
                 $this->addError('tab', 'La session 2 n\'est pas disponible pour ce niveau/parcours.');
+                return;
+            }
+
+            // Vérifier la disponibilité pour le tab simulation
+            if ($tab === 'simulation' && empty($this->resultatsSession1) && empty($this->resultatsSession2)) {
+                $this->activeTab = 'session1';
+                $this->addError('tab', 'La simulation n\'est pas disponible sans résultats.');
                 return;
             }
 
@@ -1359,6 +1154,7 @@ class ResultatsFinale extends Component
             $this->loadSessions();
             $this->loadUEStructure();
             $this->loadResultats();
+            $this->simulationResults = []; // Réinitialiser les résultats de simulation
 
             $this->dispatch('data-refreshed');
         } catch (\Exception $e) {
@@ -1383,6 +1179,12 @@ class ResultatsFinale extends Component
                 'rattrapage_id' => $this->sessionRattrapage?->id,
                 'show_session2' => $this->showSession2
             ],
+            'simulation' => [
+                'disponible' => !empty($this->resultatsSession1) || !empty($this->resultatsSession2),
+                'type_session' => $this->simulationParams['session_type'],
+                'parametres' => $this->simulationParams,
+                'nb_resultats' => count($this->simulationResults)
+            ],
             'donnees' => [
                 'resultats_s1' => count($this->resultatsSession1),
                 'resultats_s2' => count($this->resultatsSession2),
@@ -1391,8 +1193,7 @@ class ResultatsFinale extends Component
             'stats' => [
                 's1' => $this->statistiquesSession1,
                 's2' => $this->statistiquesSession2
-            ],
-            'erreurs_coherence' => $this->validateCoherence()
+            ]
         ];
     }
 }

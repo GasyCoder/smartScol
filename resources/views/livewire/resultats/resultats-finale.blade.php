@@ -1,3 +1,4 @@
+{{-- Vue principale - Votre structure exacte avec modifications pour simulation --}}
 <div class="p-6 bg-white rounded-lg shadow-sm dark:bg-gray-800">
     <!-- Header result -->
     @include('livewire.resultats.sessons.header-result')
@@ -70,8 +71,10 @@
                         </div>
                     </div>
                 </button>
+            @endif
 
-                <!-- Onglet Simulation amélioré -->
+            <!-- Onglet Simulation amélioré - MAINTENANT DISPONIBLE SI AU MOINS UNE SESSION A DES RÉSULTATS -->
+            @if(!empty($resultatsSession1) || !empty($resultatsSession2))
                 <button wire:click="$set('activeTab', 'simulation')"
                         class="group relative flex items-center px-6 py-3.5 text-sm font-medium rounded-xl transition-all duration-300 transform hover:scale-[1.02] {{ $activeTab === 'simulation' ? 'bg-white dark:bg-gray-700 text-purple-600 dark:text-purple-400 shadow-lg shadow-purple-500/20 ring-2 ring-purple-500/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-700/80' }}">
 
@@ -87,6 +90,17 @@
                             <span class="font-semibold">Simulation</span>
                             <span class="text-xs opacity-75">Délibération</span>
                         </div>
+
+                        <!-- Badge indiquant les sessions disponibles pour simulation -->
+                        <span class="ml-3 px-2.5 py-1 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded-full font-medium border border-purple-200 dark:border-purple-700">
+                            @if(!empty($resultatsSession1) && !empty($resultatsSession2))
+                                S1+S2
+                            @elseif(!empty($resultatsSession1))
+                                S1
+                            @else
+                                S2
+                            @endif
+                        </span>
                     </div>
                 </button>
             @endif
@@ -146,7 +160,7 @@
         <div class="animate-fadeIn">
             @include('livewire.resultats.sessons.normale')
             @include('livewire.resultats.sessons.rattrapage')
-            @include('livewire.resultats.sessons.simulation')
+            @include('livewire.resultats.sessons.simulation')  <!-- déliberation -->
         </div>
     </div>
 </div>
@@ -291,7 +305,7 @@
 @endpush
 
 @push('scripts')
-{{-- Scripts avec support dark mode et logique de session RATTRAPAGE LIBRE --}}
+{{-- Scripts avec support dark mode et logique de simulation POUR TOUTES LES SESSIONS --}}
 <script>
     document.addEventListener('livewire:init', () => {
         // Gestion du mode sombre
@@ -341,6 +355,14 @@
                         border: 'border-orange-400'
                     };
                     break;
+                case 'simulation':
+                    config = {
+                        bg: isDark ? 'bg-purple-600' : 'bg-purple-500',
+                        text: 'text-white',
+                        icon: 'ni-setting',
+                        border: 'border-purple-400'
+                    };
+                    break;
                 default:
                     config = {
                         bg: isDark ? 'bg-blue-600' : 'bg-blue-500',
@@ -378,22 +400,32 @@
             }, duration);
         };
 
-        // Écouter les événements Livewire spécifiques aux sessions
-        Livewire.on('simulation-complete', () => {
-            showNotification('Simulation terminée avec succès !', 'success');
+        // NOUVEAUX ÉVÉNEMENTS : Écouter les événements Livewire spécifiques aux simulations POUR TOUTES LES SESSIONS
+        Livewire.on('simulation-complete', (event) => {
+            const stats = event[0] || event;
+            const sessionType = stats.session_type || 'délibération';
+            const changements = stats.changements || 0;
+            const total = stats.total || 0;
+
+            showNotification(
+                `Simulation ${sessionType} terminée ! ${changements} changements détectés sur ${total} étudiants.`,
+                'simulation',
+                6000
+            );
             animateTabSwitch();
         });
 
+        // Événements existants améliorés
         Livewire.on('note-added', () => {
-            showNotification('Note ajoutée avec succès en session rattrapage !', 'success');
+            showNotification('Note ajoutée avec succès !', 'success');
         });
 
         Livewire.on('note-updated', () => {
-            showNotification('Note modifiée avec succès en session rattrapage !', 'success');
+            showNotification('Note modifiée avec succès !', 'success');
         });
 
         Livewire.on('session-locked', () => {
-            showNotification('Session de rattrapage verrouillée - Consultation uniquement', 'warning');
+            showNotification('Session verrouillée - Consultation uniquement', 'warning');
         });
 
         Livewire.on('note-view-only', () => {
@@ -401,9 +433,11 @@
         });
 
         Livewire.on('session-switched', (event) => {
-            const sessionType = event.session;
+            const sessionType = event.session || event[0]?.session;
             const message = sessionType === 'session2' ?
                 'Session de rattrapage - Mode consultation (Verrouillée)' :
+                sessionType === 'simulation' ?
+                'Mode simulation délibération activé' :
                 'Mode consultation - Session normale verrouillée';
             showNotification(message, 'info');
             animateTabSwitch();
@@ -411,6 +445,12 @@
 
         Livewire.on('data-refreshed', () => {
             showNotification('Données actualisées', 'info', 2000);
+        });
+
+        // NOUVEAUX ÉVÉNEMENTS : Gestion des erreurs de simulation
+        Livewire.on('simulation-error', (event) => {
+            const error = event[0] || event;
+            showNotification(`Erreur simulation : ${error.message || 'Erreur inconnue'}`, 'error', 8000);
         });
 
         // Fonction de notification améliorée
@@ -433,7 +473,7 @@
         window.showNotification = showNotification;
     });
 
-    // Fonctions globales pour l'interface - SESSION RATTRAPAGE LIBRE
+    // Fonctions globales pour l'interface - SIMULATION POUR TOUTES LES SESSIONS
     window.toggleDarkMode = function() {
         document.documentElement.classList.toggle('dark');
         localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
@@ -457,7 +497,7 @@
         Livewire.dispatch('switchTab', { tab: tab });
     };
 
-    // Actions contextuelles - SESSION RATTRAPAGE LIBRE
+    // Actions contextuelles - SIMULATION AMÉLIORÉE
     window.openAddNoteModal = function() {
         Livewire.dispatch('openNoteModal');
     };
@@ -467,10 +507,23 @@
     };
 
     window.runSimulation = function() {
-        Livewire.dispatch('runSimulation');
+        Livewire.dispatch('simulerDeliberation');
     };
 
-    // Fonctions spécifiques à la session de rattrapage FORCÉMENT DÉVERROUILLÉE
+    // NOUVELLES FONCTIONS pour simulation avec choix de session
+    window.simulerSession1 = function() {
+        if (confirm('Simuler la délibération pour la Session 1 (Normale) ?')) {
+            Livewire.dispatch('simulerDeliberationSession', { sessionType: 'session1' });
+        }
+    };
+
+    window.simulerSession2 = function() {
+        if (confirm('Simuler la délibération pour la Session 2 (Rattrapage) ?')) {
+            Livewire.dispatch('simulerDeliberationSession', { sessionType: 'session2' });
+        }
+    };
+
+    // Fonctions spécifiques existantes conservées
     window.forceUnlockSession2 = function() {
         if (confirm('ATTENTION ! Cela va FORCER le déverrouillage de la session rattrapage en ignorant TOUS les statuts de publication. Continuer ?')) {
             Livewire.dispatch('forceUnlockSession2');
