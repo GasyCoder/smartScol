@@ -2,19 +2,20 @@
 
 namespace App\Livewire\Resultats;
 
-use App\Models\AnneeUniversitaire;
+use App\Models\UE;
 use App\Models\Niveau;
 use App\Models\Parcour;
+use Livewire\Component;
+use App\Models\Etudiant;
 use App\Models\SessionExam;
 use App\Models\ResultatFinal;
-use App\Models\Etudiant;
-use App\Models\UE;
-use App\Exports\ResultatsExport;
-use Livewire\Component;
-use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Exports\ResultatsExport;
+use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Services\CalculAcademiqueService;
 
 /**
  * Composant pour afficher les résultats finaux avec sessions distinctes
@@ -343,8 +344,11 @@ class ResultatsFinale extends Component
                 $ue = $notesUE->first()->ec->ue;
                 $totalCredits += $ue->credits ?? 0;
 
-                // 1. Vérifier s'il y a une note éliminatoire (0) dans cette UE
-                $hasNoteZeroInUE = $notesUE->contains('note', 0);
+                // LOGIQUE MÉDECINE 1 : Collecter toutes les notes de l'UE
+                $notes = $notesUE->pluck('note')->toArray();
+
+                // LOGIQUE MÉDECINE 2 : Vérifier s'il y a une note éliminatoire (0) dans cette UE
+                $hasNoteZeroInUE = in_array(0, $notes);
 
                 if ($hasNoteZeroInUE) {
                     // UE éliminée à cause d'une note de 0
@@ -352,10 +356,11 @@ class ResultatsFinale extends Component
                     $moyenneUE = 0;
                     $ueValidee = false;
                 } else {
-                    // 2. Calculer la moyenne UE = somme notes / nombre EC
-                    $moyenneUE = $notesUE->avg('note');
+                    // LOGIQUE MÉDECINE 3 : Calculer la moyenne UE = somme notes / nombre EC
+                    $moyenneUE = count($notes) > 0 ? array_sum($notes) / count($notes) : 0;
+                    $moyenneUE = round($moyenneUE, 2);
 
-                    // 3. UE validée si moyenne >= 10 ET aucune note = 0
+                    // LOGIQUE MÉDECINE 4 : UE validée si moyenne >= 10 ET aucune note = 0
                     $ueValidee = $moyenneUE >= 10;
 
                     if ($ueValidee) {
@@ -368,19 +373,31 @@ class ResultatsFinale extends Component
                     'ue_id' => $ueId,
                     'ue_nom' => $ue->nom,
                     'ue_abr' => $ue->abr,
-                    'moyenne_ue' => round($moyenneUE, 2),
+                    'moyenne_ue' => $moyenneUE,
                     'credits' => $ue->credits ?? 0,
                     'validee' => $ueValidee,
-                    'eliminee' => $hasNoteZeroInUE
+                    'eliminee' => $hasNoteZeroInUE,
+                    'notes_ec' => $notesUE->map(function($resultat) {
+                        return [
+                            'ec_nom' => $resultat->ec->nom,
+                            'note' => $resultat->note,
+                            'est_eliminatoire' => $resultat->note == 0
+                        ];
+                    })->toArray()
                 ];
             }
 
-            // 4. Moyenne générale = moyenne des moyennes UE (pas pondérée)
+            // LOGIQUE MÉDECINE 5 : Moyenne générale = somme moyennes UE / nombre UE
             $moyenneGenerale = count($moyennesUE) > 0 ?
                 array_sum($moyennesUE) / count($moyennesUE) : 0;
 
+            // LOGIQUE MÉDECINE 6 : Si note éliminatoire, moyenne générale = 0
+            if ($hasNoteEliminatoire) {
+                $moyenneGenerale = 0;
+            }
+
         } catch (\Exception $e) {
-            Log::error('Erreur lors du calcul académique: ' . $e->getMessage());
+            Log::error('Erreur lors du calcul académique médecine: ' . $e->getMessage());
             $moyenneGenerale = 0;
         }
 
@@ -394,6 +411,7 @@ class ResultatsFinale extends Component
         ];
     }
 
+
     /**
      * DÉCISIONS selon votre logique métier exacte
      */
@@ -404,14 +422,14 @@ class ResultatsFinale extends Component
         $hasNoteEliminatoire = $calculAcademique['has_note_eliminatoire'];
 
         if ($session->type === 'Normale') {
-            // SESSION 1 (NORMALE) :
-            // - Si crédits validés = total (60) → Admis
+            // LOGIQUE MÉDECINE SESSION 1 (NORMALE) :
+            // - Si crédits validés = 60 (total) → Admis
             // - Sinon → Rattrapage (même avec note éliminatoire)
-            return $creditsValides >= $totalCredits ?
+            return $creditsValides >= 60 ?
                 ResultatFinal::DECISION_ADMIS :
                 ResultatFinal::DECISION_RATTRAPAGE;
         } else {
-            // SESSION 2 (RATTRAPAGE) :
+            // LOGIQUE MÉDECINE SESSION 2 (RATTRAPAGE) :
             // - Si note éliminatoire → Exclu
             // - Si crédits validés >= 40 → Admis
             // - Sinon → Redoublant
@@ -482,6 +500,89 @@ class ResultatsFinale extends Component
         }
     }
 
+
+    public function appliquerDecisionsLogiqueMedecine($sessionType)
+    {
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            $this->addError('decisions', 'Veuillez sélectionner un niveau et une année universitaire.');
+            return;
+        }
+
+        try {
+            $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+
+            if (!$session) {
+                $this->addError('decisions', 'Session non trouvée.');
+                return;
+            }
+
+            // Utiliser le service de calcul médecine
+            $calculService = new CalculAcademiqueService();
+            $result = $calculService->appliquerDecisionsSession($session->id, true);
+
+            if ($result['success']) {
+                $stats = $result['statistiques'];
+                toastr()->success(
+                    "Décisions appliquées selon la logique médecine : " .
+                    "{$stats['decisions']['admis']} admis, " .
+                    "{$stats['decisions']['rattrapage']} rattrapage, " .
+                    "{$stats['decisions']['redoublant']} redoublant, " .
+                    "{$stats['decisions']['exclus']} exclus"
+                );
+
+                // Recharger les résultats
+                $this->loadResultats();
+            } else {
+                $this->addError('decisions', $result['message']);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur application décisions médecine: ' . $e->getMessage());
+            $this->addError('decisions', 'Erreur lors de l\'application des décisions: ' . $e->getMessage());
+        }
+    }
+
+    public function validerCoherenceCalculs($sessionType)
+    {
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            $this->addError('validation', 'Veuillez sélectionner un niveau et une année universitaire.');
+            return;
+        }
+
+        try {
+            $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+
+            if (!$session) {
+                $this->addError('validation', 'Session non trouvée.');
+                return;
+            }
+
+            // Utiliser le service de calcul médecine pour valider
+            $calculService = new CalculAcademiqueService();
+            $erreurs = $calculService->validerCoherenceCalculsMedecine($session->id, null, true);
+
+            if (empty($erreurs)) {
+                toastr()->success('Validation réussie : Tous les calculs sont cohérents selon la logique médecine.');
+            } else {
+                $messageErreurs = "Erreurs détectées :\n" . implode("\n", array_slice($erreurs, 0, 10));
+                if (count($erreurs) > 10) {
+                    $messageErreurs .= "\n... et " . (count($erreurs) - 10) . " autres erreurs.";
+                }
+
+                $this->addError('validation', $messageErreurs);
+                Log::warning('Erreurs de cohérence médecine détectées', [
+                    'session_id' => $session->id,
+                    'erreurs' => $erreurs
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur validation cohérence médecine: ' . $e->getMessage());
+            $this->addError('validation', 'Erreur lors de la validation: ' . $e->getMessage());
+        }
+    }
+
+
     /**
      * SIMULATION avec paramètres personnalisables
      */
@@ -500,7 +601,7 @@ class ResultatsFinale extends Component
                 $hasNoteEliminatoire = $resultat['has_note_eliminatoire'];
 
                 $decisionActuelle = $resultat['decision'];
-                $decisionSimulee = $this->determinerDecisionAvecParametres($creditsValides, $hasNoteEliminatoire);
+                $decisionSimulee = $this->determinerDecisionSimulation($creditsValides, $hasNoteEliminatoire);
 
                 return [
                     'etudiant' => $resultat['etudiant'],
@@ -509,17 +610,46 @@ class ResultatsFinale extends Component
                     'has_note_eliminatoire' => $hasNoteEliminatoire,
                     'decision_actuelle' => $decisionActuelle,
                     'decision_simulee' => $decisionSimulee,
-                    'changement' => $decisionActuelle !== $decisionSimulee
+                    'changement' => $decisionActuelle !== $decisionSimulee,
+                    'details_ue' => $resultat['details_ue'] ?? []
                 ];
             })->toArray();
 
-            $this->dispatch('simulation-complete');
+            // Calculer les statistiques de simulation
+            $statsSimulation = [
+                'total' => count($this->simulationResults),
+                'changements' => count(array_filter($this->simulationResults, fn($r) => $r['changement'])),
+                'decisions_simulees' => array_count_values(array_column($this->simulationResults, 'decision_simulee'))
+            ];
+
+            toastr()->success(
+                "Simulation terminée : {$statsSimulation['changements']} changements détectés sur {$statsSimulation['total']} étudiants."
+            );
+
+            $this->dispatch('simulation-complete', $statsSimulation);
 
         } catch (\Exception $e) {
             $this->addError('simulation', 'Erreur lors de la simulation: ' . $e->getMessage());
-            Log::error('Erreur simulation délibération: ' . $e->getMessage());
+            Log::error('Erreur simulation délibération médecine: ' . $e->getMessage());
         }
     }
+
+
+    /**
+     * NOUVELLE MÉTHODE : Détermine la décision selon les paramètres de simulation
+     */
+    private function determinerDecisionSimulation($creditsValides, $hasNoteEliminatoire)
+    {
+        // Appliquer la logique médecine avec paramètres personnalisables
+        if ($this->simulationParams['appliquer_note_eliminatoire'] && $hasNoteEliminatoire) {
+            return ResultatFinal::DECISION_EXCLUS;
+        }
+
+        return $creditsValides >= $this->simulationParams['credits_requis_session2'] ?
+            ResultatFinal::DECISION_ADMIS :
+            ResultatFinal::DECISION_REDOUBLANT;
+    }
+
 
     private function determinerDecisionAvecParametres($creditsValides, $hasNoteEliminatoire)
     {
@@ -559,6 +689,267 @@ class ResultatsFinale extends Component
             $this->addError('export', 'Erreur lors de l\'export: ' . $e->getMessage());
             Log::error('Erreur export Excel: ' . $e->getMessage());
         }
+    }
+
+        /**
+     * NOUVELLE MÉTHODE : Exporte les résultats avec détails logique médecine
+     */
+    public function exportResultatsDetaillesMedecine($sessionType)
+    {
+        if (!$this->validateExport()) {
+            return;
+        }
+
+        try {
+            $session = $this->getSessionForType($sessionType);
+            $resultats = $sessionType === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
+
+            if (empty($resultats)) {
+                $this->addError('export', 'Aucun résultat à exporter pour cette session.');
+                return;
+            }
+
+            // Enrichir les données avec les détails médecine
+            $donneesExport = collect($resultats)->map(function($resultat) {
+                return [
+                    'etudiant' => $resultat['etudiant'],
+                    'resultats_academiques' => $resultat,
+                    'details_calcul_medecine' => [
+                        'methode_calcul' => 'Logique Faculté de Médecine',
+                        'formule_moyenne_ue' => 'Somme notes EC / Nombre EC',
+                        'formule_moyenne_generale' => 'Somme moyennes UE / Nombre UE',
+                        'seuil_validation_ue' => '10/20',
+                        'regle_note_eliminatoire' => 'Note 0 élimine l\'UE complète',
+                        'credits_requis_session1' => '60 crédits',
+                        'credits_requis_session2' => '40 crédits'
+                    ]
+                ];
+            })->toArray();
+
+            // Utiliser l'export existant avec données enrichies
+            $export = new ResultatsExport($donneesExport, $this->uesStructure, $session);
+            $filename = $this->generateExportFilename($sessionType . '_details_medecine');
+
+            return Excel::download($export, $filename);
+
+        } catch (\Exception $e) {
+            $this->addError('export', 'Erreur lors de l\'export détaillé: ' . $e->getMessage());
+            Log::error('Erreur export détaillé médecine: ' . $e->getMessage());
+        }
+    }
+
+
+
+    /**
+     * NOUVELLE MÉTHODE : Obtient un rapport détaillé selon logique médecine
+     */
+    public function genererRapportDetailleLogiqueMedecine($sessionType)
+    {
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            return null;
+        }
+
+        try {
+            $session = $this->getSessionForType($sessionType);
+            $resultats = $sessionType === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
+            $statistiques = $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2;
+
+            if (empty($resultats)) {
+                return null;
+            }
+
+            // Analyser selon logique médecine
+            $analyseMedecine = [
+                'methode_calcul' => 'Logique Faculté de Médecine',
+                'regles_appliquees' => [
+                    'moyenne_ue' => 'Moyenne UE = (Somme des notes EC) / (Nombre d\'EC)',
+                    'validation_ue' => 'UE validée si moyenne >= 10 ET aucune note = 0',
+                    'note_eliminatoire' => 'Une note de 0 dans un EC élimine toute l\'UE',
+                    'moyenne_generale' => 'Moyenne générale = (Somme moyennes UE) / (Nombre d\'UE)',
+                    'decision_session1' => 'Admis si 60 crédits, sinon Rattrapage',
+                    'decision_session2' => 'Exclu si note 0, Admis si >= 40 crédits, sinon Redoublant'
+                ],
+                'statistiques_detaillees' => $this->calculerStatistiquesDetailleesLogiqueMedecine($resultats),
+                'coherence_calculs' => $this->verifierCoherenceLogiqueMedecine($resultats, $session)
+            ];
+
+            return [
+                'session' => $session,
+                'resultats' => $resultats,
+                'statistiques' => $statistiques,
+                'analyse_medecine' => $analyseMedecine,
+                'date_generation' => now(),
+                'parametres' => [
+                    'niveau' => Niveau::find($this->selectedNiveau),
+                    'parcours' => $this->selectedParcours ? Parcour::find($this->selectedParcours) : null,
+                    'annee_universitaire' => AnneeUniversitaire::find($this->selectedAnneeUniversitaire)
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Erreur génération rapport détaillé médecine: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+
+    /**
+     * NOUVELLE MÉTHODE : Calcule des statistiques détaillées selon logique médecine
+     */
+    private function calculerStatistiquesDetailleesLogiqueMedecine($resultats)
+    {
+        try {
+            $stats = [
+                'ues_analysis' => [],
+                'notes_distribution' => [
+                    'eliminatoires' => 0,
+                    'insuffisantes' => 0, // < 10
+                    'passables' => 0,     // 10-12
+                    'assez_bien' => 0,    // 12-14
+                    'bien' => 0,          // 14-16
+                    'tres_bien' => 0      // >= 16
+                ],
+                'credits_analysis' => [
+                    'distribution' => [],
+                    'moyenne_credits' => 0,
+                    'mediane_credits' => 0
+                ]
+            ];
+
+            // Analyser chaque UE
+            $uesData = [];
+            foreach ($resultats as $resultat) {
+                foreach ($resultat['details_ue'] as $ue) {
+                    if (!isset($uesData[$ue['ue_id']])) {
+                        $uesData[$ue['ue_id']] = [
+                            'nom' => $ue['ue_nom'],
+                            'moyennes' => [],
+                            'validees' => 0,
+                            'eliminees' => 0,
+                            'total' => 0
+                        ];
+                    }
+
+                    $uesData[$ue['ue_id']]['moyennes'][] = $ue['moyenne_ue'];
+                    $uesData[$ue['ue_id']]['total']++;
+
+                    if ($ue['eliminee']) {
+                        $uesData[$ue['ue_id']]['eliminees']++;
+                    } elseif ($ue['validee']) {
+                        $uesData[$ue['ue_id']]['validees']++;
+                    }
+                }
+
+                // Distribution des crédits
+                $credits = $resultat['credits_valides'];
+                $stats['credits_analysis']['distribution'][] = $credits;
+
+                // Distribution des moyennes générales
+                $moyenne = $resultat['moyenne_generale'];
+                if ($moyenne == 0 && $resultat['has_note_eliminatoire']) {
+                    $stats['notes_distribution']['eliminatoires']++;
+                } elseif ($moyenne < 10) {
+                    $stats['notes_distribution']['insuffisantes']++;
+                } elseif ($moyenne < 12) {
+                    $stats['notes_distribution']['passables']++;
+                } elseif ($moyenne < 14) {
+                    $stats['notes_distribution']['assez_bien']++;
+                } elseif ($moyenne < 16) {
+                    $stats['notes_distribution']['bien']++;
+                } else {
+                    $stats['notes_distribution']['tres_bien']++;
+                }
+            }
+
+            // Finaliser les statistiques UE
+            foreach ($uesData as $ueId => $data) {
+                $stats['ues_analysis'][] = [
+                    'ue_nom' => $data['nom'],
+                    'moyenne_ue' => round(array_sum($data['moyennes']) / count($data['moyennes']), 2),
+                    'taux_validation' => round(($data['validees'] / $data['total']) * 100, 2),
+                    'taux_elimination' => round(($data['eliminees'] / $data['total']) * 100, 2),
+                    'total_etudiants' => $data['total']
+                ];
+            }
+
+            // Finaliser les statistiques crédits
+            $credits = $stats['credits_analysis']['distribution'];
+            if (!empty($credits)) {
+                $stats['credits_analysis']['moyenne_credits'] = round(array_sum($credits) / count($credits), 2);
+                sort($credits);
+                $count = count($credits);
+                $stats['credits_analysis']['mediane_credits'] = $count % 2 == 0
+                    ? ($credits[$count/2 - 1] + $credits[$count/2]) / 2
+                    : $credits[floor($count/2)];
+            }
+
+            return $stats;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur calcul statistiques détaillées médecine: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifie la cohérence des calculs selon logique médecine
+     */
+    private function verifierCoherenceLogiqueMedecine($resultats, $session)
+    {
+        $erreurs = [];
+        $warnings = [];
+
+        try {
+            foreach ($resultats as $resultat) {
+                $etudiant = $resultat['etudiant'];
+
+                // Vérifier cohérence moyenne générale
+                if (!empty($resultat['details_ue'])) {
+                    $moyennesUE = array_column(
+                        array_filter($resultat['details_ue'], fn($ue) => !$ue['eliminee']),
+                        'moyenne_ue'
+                    );
+
+                    $moyenneAttendue = count($moyennesUE) > 0 ?
+                        round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
+
+                    if ($resultat['has_note_eliminatoire']) {
+                        $moyenneAttendue = 0;
+                    }
+
+                    if (abs($resultat['moyenne_generale'] - $moyenneAttendue) > 0.01) {
+                        $erreurs[] = "Étudiant {$etudiant->nom}: Moyenne générale incohérente ({$resultat['moyenne_generale']} vs {$moyenneAttendue} attendu)";
+                    }
+                }
+
+                // Vérifier cohérence décision selon logique médecine
+                $decisionAttendue = $this->determinerDecision($resultat, $session);
+                if ($resultat['decision'] !== $decisionAttendue) {
+                    $erreurs[] = "Étudiant {$etudiant->nom}: Décision incohérente ({$resultat['decision']} vs {$decisionAttendue} attendu selon logique médecine)";
+                }
+
+                // Vérifier cohérence crédits
+                $creditsCalcules = array_sum(array_column(
+                    array_filter($resultat['details_ue'], fn($ue) => $ue['validee'] && !$ue['eliminee']),
+                    'credits'
+                ));
+
+                if ($creditsCalcules !== $resultat['credits_valides']) {
+                    $erreurs[] = "Étudiant {$etudiant->nom}: Crédits incohérents ({$resultat['credits_valides']} vs {$creditsCalcules} calculés)";
+                }
+            }
+
+        } catch (\Exception $e) {
+            $erreurs[] = "Erreur lors de la vérification: " . $e->getMessage();
+        }
+
+        return [
+            'erreurs' => $erreurs,
+            'warnings' => $warnings,
+            'est_coherent' => empty($erreurs),
+            'nb_verifications' => count($resultats)
+        ];
     }
 
     /**

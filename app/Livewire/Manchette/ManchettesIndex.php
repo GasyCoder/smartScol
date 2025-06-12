@@ -23,12 +23,15 @@ use Livewire\WithPagination;
  * @property \Illuminate\Support\Collection $parcours
  * @property \Illuminate\Support\Collection $salles
  * @property \Illuminate\Support\Collection $ecs
+ * @property \Illuminate\Support\Collection $etudiantsSansManchette
  */
+
 class ManchettesIndex extends Component
 {
     use WithPagination;
 
     // Propriétés de filtrage
+    public $quickFilter = '';
     public $niveau_id;
     public $parcours_id;
     public $salle_id;
@@ -1142,6 +1145,73 @@ class ManchettesIndex extends Component
         }
     }
 
+    /**
+     * NOUVELLE MÉTHODE : Sélection rapide d'un étudiant depuis la liste
+     */
+    public function selectEtudiantQuick($etudiantId)
+    {
+        $etudiant = Etudiant::find($etudiantId);
+        if (!$etudiant) {
+            toastr()->error('Étudiant introuvable');
+            return;
+        }
+
+        // Vérifier que l'étudiant n'a pas déjà une manchette
+        $hasExistingManchette = $this->checkExistingManchetteForCurrentSession($etudiantId);
+        if ($hasExistingManchette) {
+            $sessionLibelle = ucfirst($this->getCurrentSessionType());
+            toastr()->error("Cet étudiant a déjà une manchette pour cette matière en session {$sessionLibelle}");
+            return;
+        }
+
+        // Sélectionner l'étudiant
+        $this->etudiant_id = $etudiant->id;
+        $this->matricule = $etudiant->matricule;
+        $this->searchQuery = '';
+        $this->searchResults = [];
+        $this->quickFilter = ''; // Réinitialiser le filtre
+
+        // Focus automatique sur le bouton enregistrer après sélection
+        $this->dispatch('etudiant-selected-quick');
+
+        toastr()->success("Étudiant {$etudiant->nom} {$etudiant->prenom} sélectionné");
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Sélection d'un étudiant aléatoire
+     */
+    public function selectRandomStudent()
+    {
+        if (empty($this->etudiantsSansManchette) || count($this->etudiantsSansManchette) == 0) {
+            toastr()->warning('Aucun étudiant disponible');
+            return;
+        }
+
+        $randomIndex = array_rand($this->etudiantsSansManchette->toArray());
+        $randomEtudiant = $this->etudiantsSansManchette[$randomIndex];
+
+        $this->selectEtudiantQuick($randomEtudiant->id);
+        toastr()->info('Étudiant sélectionné aléatoirement');
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Sélection du premier étudiant
+     */
+    public function selectFirstStudent()
+    {
+        if (empty($this->etudiantsSansManchette) || count($this->etudiantsSansManchette) == 0) {
+            toastr()->warning('Aucun étudiant disponible');
+            return;
+        }
+
+        $firstEtudiant = $this->etudiantsSansManchette->first();
+        $this->selectEtudiantQuick($firstEtudiant->id);
+        toastr()->info('Premier étudiant sélectionné');
+    }
+
+    /**
+     * MÉTHODE CORRIGÉE : Mise à jour du saveManchette pour garder la modal ouverte
+     */
     public function saveManchette()
     {
         // Vérification des autorisations de session
@@ -1273,28 +1343,49 @@ class ManchettesIndex extends Component
                 $this->message = "Manchette enregistrée avec succès pour la session {$sessionLibelle}";
             }
 
-            // Gestion post-sauvegarde
+            // NOUVEAU : Gestion post-sauvegarde améliorée
             if (!isset($this->editingManchetteId)) {
+                // Réinitialiser seulement les champs étudiant
                 $this->etudiant_id = null;
                 $this->matricule = '';
                 $this->searchQuery = '';
                 $this->searchResults = [];
+                $this->quickFilter = ''; // Réinitialiser le filtre rapide
 
                 // Générer le prochain code pour la session courante
                 $this->generateNextCodeForCurrentSession();
 
+                // Recharger la liste des étudiants pour mettre à jour l'affichage
+                $this->chargerEtudiants();
+
+                // GARDER LA MODAL OUVERTE et préparer pour le prochain étudiant
                 $this->showManchetteModal = true;
+
+                // Focus automatique sur le champ de recherche
                 $this->dispatch('focus-search-field');
+
+                // Message encourageant à continuer avec compteur optimisé
+                $etudiantsSansCount = count($this->etudiantsSansManchette ?? []);
+                if ($etudiantsSansCount > 0) {
+                    if ($etudiantsSansCount <= 10) {
+                        toastr()->success($this->message . " - Plus que {$etudiantsSansCount} étudiant(s) !");
+                    } else {
+                        toastr()->success($this->message . " - {$etudiantsSansCount} étudiant(s) restant(s)");
+                    }
+                } else {
+                    toastr()->success($this->message . " - Tous les étudiants ont maintenant une manchette ! 🎉");
+                }
             } else {
-                $this->reset(['code_anonymat', 'etudiant_id', 'matricule', 'editingManchetteId', 'searchResults', 'searchQuery']);
+                // Mode modification : fermer la modal
+                $this->reset(['code_anonymat', 'etudiant_id', 'matricule', 'editingManchetteId', 'searchResults', 'searchQuery', 'quickFilter']);
                 $this->showManchetteModal = false;
+                toastr()->success($this->message);
             }
 
             // Mettre à jour les compteurs pour la session courante
             $this->updateCountersForCurrentSession();
 
             $this->messageType = 'success';
-            toastr()->success($this->message);
 
         } catch (\Exception $e) {
             $this->message = 'Erreur: ' . $e->getMessage();
@@ -1320,6 +1411,34 @@ class ManchettesIndex extends Component
 
             $this->code_anonymat = $newCode;
         }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Fermer la modal manuellement avec confirmation si des étudiants restent
+     */
+    public function closeModalWithConfirmation()
+    {
+        $etudiantsSansCount = count($this->etudiantsSansManchette ?? []);
+
+        if ($etudiantsSansCount > 0 && !isset($this->editingManchetteId)) {
+            // Demander confirmation si des étudiants n'ont pas encore de manchette
+            $this->dispatch('confirm-close-modal', [
+                'message' => "Il reste encore {$etudiantsSansCount} étudiant(s) sans manchette. Voulez-vous vraiment fermer la saisie ?"
+            ]);
+        } else {
+            // Fermer directement
+            $this->forceCloseModal();
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Forcer la fermeture de la modal
+     */
+    public function forceCloseModal()
+    {
+        $this->showManchetteModal = false;
+        $this->reset(['code_anonymat', 'etudiant_id', 'matricule', 'editingManchetteId', 'searchResults', 'searchQuery', 'quickFilter']);
+        toastr()->info('Saisie des manchettes fermée');
     }
 
     public function editManchette($id)

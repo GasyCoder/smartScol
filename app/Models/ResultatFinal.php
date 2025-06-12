@@ -1784,4 +1784,674 @@ class ResultatFinal extends Model
             ->groupBy('etudiant_id')
             ->havingRaw('COUNT(DISTINCT session_exam_id) > 1');
     }
+
+
+    /**
+     * NOUVELLES MÉTHODES à ajouter dans votre modèle ResultatFinal
+     * Logique exacte faculté de médecine
+     */
+
+    /**
+     * MÉTHODE MISE À JOUR : Calcule la moyenne d'une UE selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $ueId
+     * @param int $sessionId
+     * @return float|null
+     */
+    public static function calculerMoyenneUE_LogiqueMedecine($etudiantId, $ueId, $sessionId)
+    {
+        try {
+            // Récupérer tous les résultats de l'UE pour cet étudiant
+            $resultats = self::where('session_exam_id', $sessionId)
+                ->whereHas('ec', function($q) use ($ueId) {
+                    $q->where('ue_id', $ueId);
+                })
+                ->where('etudiant_id', $etudiantId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                return null;
+            }
+
+            // LOGIQUE MÉDECINE 1 : Vérifier s'il y a une note éliminatoire (0)
+            $hasNoteZero = $resultats->contains('note', 0);
+
+            if ($hasNoteZero) {
+                // LOGIQUE MÉDECINE 2 : Si note 0, UE éliminée = moyenne 0
+                return 0;
+            }
+
+            // LOGIQUE MÉDECINE 3 : Moyenne UE = somme notes / nombre EC
+            return round($resultats->avg('note'), 2);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul de la moyenne UE médecine', [
+                'etudiant_id' => $etudiantId,
+                'ue_id' => $ueId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * MÉTHODE MISE À JOUR : Vérifie si un étudiant valide une UE selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $ueId
+     * @param int $sessionId
+     * @return bool
+     */
+    public static function etudiantValideUE_LogiqueMedecine($etudiantId, $ueId, $sessionId)
+    {
+        try {
+            $moyenneUE = self::calculerMoyenneUE_LogiqueMedecine($etudiantId, $ueId, $sessionId);
+
+            if ($moyenneUE === null) {
+                return false;
+            }
+
+            // LOGIQUE MÉDECINE : UE validée si moyenne >= 10 ET pas de note 0
+            return $moyenneUE >= 10 && $moyenneUE > 0;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification de validation UE médecine', [
+                'etudiant_id' => $etudiantId,
+                'ue_id' => $ueId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * MÉTHODE MISE À JOUR : Calcule la moyenne générale selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @return float
+     */
+    public static function calculerMoyenneGenerale_LogiqueMedecine($etudiantId, $sessionId)
+    {
+        try {
+            $resultats = self::with('ec.ue')
+                ->where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                return 0;
+            }
+
+            // LOGIQUE MÉDECINE : Grouper par UE
+            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            $moyennesUE = [];
+            $hasNoteEliminatoire = false;
+
+            foreach ($resultatsParUE as $ueId => $notesUE) {
+                // LOGIQUE MÉDECINE 1 : Vérifier s'il y a une note éliminatoire (0) dans cette UE
+                $hasNoteZeroInUE = $notesUE->contains('note', 0);
+
+                if ($hasNoteZeroInUE) {
+                    $hasNoteEliminatoire = true;
+                    $moyennesUE[] = 0; // UE éliminée
+                } else {
+                    // LOGIQUE MÉDECINE 2 : Moyenne UE = somme notes / nombre EC
+                    $moyenneUE = $notesUE->avg('note');
+                    $moyennesUE[] = $moyenneUE;
+                }
+            }
+
+            // LOGIQUE MÉDECINE 3 : Moyenne générale = somme moyennes UE / nombre UE
+            $moyenneGenerale = count($moyennesUE) > 0 ?
+                array_sum($moyennesUE) / count($moyennesUE) : 0;
+
+            // LOGIQUE MÉDECINE 4 : Si note éliminatoire, moyenne générale = 0
+            if ($hasNoteEliminatoire) {
+                $moyenneGenerale = 0;
+            }
+
+            return round($moyenneGenerale, 2);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul de moyenne générale médecine', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return 0;
+        }
+    }
+
+    /**
+     * MÉTHODE MISE À JOUR : Détermine automatiquement la décision première session selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @return string
+     */
+    public static function determinerDecisionPremiereSession_LogiqueMedecine($etudiantId, $sessionId)
+    {
+        try {
+            // Calculer les crédits validés selon logique médecine
+            $creditsValides = self::calculerCreditsValides_LogiqueMedecine($etudiantId, $sessionId);
+
+            // LOGIQUE MÉDECINE SESSION 1 : Si 60 crédits → Admis, sinon → Rattrapage
+            return $creditsValides >= 60 ?
+                self::DECISION_ADMIS :
+                self::DECISION_RATTRAPAGE;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la détermination de la décision première session médecine', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return self::DECISION_RATTRAPAGE;
+        }
+    }
+
+    /**
+     * MÉTHODE MISE À JOUR : Détermine automatiquement la décision rattrapage selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @return string
+     */
+    public static function determinerDecisionRattrapage_LogiqueMedecine($etudiantId, $sessionId)
+    {
+        try {
+            // Calculer les crédits validés selon logique médecine
+            $creditsValides = self::calculerCreditsValides_LogiqueMedecine($etudiantId, $sessionId);
+
+            // Vérifier s'il y a des notes éliminatoires
+            $hasNoteEliminatoire = self::hasNoteEliminatoire_LogiqueMedecine($etudiantId, $sessionId);
+
+            // LOGIQUE MÉDECINE SESSION 2 :
+            // 1. Si note éliminatoire → Exclu
+            // 2. Si >= 40 crédits → Admis
+            // 3. Sinon → Redoublant
+            if ($hasNoteEliminatoire) {
+                return self::DECISION_EXCLUS;
+            }
+
+            return $creditsValides >= 40 ?
+                self::DECISION_ADMIS :
+                self::DECISION_REDOUBLANT;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la détermination de la décision rattrapage médecine', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return self::DECISION_REDOUBLANT;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Calcule les crédits validés selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @return int
+     */
+    public static function calculerCreditsValides_LogiqueMedecine($etudiantId, $sessionId)
+    {
+        try {
+            $resultats = self::with('ec.ue')
+                ->where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                return 0;
+            }
+
+            // Grouper par UE pour calculer les crédits selon logique médecine
+            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            $creditsValides = 0;
+
+            foreach ($resultatsParUE as $ueId => $notesUE) {
+                $ue = $notesUE->first()->ec->ue;
+
+                // LOGIQUE MÉDECINE : Vérifier si UE validée
+                if (self::etudiantValideUE_LogiqueMedecine($etudiantId, $ueId, $sessionId)) {
+                    $creditsValides += $ue->credits ?? 0;
+                }
+            }
+
+            return $creditsValides;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul des crédits validés médecine', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return 0;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifie s'il y a des notes éliminatoires selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @return bool
+     */
+    public static function hasNoteEliminatoire_LogiqueMedecine($etudiantId, $sessionId)
+    {
+        try {
+            return self::where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->where('note', 0)
+                ->exists();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification des notes éliminatoires médecine', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Applique les décisions automatiquement selon logique médecine
+     *
+     * @param int $sessionId
+     * @return array
+     */
+    public static function appliquerDecisionsSession_LogiqueMedecine($sessionId)
+    {
+        try {
+            DB::beginTransaction();
+
+            $session = SessionExam::findOrFail($sessionId);
+
+            // Récupérer tous les étudiants distincts de cette session
+            $etudiantsIds = self::where('session_exam_id', $sessionId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->distinct('etudiant_id')
+                ->pluck('etudiant_id');
+
+            $stats = [
+                'total_etudiants' => $etudiantsIds->count(),
+                'decisions' => [
+                    'admis' => 0,
+                    'rattrapage' => 0,
+                    'redoublant' => 0,
+                    'exclus' => 0
+                ],
+                'erreurs' => []
+            ];
+
+            foreach ($etudiantsIds as $etudiantId) {
+                try {
+                    // Déterminer la décision selon logique médecine
+                    if ($session->type === 'Rattrapage') {
+                        $decision = self::determinerDecisionRattrapage_LogiqueMedecine($etudiantId, $sessionId);
+                    } else {
+                        $decision = self::determinerDecisionPremiereSession_LogiqueMedecine($etudiantId, $sessionId);
+                    }
+
+                    // Appliquer la décision à tous les résultats de l'étudiant
+                    $nbUpdated = self::where('session_exam_id', $sessionId)
+                        ->where('etudiant_id', $etudiantId)
+                        ->where('statut', self::STATUT_PUBLIE)
+                        ->update(['decision' => $decision]);
+
+                    if ($nbUpdated > 0) {
+                        $stats['decisions'][$decision]++;
+
+                        Log::info('Décision médecine appliquée', [
+                            'etudiant_id' => $etudiantId,
+                            'session_id' => $sessionId,
+                            'session_type' => $session->type,
+                            'decision' => $decision,
+                            'resultats_mis_a_jour' => $nbUpdated
+                        ]);
+                    }
+
+                } catch (\Exception $e) {
+                    $stats['erreurs'][] = "Erreur étudiant {$etudiantId}: " . $e->getMessage();
+                    Log::error('Erreur application décision médecine', [
+                        'etudiant_id' => $etudiantId,
+                        'session_id' => $sessionId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            Log::info('Application des décisions médecine terminée', [
+                'session_id' => $sessionId,
+                'session_type' => $session->type,
+                'stats' => $stats
+            ]);
+
+            return [
+                'success' => empty($stats['erreurs']),
+                'message' => empty($stats['erreurs'])
+                    ? "Décisions appliquées selon logique médecine pour {$stats['total_etudiants']} étudiants."
+                    : "Décisions appliquées avec " . count($stats['erreurs']) . " erreurs.",
+                'statistiques' => $stats
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur lors de l\'application des décisions médecine', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Erreur lors de l\'application des décisions : ' . $e->getMessage(),
+                'statistiques' => []
+            ];
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Obtient un rapport détaillé pour un étudiant selon logique médecine
+     *
+     * @param int $etudiantId
+     * @param int $sessionId
+     * @return array
+     */
+    public static function genererRapportEtudiant_LogiqueMedecine($etudiantId, $sessionId)
+    {
+        try {
+            $etudiant = Etudiant::findOrFail($etudiantId);
+            $session = SessionExam::findOrFail($sessionId);
+
+            $resultats = self::with('ec.ue')
+                ->where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                throw new \Exception('Aucun résultat trouvé pour cet étudiant');
+            }
+
+            // Analyser selon logique médecine
+            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            $resultatsUE = [];
+            $creditsValides = 0;
+            $totalCredits = 0;
+            $moyennesUE = [];
+            $hasNoteEliminatoire = false;
+            $uesEliminees = [];
+
+            foreach ($resultatsParUE as $ueId => $notesUE) {
+                $ue = $notesUE->first()->ec->ue;
+                $totalCredits += $ue->credits ?? 0;
+
+                // LOGIQUE MÉDECINE : Analyser l'UE
+                $notes = $notesUE->pluck('note')->toArray();
+                $hasNoteZeroInUE = in_array(0, $notes);
+
+                if ($hasNoteZeroInUE) {
+                    $hasNoteEliminatoire = true;
+                    $uesEliminees[] = $ue->nom;
+                    $moyenneUE = 0;
+                    $ueValidee = false;
+                } else {
+                    $moyenneUE = round(array_sum($notes) / count($notes), 2);
+                    $ueValidee = $moyenneUE >= 10;
+
+                    if ($ueValidee) {
+                        $creditsValides += $ue->credits ?? 0;
+                    }
+
+                    $moyennesUE[] = $moyenneUE;
+                }
+
+                $resultatsUE[] = [
+                    'ue' => $ue,
+                    'notes_ec' => $notesUE->map(function($resultat) {
+                        return [
+                            'ec' => $resultat->ec,
+                            'note' => $resultat->note,
+                            'est_eliminatoire' => $resultat->note == 0
+                        ];
+                    }),
+                    'moyenne_ue' => $moyenneUE,
+                    'validee' => $ueValidee,
+                    'eliminee' => $hasNoteZeroInUE,
+                    'credits' => $ue->credits ?? 0
+                ];
+            }
+
+            // LOGIQUE MÉDECINE : Moyenne générale
+            $moyenneGenerale = count($moyennesUE) > 0 ?
+                round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
+
+            if ($hasNoteEliminatoire) {
+                $moyenneGenerale = 0;
+            }
+
+            // LOGIQUE MÉDECINE : Décision
+            if ($session->type === 'Rattrapage') {
+                $decision = self::determinerDecisionRattrapage_LogiqueMedecine($etudiantId, $sessionId);
+            } else {
+                $decision = self::determinerDecisionPremiereSession_LogiqueMedecine($etudiantId, $sessionId);
+            }
+
+            $rapport = [
+                'informations_generales' => [
+                    'etudiant' => $etudiant,
+                    'session' => $session,
+                    'date_generation' => now()->format('d/m/Y H:i:s')
+                ],
+                'resultats_detailles' => $resultatsUE,
+                'synthese' => [
+                    'moyenne_generale' => $moyenneGenerale,
+                    'credits_valides' => $creditsValides,
+                    'total_credits' => $totalCredits,
+                    'pourcentage_credits' => $totalCredits > 0 ?
+                        round(($creditsValides / 60) * 100, 1) : 0,
+                    'has_note_eliminatoire' => $hasNoteEliminatoire,
+                    'ues_eliminees' => $uesEliminees,
+                    'decision' => $decision
+                ],
+                'observations_medecine' => self::genererObservationsLogiqueMedecine(
+                    $moyenneGenerale,
+                    $creditsValides,
+                    $totalCredits,
+                    $hasNoteEliminatoire,
+                    $decision,
+                    $session->type
+                ),
+                'methode_calcul' => [
+                    'moyenne_ue' => 'Somme des notes EC / Nombre d\'EC',
+                    'validation_ue' => 'Moyenne UE >= 10 ET aucune note = 0',
+                    'moyenne_generale' => 'Somme des moyennes UE / Nombre d\'UE',
+                    'note_eliminatoire' => 'Une note de 0 élimine toute l\'UE',
+                    'decision_session1' => 'Admis si 60 crédits, sinon Rattrapage',
+                    'decision_session2' => 'Exclu si note 0, Admis si >= 40 crédits, sinon Redoublant'
+                ]
+            ];
+
+            return $rapport;
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la génération du rapport étudiant médecine', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Génère des observations selon logique médecine
+     *
+     * @param float $moyenneGenerale
+     * @param int $creditsValides
+     * @param int $totalCredits
+     * @param bool $hasNoteEliminatoire
+     * @param string $decision
+     * @param string $typeSession
+     * @return array
+     */
+    private static function genererObservationsLogiqueMedecine($moyenneGenerale, $creditsValides, $totalCredits, $hasNoteEliminatoire, $decision, $typeSession)
+    {
+        $observations = [];
+
+        // Observation sur la moyenne selon logique médecine
+        if ($hasNoteEliminatoire) {
+            $observations[] = "⚠️ ATTENTION : Note éliminatoire (0) détectée - Moyenne générale automatiquement fixée à 0 selon la règle médecine.";
+        } else {
+            if ($moyenneGenerale >= 16) {
+                $observations[] = "✅ Excellente performance académique avec une moyenne générale de {$moyenneGenerale}/20.";
+            } elseif ($moyenneGenerale >= 14) {
+                $observations[] = "✅ Très bonne performance académique avec une moyenne générale de {$moyenneGenerale}/20.";
+            } elseif ($moyenneGenerale >= 12) {
+                $observations[] = "✅ Bonne performance académique avec une moyenne générale de {$moyenneGenerale}/20.";
+            } elseif ($moyenneGenerale >= 10) {
+                $observations[] = "✅ Performance satisfaisante avec une moyenne générale de {$moyenneGenerale}/20.";
+            } else {
+                $observations[] = "❌ Performance insuffisante avec une moyenne générale de {$moyenneGenerale}/20.";
+            }
+        }
+
+        // Observation sur les crédits selon logique médecine
+        $pourcentage = $totalCredits > 0 ? round(($creditsValides / 60) * 100, 1) : 0;
+        $observations[] = "L'étudiant a validé {$creditsValides} crédits sur les 60 requis ({$pourcentage}%).";
+
+        // Observation sur la décision selon logique médecine
+        switch ($decision) {
+            case self::DECISION_ADMIS:
+                if ($typeSession === 'Normale') {
+                    $observations[] = "🎉 ADMIS EN 1ÈRE SESSION : L'étudiant a validé tous les 60 crédits requis selon la logique médecine.";
+                } else {
+                    $observations[] = "🎉 ADMIS EN 2ÈME SESSION : L'étudiant a atteint le minimum de 40 crédits requis en rattrapage selon la logique médecine.";
+                }
+                break;
+
+            case self::DECISION_RATTRAPAGE:
+                $observations[] = "⚠️ AUTORISÉ AU RATTRAPAGE : L'étudiant n'a pas atteint les 60 crédits requis et doit passer en session de rattrapage selon la logique médecine.";
+                break;
+
+            case self::DECISION_REDOUBLANT:
+                $observations[] = "❌ REDOUBLANT : L'étudiant n'a pas atteint le minimum de 40 crédits requis en session de rattrapage selon la logique médecine.";
+                break;
+
+            case self::DECISION_EXCLUS:
+                $observations[] = "🚫 EXCLU : L'étudiant a une note éliminatoire (0) en session de rattrapage selon la logique médecine.";
+                break;
+        }
+
+        // Observation spécifique au type de session
+        if ($typeSession === 'Rattrapage') {
+            if ($hasNoteEliminatoire) {
+                $observations[] = "📋 RÈGLE MÉDECINE : Une note de 0 en session de rattrapage entraîne automatiquement l'exclusion.";
+            } else {
+                $observations[] = "📋 RÈGLE MÉDECINE : En session de rattrapage, il faut minimum 40 crédits pour être admis.";
+            }
+        } else {
+            $observations[] = "📋 RÈGLE MÉDECINE : En première session, il faut 60 crédits pour être admis, sinon passage en rattrapage.";
+        }
+
+        return $observations;
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Valide la cohérence des calculs médecine pour une session
+     *
+     * @param int $sessionId
+     * @return array
+     */
+    public static function validerCoherenceSession_LogiqueMedecine($sessionId)
+    {
+        $erreurs = [];
+        $warnings = [];
+
+        try {
+            $session = SessionExam::findOrFail($sessionId);
+
+            // Récupérer tous les étudiants de la session
+            $etudiantsIds = self::where('session_exam_id', $sessionId)
+                ->where('statut', self::STATUT_PUBLIE)
+                ->distinct('etudiant_id')
+                ->pluck('etudiant_id');
+
+            foreach ($etudiantsIds as $etudiantId) {
+                try {
+                    // Vérifier la cohérence de la moyenne générale
+                    $moyenneCalculee = self::calculerMoyenneGenerale_LogiqueMedecine($etudiantId, $sessionId);
+                    $moyennesDB = self::where('session_exam_id', $sessionId)
+                        ->where('etudiant_id', $etudiantId)
+                        ->where('statut', self::STATUT_PUBLIE)
+                        ->with('ec.ue')
+                        ->get()
+                        ->groupBy('ec.ue_id')
+                        ->map(function($notesUE) {
+                            $hasZero = $notesUE->contains('note', 0);
+                            return $hasZero ? 0 : round($notesUE->avg('note'), 2);
+                        });
+
+                    $moyenneDBCalculee = $moyennesDB->count() > 0 ?
+                        round($moyennesDB->sum() / $moyennesDB->count(), 2) : 0;
+
+                    if (abs($moyenneCalculee - $moyenneDBCalculee) > 0.01) {
+                        $erreurs[] = "Étudiant {$etudiantId}: Moyenne générale incohérente (calculée: {$moyenneCalculee}, DB: {$moyenneDBCalculee})";
+                    }
+
+                    // Vérifier la cohérence de la décision
+                    $decisionCalculee = $session->type === 'Rattrapage' ?
+                        self::determinerDecisionRattrapage_LogiqueMedecine($etudiantId, $sessionId) :
+                        self::determinerDecisionPremiereSession_LogiqueMedecine($etudiantId, $sessionId);
+
+                    $decisionsDB = self::where('session_exam_id', $sessionId)
+                        ->where('etudiant_id', $etudiantId)
+                        ->where('statut', self::STATUT_PUBLIE)
+                        ->pluck('decision')
+                        ->unique();
+
+                    if ($decisionsDB->count() > 1) {
+                        $erreurs[] = "Étudiant {$etudiantId}: Décisions incohérentes en base " . $decisionsDB->implode(', ');
+                    } elseif ($decisionsDB->first() !== $decisionCalculee) {
+                        $erreurs[] = "Étudiant {$etudiantId}: Décision incorrecte (DB: {$decisionsDB->first()}, attendue: {$decisionCalculee})";
+                    }
+
+                    // Vérifier la cohérence des crédits
+                    $creditsCalcules = self::calculerCreditsValides_LogiqueMedecine($etudiantId, $sessionId);
+                    // Note: On ne peut pas vérifier directement les crédits en DB car ils ne sont pas stockés individuellement
+
+                } catch (\Exception $e) {
+                    $erreurs[] = "Erreur validation étudiant {$etudiantId}: " . $e->getMessage();
+                }
+            }
+
+        } catch (\Exception $e) {
+            $erreurs[] = "Erreur globale validation: " . $e->getMessage();
+        }
+
+        return [
+            'session_id' => $sessionId,
+            'etudiants_verifies' => $etudiantsIds->count(),
+            'erreurs' => $erreurs,
+            'warnings' => $warnings,
+            'est_coherent' => empty($erreurs),
+            'date_verification' => now()->format('Y-m-d H:i:s')
+        ];
+    }
+
+
+
 }

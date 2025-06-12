@@ -1,3 +1,4 @@
+{{-- Vue principale --}}
 <div class="container px-4 py-6 mx-auto">
     <!-- En-tête fixe avec titre et actions globales -->
     <div class="sticky top-0 z-10 px-5 py-4 mb-6 bg-white border-b border-gray-200 shadow-sm dark:bg-gray-900 dark:border-gray-800">
@@ -127,21 +128,336 @@
     </div>
     @endif
 
-    @push('scripts')
-    <script>
-        document.addEventListener('livewire:load', function () {
-            window.livewire.on('focus-search-field', function () {
-                setTimeout(function() {
-                    document.getElementById('searchQuery').focus();
-                }, 100);
-            });
 
-            // NOUVEAU : Écouter les changements de session
-            window.livewire.on('session-changed', function (data) {
-                console.log('Session changée:', data);
-                // Vous pouvez ajouter des actions supplémentaires ici
-            });
-        });
-    </script>
-    @endpush
+
+
+
+@push('styles')
+<style>
+/* Animation pour la liste des étudiants */
+.student-item {
+    transition: all 0.2s ease-in-out;
+}
+
+.student-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Effet de pulsation pour les étudiants récemment ajoutés */
+@keyframes pulse-success {
+    0% {
+        background-color: rgb(34, 197, 94);
+        transform: scale(1);
+    }
+    50% {
+        background-color: rgb(22, 163, 74);
+        transform: scale(1.02);
+    }
+    100% {
+        background-color: rgb(34, 197, 94);
+        transform: scale(1);
+    }
+}
+
+.manchette-success {
+    animation: pulse-success 0.6s ease-in-out;
+}
+
+/* Styles pour le compteur d'étudiants restants */
+.students-counter {
+    background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+/* Effet hover pour les cartes d'étudiants */
+.student-card:hover {
+    background: linear-gradient(135deg, #EBF8FF, #DBEAFE);
+    border-color: #3B82F6;
+}
+
+.dark .student-card:hover {
+    background: linear-gradient(135deg, #1E3A8A, #1E40AF);
+    border-color: #60A5FA;
+}
+
+/* Styles pour le mode sombre */
+.dark .students-counter {
+    background: linear-gradient(135deg, #1E40AF, #1E3A8A);
+    box-shadow: 0 2px 4px rgba(30, 64, 175, 0.3);
+}
+
+/* Animation de focus pour les champs de saisie */
+input:focus {
+    transition: all 0.2s ease-in-out;
+    transform: scale(1.01);
+}
+
+/* Styles pour les tooltips */
+.tooltip {
+    position: relative;
+}
+
+.tooltip:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 100;
+    opacity: 0;
+    animation: fadeIn 0.3s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+/* Indicateur de progression */
+.progress-indicator {
+    height: 4px;
+    background: #E5E7EB;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #10B981, #059669);
+    transition: width 0.5s ease-in-out;
+    border-radius: 2px;
+}
+
+/* Styles pour les raccourcis clavier */
+.keyboard-shortcut {
+    display: inline-flex;
+    align-items: center;
+    background: #F3F4F6;
+    border: 1px solid #D1D5DB;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    color: #6B7280;
+}
+
+.dark .keyboard-shortcut {
+    background: #374151;
+    border-color: #4B5563;
+    color: #9CA3AF;
+}
+
+/* Animation pour les notifications de succès */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.success-notification {
+    animation: slideInRight 0.3s ease-out;
+}
+
+/* Styles responsive pour mobile */
+@media (max-width: 768px) {
+    .student-item {
+        padding: 1rem;
+    }
+
+    .grid.lg\\:grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .order-1.lg\\:order-2 {
+        order: 1;
+        margin-bottom: 1rem;
+    }
+
+    .order-2.lg\\:order-1 {
+        order: 2;
+    }
+}
+
+/* Indicateur de chargement */
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+@endpush
+
+
+
+@push('scripts')
+<script>
+document.addEventListener('livewire:load', function () {
+    // Focus automatique sur le champ de recherche après sauvegarde
+    window.livewire.on('focus-search-field', function () {
+        setTimeout(function() {
+            const searchField = document.getElementById('searchQuery');
+            if (searchField) {
+                searchField.focus();
+                searchField.select();
+            }
+        }, 200);
+    });
+
+    // Focus après sélection rapide d'un étudiant
+    window.livewire.on('etudiant-selected-quick', function () {
+        setTimeout(function() {
+            const submitButton = document.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.focus();
+            }
+        }, 100);
+    });
+
+    // Confirmation avant fermeture si des étudiants restent - CORRIGÉ pour éviter le refresh
+    window.livewire.on('confirm-close-modal', function (data) {
+        if (confirm(data.message)) {
+            // Utiliser Livewire pour fermer au lieu d'un refresh
+            @this.call('forceCloseModal');
+        }
+    });
+
+    // Empêcher le refresh de page sur tous les boutons
+    document.addEventListener('click', function(e) {
+        const button = e.target.closest('button[wire\\:click]');
+        if (button && !button.hasAttribute('type')) {
+            // Ajouter type="button" pour éviter la soumission de formulaire
+            button.setAttribute('type', 'button');
+        }
+
+        // Empêcher spécifiquement les boutons de fermeture de modal
+        if (button && (
+            button.hasAttribute('wire:click.prevent') ||
+            button.textContent.includes('Terminer') ||
+            button.textContent.includes('Annuler')
+        )) {
+            e.preventDefault();
+        }
+    });
+
+    // Raccourcis clavier pour améliorer l'UX
+    document.addEventListener('keydown', function(e) {
+        // Échapper pour fermer la modal avec confirmation
+        if (e.key === 'Escape') {
+            const modal = document.querySelector('[aria-modal="true"]');
+            if (modal) {
+                e.preventDefault();
+                @this.call('closeModalWithConfirmation');
+            }
+        }
+
+        // Ctrl+Enter pour sauvegarder rapidement
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            const modal = document.querySelector('[aria-modal="true"]');
+            if (modal) {
+                e.preventDefault();
+                const submitButton = document.querySelector('button[type="submit"]');
+                if (submitButton && !submitButton.disabled) {
+                    submitButton.click();
+                }
+            }
+        }
+    });
+
+    // Écouter les changements de session
+    window.livewire.on('session-changed', function (data) {
+        console.log('Session changée:', data);
+    });
+
+    // Animation de succès pour la liste des étudiants
+    window.livewire.on('manchette-saved-success', function() {
+        // Effet visuel de succès
+        const studentList = document.querySelector('.space-y-2.overflow-y-auto');
+        if (studentList) {
+            studentList.style.transform = 'scale(0.98)';
+            studentList.style.transition = 'transform 0.2s ease-in-out';
+            setTimeout(() => {
+                studentList.style.transform = 'scale(1)';
+            }, 200);
+        }
+    });
+});
+
+// Support pour Livewire v3 si nécessaire
+document.addEventListener('livewire:initialized', function () {
+    // Mêmes événements pour Livewire v3
+    Livewire.on('focus-search-field', function () {
+        setTimeout(function() {
+            const searchField = document.getElementById('searchQuery');
+            if (searchField) {
+                searchField.focus();
+                searchField.select();
+            }
+        }, 200);
+    });
+
+    Livewire.on('etudiant-selected-quick', function () {
+        setTimeout(function() {
+            const submitButton = document.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.focus();
+            }
+        }, 100);
+    });
+
+    Livewire.on('confirm-close-modal', function (data) {
+        if (confirm(data[0].message)) {
+            // Utiliser la nouvelle méthode Livewire v3
+            Livewire.dispatch('forceCloseModal');
+        }
+    });
+});
+
+// Empêcher tous les refresh de page non désirés
+document.addEventListener('DOMContentLoaded', function() {
+    // Intercepter tous les clics sur les boutons wire:click
+    document.addEventListener('click', function(e) {
+        const element = e.target.closest('[wire\\:click]');
+        if (element && !element.closest('form')) {
+            e.preventDefault();
+        }
+    });
+
+    // Empêcher la soumission accidentelle de formulaires
+    document.addEventListener('submit', function(e) {
+        const form = e.target;
+        if (form.hasAttribute('wire:submit.prevent')) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+@endpush
+
 </div>
