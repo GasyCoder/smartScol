@@ -1,6 +1,5 @@
 <?php
 
-
 use App\Livewire\Dashboard;
 use App\Livewire\UEEC\AddUnite;
 use App\Livewire\UEEC\EditUnite;
@@ -11,74 +10,91 @@ use App\Livewire\Copie\CopiesIndex;
 use App\Livewire\Examen\EditExamen;
 use App\Livewire\UEEC\UniteElement;
 use App\Livewire\Examen\IndexExamen;
+use App\Livewire\Settings\Generales;
 use App\Livewire\Student\AddEtudiant;
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
 use App\Livewire\Resultats\FusionIndex;
-use App\Livewire\Resultats\ResultatFinale;
-use App\Http\Controllers\ProfileController;
+use App\Livewire\Resultats\ReleveNotes;
+use App\Livewire\Settings\SessionExamens;
+use App\Livewire\Settings\UserManagement;
 use App\Livewire\Manchette\ManchettesIndex;
 use App\Livewire\Resultats\ResultatsFinale;
-use App\Livewire\Resultats\ResultatValidation;
+use App\Livewire\Settings\AnneeUniversites;
+use App\Livewire\Settings\RolesPermissions;
 use App\Livewire\Manchette\ManchettesCorbeille;
 use App\Livewire\Resultats\ResultatVerification;
-
 
 Route::redirect('/', '/login');
 Route::redirect('/register', '/login');
 
-// Routes nécessitant une authentification
 Route::middleware(['auth', 'verified'])->group(function () {
-    // Dashboard - nécessite vérification de l'email
     Route::get('/dashboard', Dashboard::class)->name('dashboard');
 
-    Route::get('/unite-enseignement', UniteElement::class)->name('unite_e');
-    Route::get('/unite-enseignement/ajouter/{niveau}-{parcour}', AddUnite::class)->name('add_ue');
-    Route::get('/unite-enseignement/edit/{ue}', EditUnite::class)->name('edit_ue');
-
-    Route::get('/etudiants', Students::class)->name('students');
-    Route::get('/etudiants/ajouter/{niveau}/{parcour}', AddEtudiant::class)->name('add_etudiant');
-    Route::get('/etudiants/modifier/{etudiant}', EditEtudiant::class)->name('edit_etudiant');
-
-    Route::get('/salle', SalleIndex::class)->name('salles.index');
-
-    // Examens
-    Route::prefix('examens')->name('examens.')->group(function () {
-        Route::get('/', IndexExamen::class)->name('index');
-        Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
-        Route::get('/modifier/{examen}', EditExamen::class)->name('edit');
+    // ========================================
+    // SCOLARITÉS - Réservé SUPERADMIN UNIQUEMENT
+    // ========================================
+    Route::middleware(['role:superadmin'])->group(function () {
+        Route::get('/unite-enseignement', UniteElement::class)->name('unite_e');
+        Route::get('/unite-enseignement/ajouter/{niveau}-{parcour}', AddUnite::class)->name('add_ue');
+        Route::get('/unite-enseignement/edit/{ue}', EditUnite::class)->name('edit_ue');
+        Route::get('/etudiants/ajouter/{niveau}/{parcour}', AddEtudiant::class)->name('add_etudiant');
+        Route::get('/etudiants/modifier/{etudiant}', EditEtudiant::class)->name('edit_etudiant');
+        Route::get('/salle', SalleIndex::class)->name('salles.index');
+        Route::prefix('examens')->name('examens.')->group(function () {
+            Route::get('/', IndexExamen::class)->name('index');
+            Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
+            Route::get('/modifier/{examen}', EditExamen::class)->name('edit');
+        });
+        Route::get('/examens/reset', function () {
+            session()->forget(['examen_niveau_id', 'examen_parcours_id']);
+            return redirect()->route('examens.index');
+        })->name('examens.reset');
     });
 
-    Route::get('/examens/reset', function () {
-        session()->forget(['examen_niveau_id', 'examen_parcours_id']);
-        return redirect()->route('examens.index');
-    })->name('examens.reset');
+    // ========================================
+    // TRAITEMENTS - Accessible aux : superadmin, enseignant, secretaire
+    // ========================================
+    Route::middleware(['role:superadmin|enseignant|secretaire'])->group(function () {
+        // Copies
+        Route::prefix('copies')->name('copies.')->group(function () {
+            Route::get('/', CopiesIndex::class)->name('index');
+            Route::get('/corbeille', CopiesCorbeille::class)->name('corbeille');
+        });
 
-    //Copies
-    Route::prefix('copies')->name('copies.')->group(function () {
-        Route::get('/', CopiesIndex::class)->name('index');
-        Route::get('/corbeille', CopiesCorbeille::class)->name('corbeille');
+        // Manchettes
+        Route::prefix('manchettes')->name('manchettes.')->group(function () {
+            Route::get('/', ManchettesIndex::class)->name('index');
+            Route::get('/corbeille', ManchettesCorbeille::class)->name('corbeille');
+        });
+
+        // Students
+        Route::get('/etudiants', Students::class)->name('students');
     });
 
-    // Manchettes
-    Route::prefix('manchettes')->name('manchettes.')->group(function () {
-        Route::get('/', ManchettesIndex::class)->name('index');
-        Route::get('/corbeille', ManchettesCorbeille::class)->name('corbeille');
+    // ========================================
+    // RÉSULTATS - Accessible aux : superadmin, enseignant
+    // ========================================
+    Route::middleware(['role:superadmin|enseignant'])->group(function () {
+        Route::prefix('resultats')->name('resultats.')->group(function () {
+            Route::get('/fusion', FusionIndex::class)->name('fusion');
+            Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
+            Route::get('/finale', ResultatsFinale::class)->name('finale');
+            Route::get('/releve-notes', ReleveNotes::class)->name('releve_note');
+        });
     });
 
-    // Resultats
-    Route::prefix('resultats')->name('resultats.')->group(function () {
-        Route::get('/fusion', FusionIndex::class)->name('fusion');
-        Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
-        Route::get('/resultats-examen/finale', ResultatsFinale::class)->name('finale');
-    });
-
-    // Routes de gestion du profil
-    Route::controller(ProfileController::class)->group(function () {
-        Route::get('/profile', 'edit')->name('profile.edit');
-        Route::patch('/profile', 'update')->name('profile.update');
-        Route::delete('/profile', 'destroy')->name('profile.destroy');
+    // ========================================
+    // PARAMÈTRAGES - Réservé SUPERADMIN UNIQUEMENT
+    // ========================================
+    Route::middleware(['role:superadmin'])->group(function () {
+        Route::prefix('parametres')->name('setting.')->group(function () {
+            Route::get('/gestion-utilisateurs', UserManagement::class)->name('user_management');
+            Route::get('/annee-universite', AnneeUniversites::class)->name('annee_universite');
+            Route::get('/session-examen', SessionExamens::class)->name('session_examen');
+            Route::get('/roles-permission', RolesPermissions::class)->name('roles_permission');
+        });
     });
 });
 

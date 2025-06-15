@@ -5,8 +5,9 @@ namespace App\Livewire\Salle;
 use App\Models\Salle;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class SalleIndex extends Component
 {
@@ -74,9 +75,9 @@ class SalleIndex extends Component
     {
         $this->resetValidation();
         $this->reset([
-            'code_base', 
-            'nom', 
-            'capacite', 
+            'code_base',
+            'nom',
+            'capacite',
             'salle_id'
         ]);
         $this->capacite = 30; // Valeur par défaut
@@ -104,7 +105,7 @@ class SalleIndex extends Component
 
             $this->reset([
                 'code_base',
-                'nom', 
+                'nom',
                 'capacite'
             ]);
             $this->showAddModal = false;
@@ -219,6 +220,10 @@ class SalleIndex extends Component
      */
     public function render()
     {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
+
         $salles = Salle::query()
             ->when($this->search, function ($query) {
                 $query->where(function ($q) {

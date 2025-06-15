@@ -82,7 +82,7 @@
                             </svg>
                             Matière
                             @if(count($ecs) > 0)
-                                <span class="text-xs text-green-600">({{ count($ecs) }} matière{{ count($ecs) > 1 ? 's' : '' }})</span>
+                                <span class="text-xs text-green-600">({{ count($ecs) }} totale{{ count($ecs) > 1 ? 's' : '' }})</span>
                             @endif
                         </label>
                         <div class="relative mt-1 rounded-md">

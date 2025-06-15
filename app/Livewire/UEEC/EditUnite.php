@@ -3,11 +3,12 @@
 namespace App\Livewire\UEEC;
 
 use App\Models\EC;
-use App\Models\Niveau;
-use App\Models\Parcour;
 use App\Models\UE;
 use App\Models\User;
+use App\Models\Niveau;
+use App\Models\Parcour;
 use Livewire\Component;
+use Illuminate\Support\Facades\Auth;
 
 class EditUnite extends Component
 {
@@ -78,6 +79,10 @@ class EditUnite extends Component
 
     public function mount($ue)
     {
+
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         $this->ue_id = $ue;
         $this->ue = UE::with('ecs')->findOrFail($this->ue_id);
 

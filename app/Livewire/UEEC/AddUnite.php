@@ -3,11 +3,12 @@
 namespace App\Livewire\UEEC;
 
 use App\Models\EC;
-use App\Models\Niveau;
-use App\Models\Parcour;
 use App\Models\UE;
 use App\Models\User;
+use App\Models\Niveau;
+use App\Models\Parcour;
 use Livewire\Component;
+use Illuminate\Support\Facades\Auth;
 
 class AddUnite extends Component
 {
@@ -61,6 +62,9 @@ class AddUnite extends Component
 
     public function mount($niveau, $parcour)
     {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         $this->niveau_id = $niveau;
         $this->parcours_id = $parcour;
 

@@ -11,22 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('resultats_finaux_historique', function (Blueprint $table) {
+        Schema::create('resultat_final_historiques', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('resultat_final_id')->comment('Référence vers le résultat final');
-            $table->enum('type_action', [
-                'creation',
-                'changement_statut',
-                'annulation',
-                'reactivation',
-                'modification'
-            ])->comment('Type d\'action effectuée');
+            $table->string('type_action', 50);
             $table->string('statut_precedent', 50)->nullable()->comment('Statut avant l\'action');
             $table->string('statut_nouveau', 50)->nullable()->comment('Nouveau statut après l\'action');
             $table->unsignedBigInteger('user_id')->comment('Utilisateur ayant effectué l\'action');
             $table->text('motif')->nullable()->comment('Motif de l\'action (pour annulation par exemple)');
+            $table->string('decision_precedente', 20)->nullable();
             $table->json('donnees_supplementaires')->nullable()->comment('Données supplémentaires selon le type d\'action');
             $table->timestamp('date_action')->useCurrent()->comment('Date et heure de l\'action');
+            $table->string('decision_nouvelle', 20)->nullable();
             $table->timestamps();
 
             // Contraintes étrangères

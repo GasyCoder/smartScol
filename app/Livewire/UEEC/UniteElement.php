@@ -56,6 +56,9 @@ class UniteElement extends Component
 
     public function mount()
     {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         // Au chargement initial, restaurer l'état en fonction des paramètres d'URL
         $this->loadDataFromQueryParams();
     }

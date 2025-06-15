@@ -1,10 +1,11 @@
 <?php
 
-use Illuminate\Support\Str;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Artisan;
 
 /**
  * CUSTOM HELPER FUNCTIONS
@@ -234,5 +235,201 @@ if (!function_exists("gcs")) {
         }
 
         return $default;
+    }
+}
+
+// ========================================
+// ROLE & PERMISSION HELPER FUNCTIONS
+// ========================================
+
+if (!function_exists('user_has_role')) {
+    /**
+     * Vérifier si l'utilisateur connecté a un rôle spécifique
+     *
+     * @param string $role
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function user_has_role(string $role): bool
+    {
+        return Auth::check() && Auth::user()->hasRole($role);
+    }
+}
+
+if (!function_exists('user_has_any_role')) {
+    /**
+     * Vérifier si l'utilisateur connecté a au moins un des rôles spécifiés
+     *
+     * @param array $roles
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function user_has_any_role(array $roles): bool
+    {
+        return Auth::check() && Auth::user()->hasAnyRole($roles);
+    }
+}
+
+if (!function_exists('is_superadmin')) {
+    /**
+     * Vérifier si l'utilisateur connecté est un superadmin
+     *
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function is_superadmin(): bool
+    {
+        return user_has_role('superadmin');
+    }
+}
+
+if (!function_exists('can_access_scolarites')) {
+    /**
+     * Vérifier si l'utilisateur peut accéder aux scolarités
+     *
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function can_access_scolarites(): bool
+    {
+        return is_superadmin();
+    }
+}
+
+if (!function_exists('can_access_traitements')) {
+    /**
+     * Vérifier si l'utilisateur peut accéder aux traitements
+     *
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function can_access_traitements(): bool
+    {
+        return user_has_any_role(['superadmin', 'enseignant', 'secretaire']);
+    }
+}
+
+if (!function_exists('can_access_parametres')) {
+    /**
+     * Vérifier si l'utilisateur peut accéder aux paramètres
+     *
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function can_access_parametres(): bool
+    {
+        return is_superadmin();
+    }
+}
+
+if (!function_exists('get_user_role_badge_class')) {
+    /**
+     * Obtenir la classe CSS pour le badge du rôle
+     *
+     * @param string $roleName
+     * @return string
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function get_user_role_badge_class(string $roleName): string
+    {
+        return match($roleName) {
+            'superadmin' => 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+            'enseignant' => 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+            'secretaire' => 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
+            default => 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
+        };
+    }
+}
+
+if (!function_exists('get_user_roles_as_string')) {
+    /**
+     * Obtenir les rôles de l'utilisateur sous forme de chaîne
+     *
+     * @param string $separator
+     * @return string
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function get_user_roles_as_string(string $separator = ', '): string
+    {
+        if (!Auth::check()) {
+            return 'Invité';
+        }
+
+        $roles = Auth::user()->roles->pluck('name')->toArray();
+
+        if (empty($roles)) {
+            return 'Aucun rôle';
+        }
+
+        return implode($separator, array_map('ucfirst', $roles));
+    }
+}
+
+if (!function_exists('has_access_to_route')) {
+    /**
+     * Vérifier si l'utilisateur a accès à une route spécifique selon les permissions
+     *
+     * @param string $routeName
+     * @return bool
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function has_access_to_route(string $routeName): bool
+    {
+        if (!Auth::check()) {
+            return false;
+        }
+
+        // Routes publiques (accessibles à tous)
+        $publicRoutes = ['dashboard'];
+
+        // Routes scolarités (superadmin uniquement)
+        $scolariteRoutes = [
+            'unite_e', 'add_ue', 'edit_ue',
+            'students', 'add_etudiant', 'edit_etudiant',
+            'salles.index',
+            'examens.index', 'examens.create', 'examens.edit', 'examens.reset'
+        ];
+
+        // Routes traitements (superadmin, enseignant, secretaire)
+        $traitementRoutes = [
+            'copies.index', 'copies.corbeille',
+            'manchettes.index', 'manchettes.corbeille',
+            'resultats.fusion', 'resultats.verification', 'resultats.finale'
+        ];
+
+        // Routes paramètres (superadmin uniquement)
+        $parametreRoutes = [
+            'setting.index', 'setting.user_management', 'setting.annee_universite',
+            'setting.session_examen', 'setting.roles_permission'
+        ];
+
+        // Vérifier l'accès selon le type de route
+        if (in_array($routeName, $publicRoutes)) {
+            return true;
+        }
+
+        if (in_array($routeName, $scolariteRoutes)) {
+            return can_access_scolarites();
+        }
+
+        if (in_array($routeName, $traitementRoutes)) {
+            return can_access_traitements();
+        }
+
+        if (in_array($routeName, $parametreRoutes)) {
+            return can_access_parametres();
+        }
+
+        // Par défaut, autoriser l'accès si la route n'est pas dans la liste
+        return true;
     }
 }

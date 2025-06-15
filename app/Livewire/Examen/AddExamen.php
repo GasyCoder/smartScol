@@ -3,13 +3,14 @@
 namespace App\Livewire\Examen;
 
 use App\Models\EC;
+use App\Models\UE;
+use App\Models\Salle;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\Salle;
-use App\Models\UE;
-use Illuminate\Support\Facades\Log;
 use Livewire\Component;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class AddExamen extends Component
 {
@@ -65,6 +66,9 @@ class AddExamen extends Component
      */
     public function mount($niveau = null, $parcour = null)
     {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         // Initialisation des valeurs par défaut
         $this->date_defaut = now()->format('Y-m-d');
         $this->heure_defaut = '08:00';

@@ -33,10 +33,6 @@ class AnneeUniversitaire extends Model
         return $this->hasMany(SessionExam::class);
     }
 
-    public function deliberations()
-    {
-        return $this->hasMany(Deliberation::class);
-    }
 
     /**
      * Retourne l'année universitaire active actuelle

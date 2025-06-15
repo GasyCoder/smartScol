@@ -2,14 +2,15 @@
 
 namespace App\Livewire\Examen;
 
+use App\Models\Salle;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\Salle;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class IndexExamen extends Component
 {
@@ -86,6 +87,9 @@ class IndexExamen extends Component
      */
     public function mount()
     {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         // Force l'étape initiale à 'niveau' si pas de paramètres
         if (empty($this->niveauId) && empty($this->parcoursId)) {
             $this->step = 'niveau';

@@ -9,20 +9,29 @@ class ResultatFinalHistorique extends Model
 {
     use HasFactory;
 
-    protected $table = 'resultats_finaux_historique';
+    protected $table = 'resultat_final_historiques';
 
-    // Types d'actions possibles
+    // ✅ MISE À JOUR : Ajouter les nouveaux types d'actions
     const TYPE_CREATION = 'creation';
     const TYPE_CHANGEMENT_STATUT = 'changement_statut';
     const TYPE_ANNULATION = 'annulation';
     const TYPE_REACTIVATION = 'reactivation';
     const TYPE_MODIFICATION = 'modification';
 
+    // ✅ NOUVEAUX TYPES POUR DÉLIBÉRATION
+    const TYPE_DELIBERATION = 'deliberation';
+    const TYPE_SIMULATION_APPLIQUEE = 'simulation_appliquee';
+    const TYPE_DECISION_DELIBERATION = 'decision_deliberation';
+    const TYPE_DECISION_APPLIQUEE = 'decision_appliquee';
+    const TYPE_ANNULATION_DELIBERATION = 'annulation_deliberation';
+
     protected $fillable = [
         'resultat_final_id',
         'type_action',
         'statut_precedent',
         'statut_nouveau',
+        'decision_precedente',     // ✅ NOUVEAU
+        'decision_nouvelle',       // ✅ NOUVEAU
         'user_id',
         'motif',
         'donnees_supplementaires',
@@ -48,7 +57,7 @@ class ResultatFinalHistorique extends Model
     }
 
     /**
-     * Libellés des types d'actions
+     * ✅ MISE À JOUR : Libellés des types d'actions
      */
     public static function getLibellesTypesActions()
     {
@@ -58,6 +67,11 @@ class ResultatFinalHistorique extends Model
             self::TYPE_ANNULATION => 'Annulation',
             self::TYPE_REACTIVATION => 'Réactivation',
             self::TYPE_MODIFICATION => 'Modification',
+            self::TYPE_DELIBERATION => 'Délibération appliquée',
+            self::TYPE_SIMULATION_APPLIQUEE => 'Simulation appliquée',
+            self::TYPE_DECISION_DELIBERATION => 'Décision de délibération',
+            self::TYPE_DECISION_APPLIQUEE => 'Décision appliquée',
+            self::TYPE_ANNULATION_DELIBERATION => 'Annulation de délibération',
         ];
     }
 
@@ -68,6 +82,47 @@ class ResultatFinalHistorique extends Model
     {
         $libelles = self::getLibellesTypesActions();
         return $libelles[$this->type_action] ?? 'Action inconnue';
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Créer une entrée d'historique pour délibération
+     */
+    public static function creerEntreeDeliberation($resultatFinalId, $decisionPrecedente, $decisionNouvelle, $userId, $configId = null)
+    {
+        return self::create([
+            'resultat_final_id' => $resultatFinalId,
+            'type_action' => self::TYPE_DELIBERATION,
+            'decision_precedente' => $decisionPrecedente,
+            'decision_nouvelle' => $decisionNouvelle,
+            'user_id' => $userId,
+            'motif' => 'Délibération appliquée avec configuration personnalisée',
+            'donnees_supplementaires' => [
+                'config_deliberation_id' => $configId,
+                'jury_validated' => true,
+                'source' => 'deliberation_avec_configuration'
+            ],
+            'date_action' => now(),
+        ]);
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Créer une entrée d'historique pour simulation appliquée
+     */
+    public static function creerEntreeSimulationAppliquee($resultatFinalId, $decisionPrecedente, $decisionNouvelle, $userId, $parametres = [])
+    {
+        return self::create([
+            'resultat_final_id' => $resultatFinalId,
+            'type_action' => self::TYPE_SIMULATION_APPLIQUEE,
+            'decision_precedente' => $decisionPrecedente,
+            'decision_nouvelle' => $decisionNouvelle,
+            'user_id' => $userId,
+            'motif' => 'Application de simulation avec paramètres personnalisés',
+            'donnees_supplementaires' => [
+                'parametres_simulation' => $parametres,
+                'source' => 'simulation_parametree'
+            ],
+            'date_action' => now(),
+        ]);
     }
 
     /**
@@ -176,5 +231,24 @@ class ResultatFinalHistorique extends Model
     public function scopeOrdreAntichronologique($query)
     {
         return $query->orderBy('date_action', 'desc');
+    }
+
+    /**
+     * ✅ NOUVEAUX SCOPES POUR DÉLIBÉRATION
+     */
+    public function scopeDeliberations($query)
+    {
+        return $query->whereIn('type_action', [
+            self::TYPE_DELIBERATION,
+            self::TYPE_SIMULATION_APPLIQUEE,
+            self::TYPE_DECISION_DELIBERATION,
+            self::TYPE_ANNULATION_DELIBERATION
+        ]);
+    }
+
+    public function scopeChangementsDecision($query)
+    {
+        return $query->whereNotNull('decision_precedente')
+                    ->whereNotNull('decision_nouvelle');
     }
 }

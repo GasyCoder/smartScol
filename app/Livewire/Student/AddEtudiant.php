@@ -2,12 +2,13 @@
 
 namespace App\Livewire\Student;
 
-use App\Models\Etudiant;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;
-use Illuminate\Support\Facades\Log;
+use App\Models\Etudiant;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class AddEtudiant extends Component
 {
@@ -69,6 +70,9 @@ class AddEtudiant extends Component
 
     public function mount($niveau, $parcour)
     {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         $this->niveau_id = $niveau;
         $this->parcours_id = $parcour;
 

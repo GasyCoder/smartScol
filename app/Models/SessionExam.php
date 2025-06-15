@@ -35,13 +35,15 @@ class SessionExam extends Model
 
         static::saving(function ($session) {
             if ($session->is_active && $session->is_current) {
-                // Désactiver toutes les autres sessions pour la même année universitaire
+                // Désactiver seulement les autres sessions du MÊME TYPE
+                // SANS toucher à is_current !
                 DB::table('session_exams')
                     ->where('annee_universitaire_id', $session->annee_universitaire_id)
+                    ->where('type', $session->type) // Même type seulement
                     ->where('id', '!=', $session->id)
                     ->update([
-                        'is_active' => false,
-                        'is_current' => false
+                        'is_active' => false
+                        // ✅ On ne touche PAS à is_current !
                     ]);
             }
         });

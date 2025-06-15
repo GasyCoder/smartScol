@@ -45,7 +45,7 @@ class ResultatFinal extends Model
         'decision',
         'date_publication',
         'hash_verification',
-        'deliberation_id',
+        'jury_validated',
         'fusion_id',
         'date_fusion',
     ];
@@ -57,6 +57,7 @@ class ResultatFinal extends Model
         'date_fusion' => 'datetime',
         'date_annulation' => 'datetime',
         'date_reactivation' => 'datetime',
+        'jury_validated' => 'boolean',
     ];
 
     /**
@@ -129,6 +130,11 @@ class ResultatFinal extends Model
     public function resultatFusion()
     {
         return $this->belongsTo(ResultatFusion::class, 'fusion_id');
+    }
+
+    public function historique()
+    {
+        return $this->hasMany(ResultatFinalHistorique::class);
     }
 
     // Scopes pour filtrer par session
@@ -2451,7 +2457,5 @@ class ResultatFinal extends Model
             'date_verification' => now()->format('Y-m-d H:i:s')
         ];
     }
-
-
 
 }

@@ -47,9 +47,11 @@ class Students extends Component
     public $sortField = 'matricule';
     public $sortDirection = 'asc';
 
-    public function mount()
-    {
-        // Au chargement initial, restaurer l'état en fonction des paramètres d'URL
+   public function mount()
+   {
+        if (!Auth::user()->hasRole('superadmin')) {
+            abort(403, 'Accès non autorisé.');
+        }
         $this->loadDataFromQueryParams();
     }
 

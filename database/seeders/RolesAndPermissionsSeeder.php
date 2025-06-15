@@ -180,6 +180,36 @@ class RolesAndPermissionsSeeder extends Seeder
                 'label' => 'Configurer le système',
                 'description' => 'Permet de modifier les paramètres globaux du système'
             ],
+            [
+                'name' => 'users.view',
+                'label' => 'Voir les utilisateurs détaillés',
+                'description' => 'Permet de consulter la liste détaillée des utilisateurs avec leurs rôles'
+            ],
+            [
+                'name' => 'users.create',
+                'label' => 'Créer des utilisateurs',
+                'description' => 'Permet de créer de nouveaux comptes utilisateur'
+            ],
+            [
+                'name' => 'users.edit',
+                'label' => 'Modifier les utilisateurs',
+                'description' => 'Permet de modifier les informations des utilisateurs'
+            ],
+            [
+                'name' => 'users.delete',
+                'label' => 'Supprimer les utilisateurs',
+                'description' => 'Permet de supprimer des comptes utilisateur'
+            ],
+            [
+                'name' => 'users.change-password',
+                'label' => 'Changer les mots de passe',
+                'description' => 'Permet de modifier les mots de passe des utilisateurs'
+            ],
+            [
+                'name' => 'users.assign-roles',
+                'label' => 'Assigner des rôles',
+                'description' => 'Permet d\'assigner et modifier les rôles des utilisateurs'
+            ]
         ];
 
         foreach ($permissions as $permission) {

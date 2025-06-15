@@ -31,7 +31,7 @@ return new class extends Migration
             $table->enum('decision', ['admis', 'rattrapage', 'redoublant', 'exclus'])->nullable();
             $table->timestamp('date_publication')->nullable();
             $table->string('hash_verification', 64)->nullable();
-            $table->unsignedBigInteger('deliberation_id')->nullable();
+            $table->boolean('jury_validated')->default(false)->comment('Indique si la décision a été validée par le jury');
             $table->unsignedBigInteger('fusion_id')->nullable()->comment('ID du résultat fusion source');
             $table->timestamp('date_fusion')->nullable()->comment('Date du transfert depuis fusion');
             $table->timestamps();
@@ -44,7 +44,6 @@ return new class extends Migration
             $table->foreign('ec_id')->references('id')->on('ecs');
             $table->foreign('genere_par')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('modifie_par')->references('id')->on('users')->onDelete('set null');
-            $table->foreign('deliberation_id')->references('id')->on('deliberations')->onDelete('set null');
             $table->foreign('fusion_id')->references('id')->on('resultats_fusion')->onDelete('set null');
             $table->foreign('annule_par')->references('id')->on('users')
                 ->onDelete('set null')
@@ -65,7 +64,6 @@ return new class extends Migration
             $table->index(['date_annulation'], 'idx_date_annulation');
             $table->index(['examen_id', 'statut', 'session_exam_id', 'ec_id', 'etudiant_id'], 'idx_resultats_fusion_session');
             $table->index(['etudiant_id', 'statut'], 'idx_final_etudiant_statut');
-            $table->index(['deliberation_id'], 'idx_final_deliberation');
             $table->index(['decision'], 'idx_final_decision');
             $table->index(['date_publication'], 'idx_final_date_publication');
         });
