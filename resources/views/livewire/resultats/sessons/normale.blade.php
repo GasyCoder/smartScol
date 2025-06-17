@@ -398,17 +398,17 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
 
                                         // Couleurs selon décision avec emphasis si délibéré
                                         $baseClass = match($decision) {
-                                            'admis' => 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/50 dark:text-green-300 dark:border-green-700',
+                                            'admis' => 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
                                             'rattrapage' => 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/50 dark:text-orange-300 dark:border-orange-700',
-                                            'redoublant' => 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/50 dark:text-red-300 dark:border-red-700',
-                                            'exclus' => 'bg-red-200 text-red-900 border-red-300 dark:bg-red-900/70 dark:text-red-200 dark:border-red-600',
-                                            default => 'bg-gray-100 text-gray-900 border-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600'
+                                            'redoublant' => 'bg-red-100 text-red-80 dark:bg-red-900/50 dark:text-red-300',
+                                            'exclus' => 'bg-red-200 text-red-900 dark:bg-red-900/70 dark:text-red-200',
+                                            default => 'bg-gray-100 text-gray-900 bdark:bg-gray-700 dark:text-gray-100'
                                         };
 
                                         // Ajouter des effets si délibéré
                                         $finalClass = $juryValidated
-                                            ? $baseClass . ' ring-2 ring-blue-300 shadow-md border-2'
-                                            : $baseClass . ' border';
+                                            ? $baseClass . ' ring-2 ring-blue-300 shadow-md'
+                                            : $baseClass . ' ';
 
                                         $decisionLibelle = match($decision) {
                                             'admis' => 'Admis',
@@ -421,7 +421,7 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
 
                                     <div class="flex flex-col items-center space-y-2">
                                         {{-- Badge principal --}}
-                                        <span class="px-3 py-1 text-xs font-semibold rounded-full {{ $finalClass }}">
+                                        <span class="px-3 py-1 text-xs rounded-full {{ $finalClass }}">
                                             {{ $decisionLibelle }}
                                             @if($hasNoteEliminatoire)
                                                 <span class="ml-1" title="Note éliminatoire">⚠️</span>

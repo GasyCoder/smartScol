@@ -18,11 +18,13 @@ class UE extends Model
         'nom',
         'niveau_id',
         'parcours_id',
-        'credits'
+        'credits',
+        'is_active'
     ];
 
     protected $casts = [
-        'credits' => 'decimal:2'  // Cast pour assurer que c'est bien traité comme un décimal
+        'credits' => 'decimal:2',  // Cast pour assurer que c'est bien traité comme un décimal
+        'is_active' =>'boolean',
     ];
 
     /**

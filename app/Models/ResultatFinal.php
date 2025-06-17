@@ -122,10 +122,6 @@ class ResultatFinal extends Model
         return $this->belongsTo(User::class, 'reactive_par');
     }
 
-    public function deliberation()
-    {
-        return $this->belongsTo(Deliberation::class);
-    }
 
     public function resultatFusion()
     {
@@ -598,62 +594,66 @@ class ResultatFinal extends Model
     public static function determinerDecisionPremiereSession($etudiantId, $sessionId)
     {
         try {
-            // CORRECTION : Utiliser directement session_exam_id
-            $resultats = self::with('ec.ue')
+            Log::info('🎯 Calcul décision première session', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId
+            ]);
+
+            // Récupérer tous les résultats de l'étudiant pour cette session
+            $resultats = self::where('etudiant_id', $etudiantId)
                 ->where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
+                ->where('statut', self::STATUT_EN_ATTENTE) // ou STATUT_PUBLIE
+                ->with(['ec.ue'])
                 ->get();
 
             if ($resultats->isEmpty()) {
+                Log::warning('Aucun résultat trouvé pour décision première session', [
+                    'etudiant_id' => $etudiantId,
+                    'session_id' => $sessionId
+                ]);
                 return self::DECISION_RATTRAPAGE;
             }
 
-            // Grouper par UE
-            $resultatsParUE = $resultats->groupBy('ec.ue_id');
-            $totalCredits = 0;
-            $creditsValides = 0;
-            $hasNoteEliminatoire = false;
+            // ✅ UTILISER LE SERVICE DE CALCUL ACADÉMIQUE
+            $calculService = new CalculAcademiqueService();
+            $resultatComplet = $calculService->calculerResultatsComplets($etudiantId, $sessionId, true);
 
-            foreach ($resultatsParUE as $ueId => $notesUE) {
-                $ue = $notesUE->first()->ec->ue;
-                $totalCredits += $ue->credits ?? 0;
+            $creditsValides = $resultatComplet['synthese']['credits_valides'];
+            $hasNoteEliminatoire = $resultatComplet['synthese']['a_note_eliminatoire'];
 
-                // Vérifier s'il y a une note éliminatoire (0) dans cette UE
-                $hasNoteZeroInUE = $notesUE->contains('note', 0);
-
-                if ($hasNoteZeroInUE) {
-                    $hasNoteEliminatoire = true;
-                    continue;
-                }
-
-                // Calculer la moyenne UE = somme notes / nombre EC
-                $moyenneUE = $notesUE->avg('note');
-
-                // UE validée si moyenne >= 10 ET aucune note = 0
-                if ($moyenneUE >= 10) {
-                    $creditsValides += $ue->credits ?? 0;
-                }
-            }
-
-            // Décision selon votre logique
-            $decision = $creditsValides >= $totalCredits ?
-                self::DECISION_ADMIS :
-                self::DECISION_RATTRAPAGE;
-
-            Log::info('Décision première session calculée', [
+            Log::info('🔍 Analyse décision première session', [
                 'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId,
                 'credits_valides' => $creditsValides,
-                'total_credits' => $totalCredits,
                 'has_note_eliminatoire' => $hasNoteEliminatoire,
-                'decision' => $decision
+                'moyenne_generale' => $resultatComplet['synthese']['moyenne_generale']
             ]);
 
-            return $decision;
+            // ✅ LOGIQUE MÉDECINE CORRECTE
+            if ($creditsValides >= 60 && !$hasNoteEliminatoire) {
+                Log::info('✅ Décision: ADMIS (60 crédits sans note éliminatoire)', [
+                    'etudiant_id' => $etudiantId,
+                    'credits' => $creditsValides
+                ]);
+                return self::DECISION_ADMIS;
+            }
+
+            if ($hasNoteEliminatoire) {
+                Log::info('⚠️ Décision: RATTRAPAGE (note éliminatoire)', [
+                    'etudiant_id' => $etudiantId,
+                    'credits' => $creditsValides
+                ]);
+                return self::DECISION_RATTRAPAGE;
+            }
+
+            Log::info('📝 Décision: RATTRAPAGE (crédits insuffisants)', [
+                'etudiant_id' => $etudiantId,
+                'credits' => $creditsValides,
+                'requis' => 60
+            ]);
+            return self::DECISION_RATTRAPAGE;
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la détermination de la décision première session', [
+            Log::error('Erreur calcul décision première session', [
                 'etudiant_id' => $etudiantId,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage()
@@ -668,63 +668,57 @@ class ResultatFinal extends Model
     public static function determinerDecisionRattrapage($etudiantId, $sessionId)
     {
         try {
-            // CORRECTION : Utiliser directement session_exam_id
-            $resultats = self::with('ec.ue')
-                ->where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
-                ->get();
+            Log::info('🎯 Calcul décision rattrapage', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId
+            ]);
 
-            if ($resultats->isEmpty()) {
+            // ✅ UTILISER LE SERVICE DE CALCUL ACADÉMIQUE
+            $calculService = new CalculAcademiqueService();
+            $resultatComplet = $calculService->calculerResultatsComplets($etudiantId, $sessionId, true);
+
+            $creditsValides = $resultatComplet['synthese']['credits_valides'];
+            $hasNoteEliminatoire = $resultatComplet['synthese']['a_note_eliminatoire'];
+
+            Log::info('🔍 Analyse décision rattrapage', [
+                'etudiant_id' => $etudiantId,
+                'credits_valides' => $creditsValides,
+                'has_note_eliminatoire' => $hasNoteEliminatoire,
+                'moyenne_generale' => $resultatComplet['synthese']['moyenne_generale']
+            ]);
+
+            // ✅ LOGIQUE RATTRAPAGE
+            if ($hasNoteEliminatoire) {
+                Log::info('🚫 Décision: EXCLUS (note éliminatoire en rattrapage)', [
+                    'etudiant_id' => $etudiantId
+                ]);
+                return self::DECISION_EXCLUS;
+            }
+
+            if ($creditsValides >= 40) {
+                Log::info('✅ Décision: ADMIS (40+ crédits en rattrapage)', [
+                    'etudiant_id' => $etudiantId,
+                    'credits' => $creditsValides
+                ]);
+                return self::DECISION_ADMIS;
+            }
+
+            if ($creditsValides >= 20) {
+                Log::info('🔄 Décision: REDOUBLANT', [
+                    'etudiant_id' => $etudiantId,
+                    'credits' => $creditsValides
+                ]);
                 return self::DECISION_REDOUBLANT;
             }
 
-            // Grouper par UE
-            $resultatsParUE = $resultats->groupBy('ec.ue_id');
-            $creditsValides = 0;
-            $hasNoteEliminatoire = false;
-
-            foreach ($resultatsParUE as $ueId => $notesUE) {
-                $ue = $notesUE->first()->ec->ue;
-
-                // Vérifier s'il y a une note éliminatoire (0) dans cette UE
-                $hasNoteZeroInUE = $notesUE->contains('note', 0);
-
-                if ($hasNoteZeroInUE) {
-                    $hasNoteEliminatoire = true;
-                    continue;
-                }
-
-                // Calculer la moyenne UE = somme notes / nombre EC
-                $moyenneUE = $notesUE->avg('note');
-
-                // UE validée si moyenne >= 10 ET aucune note = 0
-                if ($moyenneUE >= 10) {
-                    $creditsValides += $ue->credits ?? 0;
-                }
-            }
-
-            // Décision selon votre logique pour le rattrapage
-            if ($hasNoteEliminatoire) {
-                $decision = self::DECISION_EXCLUS;
-            } else {
-                $decision = $creditsValides >= 40 ?
-                    self::DECISION_ADMIS :
-                    self::DECISION_REDOUBLANT;
-            }
-
-            Log::info('Décision rattrapage calculée', [
+            Log::info('🚫 Décision: EXCLUS (crédits insuffisants)', [
                 'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId,
-                'credits_valides' => $creditsValides,
-                'has_note_eliminatoire' => $hasNoteEliminatoire,
-                'decision' => $decision
+                'credits' => $creditsValides
             ]);
-
-            return $decision;
+            return self::DECISION_EXCLUS;
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la détermination de la décision rattrapage', [
+            Log::error('Erreur calcul décision rattrapage', [
                 'etudiant_id' => $etudiantId,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage()

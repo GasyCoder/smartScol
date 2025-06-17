@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('nom', 100)->comment('Ex: Médecine humaine, Physiologie');
             $table->decimal('credits', 5, 2)->default(0)
                   ->comment('Nombre de crédits associés à cette UE');
+            $table->boolean('is_active')->default(true);
             $table->unsignedBigInteger('niveau_id');
             $table->unsignedBigInteger('parcours_id')->nullable()->comment('Uniquement pour les UE spécifiques à un parcours (PACES)');
             $table->timestamps();

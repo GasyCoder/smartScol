@@ -1,6 +1,6 @@
-{{-- ✅ VUE BLADE MISE À JOUR AVEC DERNIÈRES VALEURS DÉLIBÉRATION --}}
+{{-- ✅ VUE BLADE CORRIGÉE AVEC GESTION D'ERREURS --}}
 
-{{-- Onglet Simulation - AVEC AFFICHAGE DES DERNIÈRES VALEURS --}}
+{{-- Onglet Simulation - AVEC PROTECTION CONTRE LES ERREURS --}}
 @if($activeTab === 'simulation' && (!empty($resultatsSession1) || !empty($resultatsSession2)))
     <div class="space-y-6">
         {{-- ✅ STATUT DE DÉLIBÉRATION AVEC DERNIÈRES CONFIGURATIONS --}}
@@ -17,7 +17,7 @@
                         <div class="p-4 bg-white rounded-lg dark:bg-gray-800">
                             <div class="flex items-center justify-between mb-3">
                                 <span class="font-medium text-gray-900 dark:text-gray-100">Session 1 (Normale)</span>
-                                @if($this->dernieresValeursDeliberation['session1']['delibere'] ?? false)
+                                @if(($this->dernieresValeursDeliberation['session1']['delibere'] ?? false))
                                     <span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-200 rounded-full dark:text-green-300 dark:bg-green-800">
                                         ✅ Délibérée
                                     </span>
@@ -28,29 +28,31 @@
                                 @endif
                             </div>
 
-                            {{-- ✅ DERNIÈRES VALEURS SESSION 1 --}}
-                            @if($this->dernieresValeursDeliberation['session1'])
-                                @php $config1 = $this->dernieresValeursDeliberation['session1']; @endphp
+                            {{-- ✅ DERNIÈRES VALEURS SESSION 1 AVEC PROTECTION --}}
+                            @if(isset($this->dernieresValeursDeliberation['session1']) && !empty($this->dernieresValeursDeliberation['session1']))
+                                @php
+                                    $config1 = $this->dernieresValeursDeliberation['session1'];
+                                @endphp
                                 <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
                                     <div class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Dernière configuration :</div>
                                     <div class="grid grid-cols-2 gap-2 text-xs">
                                         <div class="flex justify-between">
                                             <span class="text-gray-600 dark:text-gray-400">Crédits requis :</span>
-                                            <span class="font-medium text-blue-600 dark:text-blue-400">{{ $config1['credits_admission_s1'] }}</span>
+                                            <span class="font-medium text-blue-600 dark:text-blue-400">{{ $config1['credits_admission_s1'] ?? 60 }}</span>
                                         </div>
                                         <div class="flex justify-between">
                                             <span class="text-gray-600 dark:text-gray-400">Note 0 bloque :</span>
-                                            <span class="font-medium {{ $config1['note_eliminatoire_bloque_s1'] ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
-                                                {{ $config1['note_eliminatoire_bloque_s1'] ? 'OUI' : 'NON' }}
+                                            <span class="font-medium {{ ($config1['note_eliminatoire_bloque_s1'] ?? true) ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
+                                                {{ ($config1['note_eliminatoire_bloque_s1'] ?? true) ? 'OUI' : 'NON' }}
                                             </span>
                                         </div>
                                     </div>
 
-                                    @if($config1['delibere'])
+                                    @if($config1['delibere'] ?? false)
                                         <div class="pt-2 mt-2 border-t border-gray-200 dark:border-gray-600">
                                             <div class="text-xs text-green-600 dark:text-green-400">
                                                 <em class="mr-1 ni ni-check-circle"></em>
-                                                Délibérée le {{ \Carbon\Carbon::parse($config1['date_deliberation'])->format('d/m/Y à H:i') }}
+                                                Délibérée le {{ isset($config1['date_deliberation']) ? \Carbon\Carbon::parse($config1['date_deliberation'])->format('d/m/Y à H:i') : 'Date inconnue' }}
                                             </div>
                                         </div>
                                     @endif
@@ -71,7 +73,7 @@
                         <div class="p-4 bg-white rounded-lg dark:bg-gray-800">
                             <div class="flex items-center justify-between mb-3">
                                 <span class="font-medium text-gray-900 dark:text-gray-100">Session 2 (Rattrapage)</span>
-                                @if($this->dernieresValeursDeliberation['session2']['delibere'] ?? false)
+                                @if(($this->dernieresValeursDeliberation['session2']['delibere'] ?? false))
                                     <span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-200 rounded-full dark:text-green-300 dark:bg-green-800">
                                         ✅ Délibérée
                                     </span>
@@ -82,33 +84,35 @@
                                 @endif
                             </div>
 
-                            {{-- ✅ DERNIÈRES VALEURS SESSION 2 --}}
-                            @if($this->dernieresValeursDeliberation['session2'])
-                                @php $config2 = $this->dernieresValeursDeliberation['session2']; @endphp
+                            {{-- ✅ DERNIÈRES VALEURS SESSION 2 AVEC PROTECTION --}}
+                            @if(isset($this->dernieresValeursDeliberation['session2']) && !empty($this->dernieresValeursDeliberation['session2']))
+                                @php
+                                    $config2 = $this->dernieresValeursDeliberation['session2'];
+                                @endphp
                                 <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
                                     <div class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Dernière configuration :</div>
                                     <div class="grid grid-cols-2 gap-2 text-xs">
                                         <div class="flex justify-between">
                                             <span class="text-gray-600 dark:text-gray-400">Admis :</span>
-                                            <span class="font-medium text-green-600 dark:text-green-400">{{ $config2['credits_admission_s2'] }} crédits</span>
+                                            <span class="font-medium text-green-600 dark:text-green-400">{{ $config2['credits_admission_s2'] ?? 40 }} crédits</span>
                                         </div>
                                         <div class="flex justify-between">
                                             <span class="text-gray-600 dark:text-gray-400">Redoublement :</span>
-                                            <span class="font-medium text-orange-600 dark:text-orange-400">{{ $config2['credits_redoublement_s2'] }} crédits</span>
+                                            <span class="font-medium text-orange-600 dark:text-orange-400">{{ $config2['credits_redoublement_s2'] ?? 20 }} crédits</span>
                                         </div>
                                         <div class="flex justify-between col-span-2">
                                             <span class="text-gray-600 dark:text-gray-400">Note 0 exclut :</span>
-                                            <span class="font-medium {{ $config2['note_eliminatoire_exclusion_s2'] ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
-                                                {{ $config2['note_eliminatoire_exclusion_s2'] ? 'OUI' : 'NON' }}
+                                            <span class="font-medium {{ ($config2['note_eliminatoire_exclusion_s2'] ?? true) ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
+                                                {{ ($config2['note_eliminatoire_exclusion_s2'] ?? true) ? 'OUI' : 'NON' }}
                                             </span>
                                         </div>
                                     </div>
 
-                                    @if($config2['delibere'])
+                                    @if($config2['delibere'] ?? false)
                                         <div class="pt-2 mt-2 border-t border-gray-200 dark:border-gray-600">
                                             <div class="text-xs text-green-600 dark:text-green-400">
                                                 <em class="mr-1 ni ni-check-circle"></em>
-                                                Délibérée le {{ \Carbon\Carbon::parse($config2['date_deliberation'])->format('d/m/Y à H:i') }}
+                                                Délibérée le {{ isset($config2['date_deliberation']) ? \Carbon\Carbon::parse($config2['date_deliberation'])->format('d/m/Y à H:i') : 'Date inconnue' }}
                                             </div>
                                         </div>
                                     @endif
@@ -125,16 +129,16 @@
                     @endif
                 </div>
 
-                {{-- ✅ RÉSUMÉ LOGIQUE MÉDECINE APPLIQUÉE --}}
+                {{-- ✅ RÉSUMÉ LOGIQUE MÉDECINE APPLIQUÉE AVEC PROTECTION --}}
                 <div class="p-3 mt-4 bg-blue-100 rounded-lg dark:bg-blue-800/30">
                     <div class="text-sm text-blue-800 dark:text-blue-200">
                         <div class="mb-1 font-medium">🏥 Logique Médecine Appliquée :</div>
                         <div class="grid grid-cols-1 gap-2 text-xs md:grid-cols-2">
                             <div>
-                                • Session 1: {{ $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60 }} crédits → Admis, sinon → Rattrapage
+                                • Session 1: {{ ($this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }} crédits → Admis, sinon → Rattrapage
                             </div>
                             <div>
-                                • Session 2: {{ $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40 }} crédits → Admis, {{ $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20 }} → Redoublant
+                                • Session 2: {{ ($this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40) }} crédits → Admis, {{ ($this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }} → Redoublant
                             </div>
                             @if(($this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ?? true) || ($this->dernieresValeursDeliberation['session2']['note_eliminatoire_exclusion_s2'] ?? true))
                                 <div class="col-span-2 text-red-700 dark:text-red-300">
@@ -156,7 +160,7 @@
             </div>
         @endif
 
-        {{-- ✅ PARAMÈTRES DE SIMULATION DÉLIBÉRATION AVEC DERNIÈRES VALEURS --}}
+        {{-- ✅ PARAMÈTRES DE SIMULATION DÉLIBÉRATION --}}
         <div class="p-6 border rounded-lg bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800">
             <h3 class="mb-4 text-lg font-semibold text-purple-900 dark:text-purple-300">
                 <em class="mr-2 ni ni-setting"></em>
@@ -178,7 +182,7 @@
                                 <div class="font-medium text-gray-900 dark:text-gray-100">Session 1 (Normale)</div>
                                 <div class="text-sm text-gray-500 dark:text-gray-400">
                                     {{ count($resultatsSession1) }} étudiants • Critères admission directe
-                                    @if($this->dernieresValeursDeliberation['session1']['delibere'] ?? false)
+                                    @if(($this->dernieresValeursDeliberation['session1']['delibere'] ?? false))
                                         <span class="ml-2 text-green-600 dark:text-green-400">✓ Délibérée</span>
                                     @endif
                                 </div>
@@ -197,7 +201,7 @@
                                 <div class="font-medium text-gray-900 dark:text-gray-100">Session 2 (Rattrapage)</div>
                                 <div class="text-sm text-gray-500 dark:text-gray-400">
                                     {{ count($resultatsSession2) }} étudiants • Critères rattrapage
-                                    @if($this->dernieresValeursDeliberation['session2']['delibere'] ?? false)
+                                    @if(($this->dernieresValeursDeliberation['session2']['delibere'] ?? false))
                                         <span class="ml-2 text-green-600 dark:text-green-400">✓ Délibérée</span>
                                     @endif
                                 </div>
@@ -210,26 +214,21 @@
                 @enderror
             </div>
 
-            {{-- ✅ PARAMÈTRES SELON LA SESSION SÉLECTIONNÉE AVEC DERNIÈRES VALEURS --}}
+            {{-- ✅ PARAMÈTRES SELON LA SESSION SÉLECTIONNÉE AVEC PROTECTION --}}
             @if(($deliberationParams['session_type'] ?? 'session1') === 'session1')
                 {{-- Paramètres pour Session 1 (Normale) --}}
                 <div class="p-4 mb-4 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
-                    <h4 class="mb-3 font-medium text-blue-900 dark:text-blue-300">
-                        <em class="mr-2 ni ni-graduation"></em>
-                        Critères Session 1 (Normale) - Logique Médecine
-                    </h4>
-
                     {{-- ✅ AFFICHAGE DES DERNIÈRES VALEURS SI DÉLIBÉRÉE --}}
-                    @if($this->dernieresValeursDeliberation['session1']['delibere'] ?? false)
+                    @if(($this->dernieresValeursDeliberation['session1']['delibere'] ?? false))
                         <div class="p-3 mb-4 bg-green-100 rounded-lg dark:bg-green-800/30">
                             <div class="flex items-center text-sm text-green-800 dark:text-green-200">
                                 <em class="mr-2 ni ni-info-circle"></em>
                                 <div>
                                     <div class="font-medium">Dernière délibération appliquée :</div>
                                     <div class="mt-1 text-xs">
-                                        {{ $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] }} crédits requis •
-                                        Note 0 {{ $this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ? 'bloque' : 'autorisée' }} •
-                                        Le {{ \Carbon\Carbon::parse($this->dernieresValeursDeliberation['session1']['date_deliberation'])->format('d/m/Y à H:i') }}
+                                        {{ ($this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }} crédits requis •
+                                        Note 0 {{ ($this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ?? true) ? 'bloque' : 'autorisée' }} •
+                                        Le {{ isset($this->dernieresValeursDeliberation['session1']['date_deliberation']) ? \Carbon\Carbon::parse($this->dernieresValeursDeliberation['session1']['date_deliberation'])->format('d/m/Y à H:i') : 'Date inconnue' }}
                                     </div>
                                 </div>
                             </div>
@@ -241,15 +240,15 @@
                             <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Crédits requis pour admission directe
                                 <span class="text-xs text-blue-600 dark:text-blue-400">
-                                    (Dernière valeur: {{ $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60 }})
+                                    (Dernière valeur: {{ ($this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }})
                                 </span>
                             </label>
                             <input type="number" min="40" max="60" step="1"
                                    wire:model="deliberationParams.credits_admission_s1"
-                                   placeholder="{{ $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 80 }}"
+                                   placeholder="{{ ($this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }}"
                                    class="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400">
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                Si ≥ {{ $deliberationParams['credits_admission_s1'] ?? $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60 }} crédits → Admis, sinon → Rattrapage
+                                Si ≥ {{ ($deliberationParams['credits_admission_s1'] ?? $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }} crédits → Admis, sinon → Rattrapage
                             </p>
                             @error('deliberationParams.credits_admission_s1')
                                 <span class="text-xs text-red-500 dark:text-red-400">{{ $message }}</span>
@@ -263,7 +262,7 @@
                             <label class="ml-2 text-sm text-gray-700 dark:text-gray-300">
                                 Bloquer admission si note éliminatoire
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">
-                                    Dernière valeur: {{ ($this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ?? true) ? 'Activé' : 'Désactivé' }}
+                                    Dernière valeur: {{ (($this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ?? true)) ? 'Activé' : 'Désactivé' }}
                                 </span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">
                                     Si activé : Note = 0 empêche admission directe (logique médecine standard)
@@ -276,11 +275,11 @@
                     <div class="p-3 mt-4 bg-blue-100 rounded-lg dark:bg-blue-800/30">
                         <p class="text-sm text-blue-800 dark:text-blue-200">
                             <strong>Logique appliquée :</strong>
-                            @if($deliberationParams['note_eliminatoire_bloque_s1'] ?? $this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ?? true)
+                            @if(($deliberationParams['note_eliminatoire_bloque_s1'] ?? $this->dernieresValeursDeliberation['session1']['note_eliminatoire_bloque_s1'] ?? true))
                                 Note 0 → Rattrapage automatique |
                             @endif
-                            ≥ {{ $deliberationParams['credits_admission_s1'] ?? $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60 }} crédits → Admis |
-                            < {{ $deliberationParams['credits_admission_s1'] ?? $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60 }} crédits → Rattrapage
+                            ≥ {{ ($deliberationParams['credits_admission_s1'] ?? $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }} crédits → Admis |
+                            < {{ ($deliberationParams['credits_admission_s1'] ?? $this->dernieresValeursDeliberation['session1']['credits_admission_s1'] ?? 60) }} crédits → Rattrapage
                         </p>
                     </div>
                 </div>
@@ -294,16 +293,16 @@
                     </h4>
 
                     {{-- ✅ AFFICHAGE DES DERNIÈRES VALEURS SI DÉLIBÉRÉE --}}
-                    @if($this->dernieresValeursDeliberation['session2']['delibere'] ?? false)
+                    @if(($this->dernieresValeursDeliberation['session2']['delibere'] ?? false))
                         <div class="p-3 mb-4 bg-green-100 rounded-lg dark:bg-green-800/30">
                             <div class="flex items-center text-sm text-green-800 dark:text-green-200">
                                 <em class="mr-2 ni ni-info-circle"></em>
                                 <div>
                                     <div class="font-medium">Dernière délibération appliquée :</div>
                                     <div class="mt-1 text-xs">
-                                        {{ $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] }} crédits admission •
-                                        {{ $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] }} crédits redoublement •
-                                        Le {{ \Carbon\Carbon::parse($this->dernieresValeursDeliberation['session2']['date_deliberation'])->format('d/m/Y à H:i') }}
+                                        {{ ($this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40) }} crédits admission •
+                                        {{ ($this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }} crédits redoublement •
+                                        Le {{ isset($this->dernieresValeursDeliberation['session2']['date_deliberation']) ? \Carbon\Carbon::parse($this->dernieresValeursDeliberation['session2']['date_deliberation'])->format('d/m/Y à H:i') : 'Date inconnue' }}
                                     </div>
                                 </div>
                             </div>
@@ -315,15 +314,15 @@
                             <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Crédits minimum admission
                                 <span class="text-xs text-green-600 dark:text-green-400">
-                                    (Dernière: {{ $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40 }})
+                                    (Dernière: {{ ($this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40) }})
                                 </span>
                             </label>
                             <input type="number" min="30" max="60" step="1"
                                    wire:model="deliberationParams.credits_admission_s2"
-                                   placeholder="{{ $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40 }}"
+                                   placeholder="{{ ($this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40) }}"
                                    class="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400">
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                Si ≥ {{ $deliberationParams['credits_admission_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40 }} crédits → Admis
+                                Si ≥ {{ ($deliberationParams['credits_admission_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40) }} crédits → Admis
                             </p>
                             @error('deliberationParams.credits_admission_s2')
                                 <span class="text-xs text-red-500 dark:text-red-400">{{ $message }}</span>
@@ -334,15 +333,15 @@
                             <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Crédits minimum redoublement
                                 <span class="text-xs text-green-600 dark:text-green-400">
-                                    (Dernière: {{ $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20 }})
+                                    (Dernière: {{ ($this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }})
                                 </span>
                             </label>
                             <input type="number" min="0" max="40" step="1"
                                    wire:model="deliberationParams.credits_redoublement_s2"
-                                   placeholder="{{ $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20 }}"
+                                   placeholder="{{ ($this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }}"
                                    class="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400">
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                Si < {{ $deliberationParams['credits_redoublement_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20 }} crédits → Exclus
+                                Si < {{ ($deliberationParams['credits_redoublement_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }} crédits → Exclus
                             </p>
                             @error('deliberationParams.credits_redoublement_s2')
                                 <span class="text-xs text-red-500 dark:text-red-400">{{ $message }}</span>
@@ -356,7 +355,7 @@
                             <label class="ml-2 text-sm text-gray-700 dark:text-gray-300">
                                 Exclusion automatique si note 0
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">
-                                    Dernière valeur: {{ ($this->dernieresValeursDeliberation['session2']['note_eliminatoire_exclusion_s2'] ?? true) ? 'Activé' : 'Désactivé' }}
+                                    Dernière valeur: {{ (($this->dernieresValeursDeliberation['session2']['note_eliminatoire_exclusion_s2'] ?? true)) ? 'Activé' : 'Désactivé' }}
                                 </span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">
                                     Si activé : Note = 0 en rattrapage → Exclusion (logique médecine standard)
@@ -369,18 +368,18 @@
                     <div class="p-3 mt-4 bg-green-100 rounded-lg dark:bg-green-800/30">
                         <p class="text-sm text-green-800 dark:text-green-200">
                             <strong>Logique appliquée :</strong>
-                            @if($deliberationParams['note_eliminatoire_exclusion_s2'] ?? $this->dernieresValeursDeliberation['session2']['note_eliminatoire_exclusion_s2'] ?? true)
+                            @if(($deliberationParams['note_eliminatoire_exclusion_s2'] ?? $this->dernieresValeursDeliberation['session2']['note_eliminatoire_exclusion_s2'] ?? true))
                                 Note 0 → Exclusion automatique |
                             @endif
-                            ≥ {{ $deliberationParams['credits_admission_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40 }} crédits → Admis |
-                            ≥ {{ $deliberationParams['credits_redoublement_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20 }} crédits → Redoublant |
-                            < {{ $deliberationParams['credits_redoublement_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20 }} crédits → Exclus
+                            ≥ {{ ($deliberationParams['credits_admission_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_admission_s2'] ?? 40) }} crédits → Admis |
+                            ≥ {{ ($deliberationParams['credits_redoublement_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }} crédits → Redoublant |
+                            < {{ ($deliberationParams['credits_redoublement_s2'] ?? $this->dernieresValeursDeliberation['session2']['credits_redoublement_s2'] ?? 20) }} crédits → Exclus
                         </p>
                     </div>
                 </div>
             @endif
 
-            {{-- Le reste de votre code (boutons d'action, etc.) reste identique... --}}
+            {{-- Boutons d'action --}}
             <div class="flex items-center justify-between">
                 <div class="text-sm text-gray-600 dark:text-gray-400">
                     <p><strong>Simulation :</strong> Teste l'impact des paramètres de délibération</p>
@@ -415,7 +414,6 @@
             @enderror
         </div>
 
-
         {{-- ✅ ACTIONS RAPIDES DE DÉLIBÉRATION --}}
         <div class="p-4 border rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
             <h4 class="mb-3 font-medium text-gray-900 dark:text-gray-100">
@@ -431,7 +429,7 @@
                     Logique Médecine Standard
                 </button>
                 {{-- Restaurer dernières valeurs --}}
-                @if($this->dernieresValeursDeliberation['session1'] || $this->dernieresValeursDeliberation['session2'])
+                @if(isset($this->dernieresValeursDeliberation['session1']) || isset($this->dernieresValeursDeliberation['session2']))
                     <button wire:click="restaurerDernieresValeurs"
                             wire:confirm="Restaurer les dernières valeurs de délibération utilisées ?"
                             class="px-4 py-2 text-sm text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/50 dark:hover:bg-purple-900">
@@ -448,29 +446,29 @@
                 </button>
             </div>
 
-            {{-- Informations sur la délibération --}}
+            {{-- Informations sur la délibération avec protection --}}
             @if(isset($statistiquesDeliberation[$deliberationParams['session_type'] ?? 'session1']))
                 @php
                     $sessionType = $deliberationParams['session_type'] ?? 'session1';
-                    $statsDelib = $statistiquesDeliberation[$sessionType];
+                    $statsDelib = $statistiquesDeliberation[$sessionType] ?? null;
                 @endphp
-                @if($statsDelib && $statsDelib['configuration_existante'])
+                @if($statsDelib && ($statsDelib['configuration_existante'] ?? false))
                     <div class="p-3 mt-4 bg-blue-100 rounded-lg dark:bg-blue-800/30">
                         <div class="text-sm text-blue-800 dark:text-blue-200">
                             <p><strong>Configuration actuelle :</strong></p>
                             <div class="grid grid-cols-2 gap-4 mt-2 md:grid-cols-4">
-                                <div>Crédits S1: {{ $statsDelib['parametres']['credits_admission_s1'] ?? 60 }}</div>
-                                <div>Crédits S2: {{ $statsDelib['parametres']['credits_admission_s2'] ?? 40 }}</div>
-                                <div>Redoublement: {{ $statsDelib['parametres']['credits_redoublement_s2'] ?? 20 }}</div>
+                                <div>Crédits S1: {{ ($statsDelib['parametres']['credits_admission_s1'] ?? 60) }}</div>
+                                <div>Crédits S2: {{ ($statsDelib['parametres']['credits_admission_s2'] ?? 40) }}</div>
+                                <div>Redoublement: {{ ($statsDelib['parametres']['credits_redoublement_s2'] ?? 20) }}</div>
                                 <div>
-                                    Note 0: {{ ($statsDelib['parametres']['note_eliminatoire_bloque_s1'] ?? true) ? 'Bloque' : 'Autorisée' }}
+                                    Note 0: {{ (($statsDelib['parametres']['note_eliminatoire_bloque_s1'] ?? true)) ? 'Bloque' : 'Autorisée' }}
                                 </div>
                             </div>
-                            @if($statsDelib['delibere'])
+                            @if($statsDelib['delibere'] ?? false)
                                 <p class="mt-2 text-xs">
                                     <em class="mr-1 ni ni-check-circle"></em>
-                                    Délibérée le {{ $statsDelib['date_deliberation'] ?? 'Date inconnue' }}
-                                    par {{ $statsDelib['delibere_par'] ?? 'Utilisateur inconnu' }}
+                                    Délibérée le {{ ($statsDelib['date_deliberation'] ?? 'Date inconnue') }}
+                                    par {{ ($statsDelib['delibere_par'] ?? 'Utilisateur inconnu') }}
                                 </p>
                             @endif
                         </div>
@@ -479,8 +477,7 @@
             @endif
         </div>
 
-        {{-- Le reste de votre code existant pour les résultats de simulation reste identique... --}}
-        {{-- ✅ RÉSULTATS DE SIMULATION AVEC EXPORTS --}}
+        {{-- ✅ RÉSULTATS DE SIMULATION AVEC PROTECTION CONTRE LES ERREURS --}}
         @if(!empty($simulationDeliberation))
             <div class="bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-700">
                 <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -560,7 +557,7 @@
                                                 <div>Tous (PDF)</div>
                                                 <div class="text-xs text-gray-500">Colonnes par défaut</div>
                                             </div>
-                                            <span class="text-xs font-medium text-blue-600">{{ $simulationDeliberation['total_etudiants'] ?? 0 }}</span>
+                                            <span class="text-xs font-medium text-blue-600">{{ ($simulationDeliberation['total_etudiants'] ?? 0) }}</span>
                                         </button>
 
                                         {{-- Export rapide tous Excel --}}
@@ -572,7 +569,7 @@
                                                 <div>Tous (Excel)</div>
                                                 <div class="text-xs text-gray-500">Colonnes par défaut</div>
                                             </div>
-                                            <span class="text-xs font-medium text-blue-600">{{ $simulationDeliberation['total_etudiants'] ?? 0 }}</span>
+                                            <span class="text-xs font-medium text-blue-600">{{ ($simulationDeliberation['total_etudiants'] ?? 0) }}</span>
                                         </button>
 
                                         {{-- Séparateur --}}
@@ -598,7 +595,7 @@
                                                     <div>Admis (PDF)</div>
                                                     <div class="text-xs text-green-600">Étudiants admis uniquement</div>
                                                 </div>
-                                                <span class="text-xs font-medium text-green-600">{{ $stats['admis'] }}</span>
+                                                <span class="text-xs font-medium text-green-600">{{ ($stats['admis'] ?? 0) }}</span>
                                             </button>
                                         @endif
 
@@ -614,7 +611,7 @@
                                                         <div>Rattrapage (PDF)</div>
                                                         <div class="text-xs text-orange-600">Étudiants en rattrapage</div>
                                                     </div>
-                                                    <span class="text-xs font-medium text-orange-600">{{ $stats['rattrapage'] }}</span>
+                                                    <span class="text-xs font-medium text-orange-600">{{ ($stats['rattrapage'] ?? 0) }}</span>
                                                 </button>
                                             @endif
                                         @else
@@ -628,7 +625,7 @@
                                                         <div>Redoublants (PDF)</div>
                                                         <div class="text-xs text-red-600">Étudiants redoublants</div>
                                                     </div>
-                                                    <span class="text-xs font-medium text-red-600">{{ $stats['redoublant'] }}</span>
+                                                    <span class="text-xs font-medium text-red-600">{{ ($stats['redoublant'] ?? 0) }}</span>
                                                 </button>
                                             @endif
 
@@ -641,7 +638,7 @@
                                                         <div>Exclus (PDF)</div>
                                                         <div class="text-xs text-red-800">Étudiants exclus</div>
                                                     </div>
-                                                    <span class="text-xs font-medium text-red-800">{{ $stats['exclus'] }}</span>
+                                                    <span class="text-xs font-medium text-red-800">{{ ($stats['exclus'] ?? 0) }}</span>
                                                 </button>
                                             @endif
                                         @endif
@@ -662,10 +659,10 @@
                     </div>
                 </div>
 
-                {{-- ✅ STATISTIQUES DE SIMULATION --}}
+                {{-- ✅ STATISTIQUES DE SIMULATION AVEC PROTECTION --}}
                 <div class="p-4 bg-gray-50 dark:bg-gray-700/50">
                     @php
-                        // ✅ PRIORISER LES STATISTIQUES DE SIMULATION SI DISPONIBLES
+                        // ✅ PROTECTION CONTRE LES ERREURS ET VALEURS MANQUANTES
                         if (!empty($simulationDeliberation['statistiques'])) {
                             $stats = $simulationDeliberation['statistiques'];
                             $totalSimulation = $simulationDeliberation['total_etudiants'] ?? 0;
@@ -677,13 +674,13 @@
                             $sourceStats = 'simulation';
                         } else {
                             // Fallback vers les statistiques actuelles
-                            $stats = $activeTab === 'session1' ? ($statistiquesSession1 ?? []) : ($statistiquesSession2 ?? []);
-                            $totalSimulation = $stats['total_etudiants'] ?? 0;
+                            $statsActuelles = $activeTab === 'session1' ? ($statistiquesSession1 ?? []) : ($statistiquesSession2 ?? []);
+                            $totalSimulation = $statsActuelles['total_etudiants'] ?? 0;
                             $changements = 0;
-                            $admisSimulation = $stats['admis'] ?? 0;
-                            $rattrapageSimulation = $stats['rattrapage'] ?? 0;
-                            $redoublantsSimulation = $stats['redoublant'] ?? 0;
-                            $exclusSimulation = $stats['exclus'] ?? 0;
+                            $admisSimulation = $statsActuelles['admis'] ?? 0;
+                            $rattrapageSimulation = $statsActuelles['rattrapage'] ?? 0;
+                            $redoublantsSimulation = $statsActuelles['redoublant'] ?? 0;
+                            $exclusSimulation = $statsActuelles['exclus'] ?? 0;
                             $sourceStats = 'actuelle';
                         }
                     @endphp
@@ -775,7 +772,7 @@
                     @endif
                 </div>
 
-                {{-- ✅ TABLEAU DES RÉSULTATS DÉTAILLÉS --}}
+                {{-- ✅ TABLEAU DES RÉSULTATS DÉTAILLÉS AVEC PROTECTION --}}
                 @if(!empty($simulationDeliberation['resultats_detailles']))
                     <div class="overflow-x-auto">
                         <table class="min-w-full">
@@ -806,28 +803,28 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 @foreach($simulationDeliberation['resultats_detailles'] as $index => $result)
-                                    <tr class="{{ $result['changement'] ? 'bg-yellow-50 dark:bg-yellow-900/20' : '' }}">
+                                    <tr class="{{ ($result['changement'] ?? false) ? 'bg-yellow-50 dark:bg-yellow-900/20' : '' }}">
                                         {{-- Rang --}}
                                         <td class="px-4 py-3 text-center whitespace-nowrap">
                                             <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                {{ $result['rang'] ?? ($index + 1) }}
+                                                {{ ($result['rang'] ?? ($index + 1)) }}
                                             </span>
                                         </td>
 
-                                        {{-- Informations étudiant --}}
+                                        {{-- Informations étudiant avec protection --}}
                                         <td class="px-4 py-3 whitespace-nowrap">
                                             <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                {{ $result['etudiant']['nom'] ?? 'Nom inconnu' }} {{ $result['etudiant']['prenom'] ?? 'Prénom inconnu' }}
+                                                {{ ($result['etudiant']['nom'] ?? $result['nom'] ?? 'Nom inconnu') }} {{ ($result['etudiant']['prenom'] ?? $result['prenom'] ?? 'Prénom inconnu') }}
                                             </div>
                                             <div class="text-sm text-gray-500 dark:text-gray-400">
-                                                {{ $result['etudiant']['matricule'] ?? $result['matricule'] ?? 'Matricule inconnu' }}
+                                                {{ ($result['etudiant']['matricule'] ?? $result['matricule'] ?? 'Matricule inconnu') }}
                                             </div>
                                         </td>
 
                                         {{-- Moyenne --}}
                                         <td class="px-4 py-3 text-center whitespace-nowrap">
-                                            <span class="text-sm font-medium {{ ($result['moyenne_generale'] ?? 0) >= 10 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
-                                                {{ number_format($result['moyenne_generale'] ?? 0, 2) }}
+                                            <span class="text-sm font-medium {{ (($result['moyenne_generale'] ?? 0) >= 10) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
+                                                {{ number_format(($result['moyenne_generale'] ?? 0), 2) }}
                                             </span>
                                             @if($result['has_note_eliminatoire'] ?? false)
                                                 <span class="ml-1 text-red-500 dark:text-red-400" title="Note éliminatoire">⚠️</span>
@@ -837,13 +834,13 @@
                                         {{-- Crédits --}}
                                         <td class="px-4 py-3 text-center whitespace-nowrap">
                                             <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                {{ $result['credits_valides'] ?? $result['total_credits'] ?? 0 }}/60
+                                                {{ ($result['credits_valides'] ?? $result['total_credits'] ?? 0) }}/60
                                             </span>
                                         </td>
 
                                         {{-- Décision actuelle --}}
                                         <td class="px-4 py-3 text-center whitespace-nowrap">
-                                            @if($result['decision_actuelle'])
+                                            @if(isset($result['decision_actuelle']) && !empty($result['decision_actuelle']))
                                                 @php
                                                     $decisionClass = match($result['decision_actuelle']) {
                                                         'admis' => 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300',
@@ -866,7 +863,8 @@
                                         {{-- Décision simulée --}}
                                         <td class="px-4 py-3 text-center whitespace-nowrap">
                                             @php
-                                                $decisionClass = match($result['decision_simulee']) {
+                                                $decisionSimulee = $result['decision_simulee'] ?? 'non_definie';
+                                                $decisionClass = match($decisionSimulee) {
                                                     'admis' => 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300',
                                                     'rattrapage' => 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300',
                                                     'redoublant' => 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300',
@@ -875,13 +873,13 @@
                                                 };
                                             @endphp
                                             <span class="px-2 py-1 text-xs font-semibold rounded-full {{ $decisionClass }}">
-                                                {{ ucfirst($result['decision_simulee']) }}
+                                                {{ ucfirst($decisionSimulee) }}
                                             </span>
                                         </td>
 
                                         {{-- Impact --}}
                                         <td class="px-4 py-3 text-center whitespace-nowrap">
-                                            @if($result['changement'])
+                                            @if($result['changement'] ?? false)
                                                 <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded-full dark:text-orange-300 dark:bg-orange-900/50">
                                                     <em class="mr-1 ni ni-alert-circle"></em>
                                                     Modifié
@@ -909,7 +907,7 @@
                             <div class="flex space-x-2">
                                 {{-- Export rapide colonnes essentielles --}}
                                 <button wire:click="exporterAdmisRapide('pdf')"
-                                        class="px-3 py-2 text-sm text-red-700 bg-red-100 rounedded-lg hover:bg-red-200 dark:text-red-300 dark:bg-red-900/50 dark:hover:bg-red-900">
+                                        class="px-3 py-2 text-sm text-red-700 bg-red-100 rounded-lg hover:bg-red-200 dark:text-red-300 dark:bg-red-900/50 dark:hover:bg-red-900">
                                     <em class="mr-1 ni ni-file-pdf"></em>
                                     Export admis en PDF
                                 </button>
@@ -930,8 +928,6 @@
                 @endif
             </div>
         @endif
-
-
     </div>
 @endif
 
@@ -982,10 +978,8 @@
     </div>
 @endif
 
-
-
-{{-- ✅ MODAL D'EXPORT AVEC CONFIGURATION DES COLONNES --}}
-@if($showExportModal)
+{{-- ✅ MODAL D'EXPORT AVEC PROTECTION CONTRE LES ERREURS --}}
+@if($showExportModal ?? false)
     <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="export-modal-title" role="dialog" aria-modal="true">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             {{-- Overlay --}}
@@ -1002,7 +996,7 @@
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
                             <div class="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-full dark:bg-blue-900">
-                                @if($exportType === 'pdf')
+                                @if(($exportType ?? 'pdf') === 'pdf')
                                     <em class="text-red-600 ni ni-file-pdf dark:text-red-400"></em>
                                 @else
                                     <em class="text-green-600 ni ni-file-excel dark:text-green-400"></em>
@@ -1010,12 +1004,12 @@
                             </div>
                             <div class="ml-4">
                                 <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100" id="export-modal-title">
-                                    Configuration Export {{ strtoupper($exportType) }}
+                                    Configuration Export {{ strtoupper($exportType ?? 'PDF') }}
                                 </h3>
                                 <p class="text-sm text-gray-500 dark:text-gray-400">
-                                    Source : {{ ucfirst($exportData) }}
-                                    @if($exportData === 'simulation' && !empty($simulationDeliberation))
-                                        ({{ $simulationDeliberation['total_etudiants'] ?? 0 }} étudiants)
+                                    Source : {{ ucfirst($exportData ?? 'simulation') }}
+                                    @if(($exportData ?? '') === 'simulation' && !empty($simulationDeliberation))
+                                        ({{ ($simulationDeliberation['total_etudiants'] ?? 0) }} étudiants)
                                     @endif
                                 </p>
                             </div>
@@ -1040,7 +1034,7 @@
 
                             <div class="space-y-3">
                                 {{-- Rang --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['rang'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['rang'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.rang"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1051,7 +1045,7 @@
                                 </label>
 
                                 {{-- Nom et Prénom --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['nom_complet'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['nom_complet'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.nom_complet"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1062,7 +1056,7 @@
                                 </label>
 
                                 {{-- Matricule --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['matricule'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['matricule'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.matricule"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1073,7 +1067,7 @@
                                 </label>
 
                                 {{-- Moyenne --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['moyenne'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['moyenne'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.moyenne"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1084,7 +1078,7 @@
                                 </label>
 
                                 {{-- Crédits --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['credits'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['credits'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.credits"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1095,7 +1089,7 @@
                                 </label>
 
                                 {{-- Décision --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['decision'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['decision'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.decision"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1106,7 +1100,7 @@
                                 </label>
 
                                 {{-- Niveau (optionnel) --}}
-                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ $exportConfig['colonnes']['niveau'] ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ (($exportConfig['colonnes']['niveau'] ?? false)) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                                     <input type="checkbox"
                                            wire:model="exportConfig.colonnes.niveau"
                                            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
@@ -1204,24 +1198,29 @@
                                 </div>
                             </div>
 
-                            {{-- Aperçu des statistiques --}}
+                            {{-- ✅ APERÇU DES STATISTIQUES AVEC PROTECTION --}}
                             @php
-                                $statsPreview = $this->getStatistiquesExportPreview();
+                                // Protéger l'appel à getStatistiquesExportPreview
+                                try {
+                                    $statsPreview = method_exists($this, 'getStatistiquesExportPreview') ? $this->getStatistiquesExportPreview() : null;
+                                } catch (\Exception $e) {
+                                    $statsPreview = null;
+                                }
                             @endphp
-                            @if($statsPreview)
+                            @if($statsPreview && is_array($statsPreview))
                                 <div class="p-3 bg-gray-100 rounded-lg dark:bg-gray-700">
                                     <h5 class="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                                         Aperçu des données
                                     </h5>
                                     <div class="grid grid-cols-2 gap-2 text-sm">
-                                        <div>Total initial: {{ $statsPreview['total_initial'] }}</div>
-                                        <div>Après filtres: {{ $statsPreview['total_filtre'] }}</div>
-                                        @if($statsPreview['total_filtre'] > 0)
-                                            <div>Moy. min: {{ number_format($statsPreview['moyenne_min'], 2) }}</div>
-                                            <div>Moy. max: {{ number_format($statsPreview['moyenne_max'], 2) }}</div>
+                                        <div>Total initial: {{ ($statsPreview['total_initial'] ?? 0) }}</div>
+                                        <div>Après filtres: {{ ($statsPreview['total_filtre'] ?? 0) }}</div>
+                                        @if(($statsPreview['total_filtre'] ?? 0) > 0)
+                                            <div>Moy. min: {{ number_format(($statsPreview['moyenne_min'] ?? 0), 2) }}</div>
+                                            <div>Moy. max: {{ number_format(($statsPreview['moyenne_max'] ?? 0), 2) }}</div>
                                         @endif
                                     </div>
-                                    @if(!empty($statsPreview['decisions']))
+                                    @if(!empty($statsPreview['decisions']) && is_array($statsPreview['decisions']))
                                         <div class="grid grid-cols-2 gap-1 mt-2 text-xs">
                                             @foreach($statsPreview['decisions'] as $decision => $count)
                                                 @if($count > 0)
@@ -1247,10 +1246,10 @@
                 <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600">
                     <div class="flex items-center justify-between">
                         <div class="text-sm text-gray-500 dark:text-gray-400">
-                            Format: <strong>{{ strtoupper($exportType) }}</strong> •
-                            Source: <strong>{{ ucfirst($exportData) }}</strong>
-                            @if($statsPreview)
-                                • <strong>{{ $statsPreview['total_filtre'] ?? 0 }}</strong> résultats sélectionnés
+                            Format: <strong>{{ strtoupper($exportType ?? 'PDF') }}</strong> •
+                            Source: <strong>{{ ucfirst($exportData ?? 'simulation') }}</strong>
+                            @if(isset($statsPreview) && is_array($statsPreview))
+                                • <strong>{{ ($statsPreview['total_filtre'] ?? 0) }}</strong> résultats sélectionnés
                             @endif
                         </div>
                         <div class="flex space-x-3">
@@ -1262,12 +1261,12 @@
                             <button wire:click="genererExportAvecConfig"
                                     type="button"
                                     class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                                @if($exportType === 'pdf')
+                                @if(($exportType ?? 'pdf') === 'pdf')
                                     <em class="mr-2 ni ni-file-pdf"></em>
                                 @else
                                     <em class="mr-2 ni ni-file-excel"></em>
                                 @endif
-                                Générer {{ strtoupper($exportType) }}
+                                Générer {{ strtoupper($exportType ?? 'PDF') }}
                             </button>
                         </div>
                     </div>
@@ -1277,73 +1276,220 @@
     </div>
 @endif
 
-{{-- ✅ SCRIPTS JAVASCRIPT POUR LES INTERACTIONS --}}
+{{-- ✅ SCRIPTS JAVASCRIPT POUR LES INTERACTIONS AVEC PROTECTION --}}
 @push('scripts')
 <script>
-    // Fonction pour exporter par décision depuis la simulation
-    function exporterParDecisionSimulation(decision, format = 'pdf') {
-        // Configurer l'export pour cette décision spécifique
-        @this.set('exportConfig.filtres.decision_filter', decision);
-        @this.set('exportConfig.tri.champ', 'moyenne_generale');
-        @this.set('exportConfig.tri.ordre', 'desc');
-        @this.set('exportData', 'simulation');
-        @this.set('exportType', format);
-
-        // Générer directement sans modal
-        @this.call('genererExportAvecConfig');
-    }
-
-    // Fonction pour export rapide avec choix du format
-    function exportRapideSimulation(format, decision = 'tous') {
-        if (decision !== 'tous') {
-            @this.set('exportConfig.filtres.decision_filter', decision);
+    // ✅ PROTECTION CONTRE LES ERREURS JAVASCRIPT
+    document.addEventListener('DOMContentLoaded', function() {
+        // Vérifier que Livewire est disponible
+        if (typeof Livewire === 'undefined') {
+            console.warn('Livewire non disponible');
+            return;
         }
-        @this.set('exportType', format);
-        @this.set('exportData', 'simulation');
-        @this.call('genererExportAvecConfig');
-    }
 
-    // Fonction pour sélectionner rapidement les colonnes essentielles
-    function selectionnerColonnesEssentielles() {
-        @this.set('exportConfig.colonnes', {
-            'rang': true,
-            'nom_complet': true,
-            'matricule': true,
-            'moyenne': true,
-            'credits': true,
-            'decision': true,
-            'niveau': false
-        });
-    }
+        // Fonction pour exporter par décision depuis la simulation
+        window.exporterParDecisionSimulation = function(decision, format = 'pdf') {
+            try {
+                // Configurer l'export pour cette décision spécifique
+                @this.set('exportConfig.filtres.decision_filter', decision);
+                @this.set('exportConfig.tri.champ', 'moyenne_generale');
+                @this.set('exportConfig.tri.ordre', 'desc');
+                @this.set('exportData', 'simulation');
+                @this.set('exportType', format);
 
-    // Fonction pour sélectionner uniquement les colonnes minimales
-    function selectionnerColonnesMinimales() {
-        @this.set('exportConfig.colonnes', {
-            'rang': true,
-            'nom_complet': true,
-            'decision': true,
-            'matricule': false,
-            'moyenne': false,
-            'credits': false,
-            'niveau': false
-        });
-    }
+                // Générer directement sans modal
+                @this.call('genererExportAvecConfig');
+            } catch (error) {
+                console.error('Erreur lors de l\'export par décision:', error);
+                alert('Erreur lors de l\'export. Veuillez réessayer.');
+            }
+        };
+
+        // Fonction pour export rapide avec choix du format
+        window.exportRapideSimulation = function(format, decision = 'tous') {
+            try {
+                if (decision !== 'tous') {
+                    @this.set('exportConfig.filtres.decision_filter', decision);
+                }
+                @this.set('exportType', format);
+                @this.set('exportData', 'simulation');
+                @this.call('genererExportAvecConfig');
+            } catch (error) {
+                console.error('Erreur lors de l\'export rapide:', error);
+                alert('Erreur lors de l\'export. Veuillez réessayer.');
+            }
+        };
+
+        // Fonction pour sélectionner rapidement les colonnes essentielles
+        window.selectionnerColonnesEssentielles = function() {
+            try {
+                @this.set('exportConfig.colonnes', {
+                    'rang': true,
+                    'nom_complet': true,
+                    'matricule': true,
+                    'moyenne': true,
+                    'credits': true,
+                    'decision': true,
+                    'niveau': false
+                });
+            } catch (error) {
+                console.error('Erreur lors de la sélection des colonnes:', error);
+            }
+        };
+
+        // Fonction pour sélectionner uniquement les colonnes minimales
+        window.selectionnerColonnesMinimales = function() {
+            try {
+                @this.set('exportConfig.colonnes', {
+                    'rang': true,
+                    'nom_complet': true,
+                    'decision': true,
+                    'matricule': false,
+                    'moyenne': false,
+                    'credits': false,
+                    'niveau': false
+                });
+            } catch (error) {
+                console.error('Erreur lors de la sélection minimale:', error);
+            }
+        };
+    });
+
+    // ✅ ACTUALISER LES STATISTIQUES APRÈS UNE DÉLIBÉRATION AVEC PROTECTION
+    document.addEventListener('livewire:updated', function () {
+        try {
+            // Vérifier que les méthodes existent avant de les appeler
+            if (window.livewire && @this && typeof @this.loadResultats === 'function') {
+                // Recharger automatiquement après application de délibération
+                setTimeout(() => {
+                    try {
+                        @this.loadResultats();
+                    } catch (error) {
+                        console.error('Erreur lors du rechargement des résultats:', error);
+                    }
+                }, 500);
+            }
+        } catch (error) {
+            console.error('Erreur dans livewire:updated:', error);
+        }
+    });
+
+    // ✅ OBSERVER LES CHANGEMENTS DE SIMULATION AVEC PROTECTION
+    document.addEventListener('simulation-applied', function () {
+        try {
+            // Force le rechargement des données après application de simulation
+            if (@this && typeof @this.refreshData === 'function') {
+                @this.refreshData();
+            }
+        } catch (error) {
+            console.error('Erreur lors du refresh après simulation:', error);
+        }
+    });
+
+    // ✅ GESTION DES ERREURS GLOBALES JAVASCRIPT
+    window.addEventListener('error', function(e) {
+        // Logger les erreurs mais ne pas les afficher à l'utilisateur sauf si critique
+        console.error('Erreur JavaScript globale:', e.error);
+
+        // Seulement afficher une alerte pour les erreurs critiques
+        if (e.error && e.error.message && e.error.message.includes('critical')) {
+            alert('Une erreur critique s\'est produite. Veuillez actualiser la page.');
+        }
+    });
+
+    // ✅ PROTECTION CONTRE LES ERREURS LIVEWIRE
+    document.addEventListener('livewire:error', function (event) {
+        console.error('Erreur Livewire:', event.detail);
+
+        // Afficher un message d'erreur utilisateur-friendly
+        if (event.detail && event.detail.message) {
+            const errorMessage = event.detail.message;
+
+            // Messages d'erreur spécifiques
+            if (errorMessage.includes('getStatistiquesExportPreview')) {
+                console.warn('Erreur dans les statistiques d\'export, mais continuons...');
+                return; // Ne pas afficher cette erreur à l'utilisateur
+            }
+
+            if (errorMessage.includes('Method') && errorMessage.includes('does not exist')) {
+                alert('Une fonctionnalité n\'est pas encore disponible. Veuillez contacter l\'administrateur.');
+                return;
+            }
+
+            // Erreur générique
+            alert('Une erreur s\'est produite. Veuillez réessayer ou actualiser la page.');
+        }
+    });
 </script>
-<script>
-document.addEventListener('livewire:updated', function () {
-    // ✅ ACTUALISER LES STATISTIQUES APRÈS UNE DÉLIBÉRATION
-    if (window.livewire && typeof @this.loadResultats === 'function') {
-        // Recharger automatiquement après application de délibération
-        setTimeout(() => {
-            @this.loadResultats();
-        }, 500);
-    }
-});
+@endpush
 
-// ✅ OBSERVER LES CHANGEMENTS DE SIMULATION
-document.addEventListener('simulation-applied', function () {
-    // Force le rechargement des données après application de simulation
-    @this.refreshData();
-});
-</script>
+{{-- ✅ STYLES CSS POUR AMÉLIORER L'EXPÉRIENCE UTILISATEUR --}}
+@push('styles')
+<style>
+    /* Protection contre le clignotement lors des rechargements */
+    [wire\:loading] {
+        opacity: 0.7;
+        pointer-events: none;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    /* Indicateur de chargement subtil */
+    [wire\:loading.delay] {
+        opacity: 1;
+    }
+
+    /* Amélioration de l'accessibilité pour les boutons désactivés */
+    button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Style pour les éléments en erreur */
+    .error-highlight {
+        border: 2px solid #ef4444 !important;
+        background-color: #fef2f2 !important;
+    }
+
+    /* Animation pour les changements de délibération */
+    .deliberation-change {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.8;
+        }
+    }
+
+    /* Style pour les alertes temporaires */
+    .alert-fade-in {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Protection contre le débordement sur mobile */
+    @media (max-width: 768px) {
+        .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .modal-content {
+            margin: 10px;
+            max-height: calc(100vh - 20px);
+        }
+    }
+</style>
 @endpush

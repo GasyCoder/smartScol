@@ -49,8 +49,11 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Copie> $allCopies
+ * @property-read int|null $all_copies_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Manchette> $allManchettes
+ * @property-read int|null $all_manchettes_count
  * @property-read \App\Models\Copie|null $copie
- * @property-read \App\Models\Copie|null $copieCurrentSession
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Copie> $copies
  * @property-read int|null $copies_count
  * @property-read \App\Models\EC|null $ec
@@ -60,17 +63,16 @@ namespace App\Models{
  * @property-read mixed $numero
  * @property-read mixed $salle
  * @property-read \App\Models\Manchette|null $manchette
- * @property-read \App\Models\Manchette|null $manchetteCurrentSession
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Manchette> $manchettes
  * @property-read int|null $manchettes_count
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat complete($sessionId = null)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat forCurrentSession()
+ * @property-read \App\Models\SessionExam|null $sessionExam
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat complete($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat forSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat onlyTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat unused($sessionId = null)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat unused($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereCodeComplet($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereDeletedAt($value)
@@ -79,7 +81,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereSequence($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withManchetteOnly($sessionId = null)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withManchetteOnly($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withoutTrashed()
  */
@@ -207,6 +209,7 @@ namespace App\Models{
  * @property numeric $coefficient
  * @property int $ue_id UE à laquelle appartient l'EC
  * @property string $enseignant Enseignant responsable de l'EC
+ * @property bool $is_active
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
@@ -241,6 +244,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereDeletedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereEnseignant($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereIsActive($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUeId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUpdatedAt($value)
@@ -547,8 +551,6 @@ namespace App\Models{
  * @property numeric $note Note finale
  * @property int $genere_par Utilisateur ayant généré le résultat
  * @property int|null $modifie_par
- * @property string|null $decision
- * @property bool $jury_validated Indique si la décision a été validée par le jury
  * @property string $statut
  * @property array<array-key, mixed>|null $status_history
  * @property string|null $motif_annulation
@@ -556,8 +558,10 @@ namespace App\Models{
  * @property int|null $annule_par
  * @property \Illuminate\Support\Carbon|null $date_reactivation
  * @property int|null $reactive_par
+ * @property string|null $decision
  * @property \Illuminate\Support\Carbon|null $date_publication
  * @property string|null $hash_verification
+ * @property bool $jury_validated Indique si la décision a été validée par le jury
  * @property int|null $fusion_id ID du résultat fusion source
  * @property \Illuminate\Support\Carbon|null $date_fusion Date du transfert depuis fusion
  * @property \Illuminate\Support\Carbon|null $created_at
@@ -828,6 +832,7 @@ namespace App\Models{
  * @property string|null $abr Ex: UE1, UE2
  * @property string $nom Ex: Médecine humaine, Physiologie
  * @property numeric $credits Nombre de crédits associés à cette UE
+ * @property bool $is_active
  * @property int $niveau_id
  * @property int|null $parcours_id Uniquement pour les UE spécifiques à un parcours (PACES)
  * @property \Illuminate\Support\Carbon|null $created_at
@@ -847,6 +852,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereCredits($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereDeletedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereIsActive($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereParcoursId($value)

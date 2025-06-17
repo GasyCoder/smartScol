@@ -509,10 +509,12 @@ class ResultatsFinale extends Component
                 }
 
                 $this->loadUEStructure();
+
                 // ✅ Réinitialiser avec les nouvelles valeurs
                 $this->initialiserParametresDeliberation();
-                    // ✅ Vider le cache des dernières valeurs
-                unset($this->dernieresValeursDeliberation);
+
+                // ✅ CORRECTION : Pas besoin d'unset sur une propriété computed
+                // La propriété computed se recalculera automatiquement au prochain accès
 
             } catch (\Exception $e) {
                 Log::error('Erreur lors de la mise à jour du niveau: ' . $e->getMessage());
@@ -529,8 +531,53 @@ class ResultatsFinale extends Component
     {
         $this->checkSession2Availability();
         $this->loadResultats();
+
         // ✅ Réinitialiser avec les nouvelles valeurs
         $this->initialiserParametresDeliberation();
+
+        // ✅ Vider le cache si nécessaire
+        $this->viderCacheDeliberation();
+    }
+
+    /**
+     * ✅ MÉTHODE : Vider le cache des configurations de délibération
+     */
+    public function viderCacheDeliberation()
+    {
+        try {
+            // Construire la clé de cache actuelle
+            $cacheKey = sprintf(
+                'deliberation_config_%s_%s_%s_%s',
+                $this->selectedNiveau ?? 'null',
+                $this->selectedParcours ?? 'null',
+                $this->sessionNormale?->id ?? 'null',
+                $this->sessionRattrapage?->id ?? 'null'
+            );
+
+            // Vider le cache
+            cache()->forget($cacheKey);
+
+            // ✅ Vider aussi les caches pour toutes les combinaisons possibles si nécessaire
+            $patterns = [
+                "deliberation_config_{$this->selectedNiveau}_*",
+                "deliberation_config_*_{$this->selectedParcours}_*",
+            ];
+
+            foreach ($patterns as $pattern) {
+                // Note: Cette méthode dépend du driver de cache utilisé
+                // Pour Redis: cache()->getRedis()->del(cache()->getRedis()->keys($pattern))
+                // Pour file: plus complexe, nécessite d'itérer sur les fichiers
+            }
+
+            Log::info('Cache délibération vidé', [
+                'cache_key' => $cacheKey,
+                'niveau_id' => $this->selectedNiveau,
+                'parcours_id' => $this->selectedParcours
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur vidage cache délibération: ' . $e->getMessage());
+        }
     }
 
     public function updatedSelectedAnneeUniversitaire()
@@ -1252,14 +1299,14 @@ class ResultatsFinale extends Component
      */
     private function validateStudentsAvailability(SessionExam $session): void
     {
-        $countEtudiants = \App\Models\ResultatFinal::where('session_exam_id', $session->id)
+        $countEtudiants = ResultatFinal::where('session_exam_id', $session->id)
             ->whereHas('examen', function($q) {
                 $q->where('niveau_id', $this->selectedNiveau);
                 if ($this->selectedParcours) {
                     $q->where('parcours_id', $this->selectedParcours);
                 }
             })
-            ->where('statut', \App\Models\ResultatFinal::STATUT_PUBLIE)
+            ->where('statut', ResultatFinal::STATUT_PUBLIE)
             ->distinct('etudiant_id')
             ->count();
 
@@ -1375,7 +1422,7 @@ class ResultatsFinale extends Component
     /**
      * ✅ MÉTHODE AMÉLIORÉE : Force le rechargement complet
      */
-    private function forceReloadData()
+    public function forceReloadData()
     {
         try {
             Log::info('🔄 FORCE RELOAD DATA - Début');
@@ -1404,6 +1451,9 @@ class ResultatsFinale extends Component
             // ✅ ÉTAPE 5 : Recalculer les statistiques
             $this->calculateStatistics();
 
+            // ✅ ÉTAPE 6 : Message de succès
+            toastr()->success('✅ Données rechargées avec succès');
+
             Log::info('✅ FORCE RELOAD DATA - Terminé', [
                 'session1_count' => count($this->resultatsSession1),
                 'session2_count' => count($this->resultatsSession2),
@@ -1413,9 +1463,9 @@ class ResultatsFinale extends Component
 
         } catch (\Exception $e) {
             Log::error('❌ Erreur force reload: ' . $e->getMessage());
+            toastr()->error('Erreur lors du rechargement des données');
         }
     }
-
     /**
      * ✅ SOLUTION 2 : Réinitialiser après délibération avec rechargement forcé
      */
@@ -1442,10 +1492,10 @@ class ResultatsFinale extends Component
             // ✅ ÉTAPE 4 : Vider le cache Eloquent
             \Illuminate\Database\Eloquent\Model::clearBootedModels();
 
-            // ✅ ÉTAPE 5 : Force refresh avec logs détaillés
-            Log::info('🔄 Avant forceReloadData');
-            $this->forceReloadData();
-            Log::info('✅ Après forceReloadData');
+            // ✅ ÉTAPE 5 : Force refresh avec méthode publique
+            Log::info('🔄 Avant refreshResultats');
+            $this->refreshResultats(); // Utiliser la méthode publique au lieu de forceReloadData
+            Log::info('✅ Après refreshResultats');
 
             // ✅ ÉTAPE 6 : Vérifier que les données ont bien changé
             $this->verifierChangementsApresDeliberation($sessionType);
@@ -2984,8 +3034,9 @@ class ResultatsFinale extends Component
     }
 
 
+
     /**
-     * ✅ MÉTHODE SIMPLE : Récupérer les dernières valeurs de délibération
+     * ✅ MÉTHODE CORRIGÉE : Récupérer les dernières valeurs de délibération
      */
     private function getDernieresValeursDeliberation()
     {
@@ -2999,6 +3050,8 @@ class ResultatsFinale extends Component
                     ->where('session_id', $this->sessionNormale->id)
                     ->when($this->selectedParcours, function($q) {
                         $q->where('parcours_id', $this->selectedParcours);
+                    }, function($q) {
+                        $q->whereNull('parcours_id');
                     })
                     ->first();
             }
@@ -3009,34 +3062,74 @@ class ResultatsFinale extends Component
                     ->where('session_id', $this->sessionRattrapage->id)
                     ->when($this->selectedParcours, function($q) {
                         $q->where('parcours_id', $this->selectedParcours);
+                    }, function($q) {
+                        $q->whereNull('parcours_id');
                     })
                     ->first();
             }
 
+            // ✅ CORRECTION : Structure standardisée avec valeurs par défaut
             return [
                 'session1' => $sessionNormaleConfig ? [
                     'delibere' => $sessionNormaleConfig->delibere,
                     'date_deliberation' => $sessionNormaleConfig->date_deliberation,
                     'delibere_par' => $sessionNormaleConfig->delibere_par,
-                    'credits_admission_s1' => $sessionNormaleConfig->credits_admission_s1,
-                    'note_eliminatoire_bloque_s1' => $sessionNormaleConfig->note_eliminatoire_bloque_s1,
+                    'credits_admission_s1' => $sessionNormaleConfig->credits_admission_s1 ?? 60,
+                    'note_eliminatoire_bloque_s1' => $sessionNormaleConfig->note_eliminatoire_bloque_s1 ?? true,
                     'config_id' => $sessionNormaleConfig->id
-                ] : null,
+                ] : [
+                    // ✅ Valeurs par défaut si aucune config
+                    'delibere' => false,
+                    'date_deliberation' => null,
+                    'delibere_par' => null,
+                    'credits_admission_s1' => 60,
+                    'note_eliminatoire_bloque_s1' => true,
+                    'config_id' => null
+                ],
 
                 'session2' => $sessionRattrapageConfig ? [
                     'delibere' => $sessionRattrapageConfig->delibere,
                     'date_deliberation' => $sessionRattrapageConfig->date_deliberation,
                     'delibere_par' => $sessionRattrapageConfig->delibere_par,
-                    'credits_admission_s2' => $sessionRattrapageConfig->credits_admission_s2,
-                    'credits_redoublement_s2' => $sessionRattrapageConfig->credits_redoublement_s2,
-                    'note_eliminatoire_exclusion_s2' => $sessionRattrapageConfig->note_eliminatoire_exclusion_s2,
+                    'credits_admission_s2' => $sessionRattrapageConfig->credits_admission_s2 ?? 40,
+                    'credits_redoublement_s2' => $sessionRattrapageConfig->credits_redoublement_s2 ?? 20,
+                    'note_eliminatoire_exclusion_s2' => $sessionRattrapageConfig->note_eliminatoire_exclusion_s2 ?? true,
                     'config_id' => $sessionRattrapageConfig->id
-                ] : null
+                ] : [
+                    // ✅ Valeurs par défaut si aucune config
+                    'delibere' => false,
+                    'date_deliberation' => null,
+                    'delibere_par' => null,
+                    'credits_admission_s2' => 40,
+                    'credits_redoublement_s2' => 20,
+                    'note_eliminatoire_exclusion_s2' => true,
+                    'config_id' => null
+                ]
             ];
 
         } catch (\Exception $e) {
             Log::error('Erreur récupération config délibération: ' . $e->getMessage());
-            return ['session1' => null, 'session2' => null];
+
+            // ✅ Retourner des valeurs par défaut en cas d'erreur
+            return [
+                'session1' => [
+                    'delibere' => false,
+                    'date_deliberation' => null,
+                    'delibere_par' => null,
+                    'credits_admission_s1' => 60,
+                    'note_eliminatoire_bloque_s1' => true,
+                    'config_id' => null
+                ],
+                'session2' => [
+                    'delibere' => false,
+                    'date_deliberation' => null,
+                    'delibere_par' => null,
+                    'credits_admission_s2' => 40,
+                    'credits_redoublement_s2' => 20,
+                    'note_eliminatoire_exclusion_s2' => true,
+                    'config_id' => null
+                ]
+            ];
         }
     }
 

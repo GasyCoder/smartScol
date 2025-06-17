@@ -20,11 +20,13 @@ class EC extends Model
         'nom',
         'coefficient', //NULL
         'ue_id',
-        'enseignant'
+        'enseignant',
+        'is_active'
     ];
 
     protected $casts = [
-        'coefficient' => 'decimal:2'
+        'coefficient' => 'decimal:2',
+         'is_active' =>'boolean',
     ];
 
     protected $attributes = [

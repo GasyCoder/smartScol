@@ -24,6 +24,7 @@ use Livewire\WithPagination;
  * @property \Illuminate\Support\Collection $salles
  * @property \Illuminate\Support\Collection $ecs
  * @property \Illuminate\Support\Collection $etudiantsSansManchette
+ * @property \Illuminate\Support\Collection $searchResults
  */
 
 class ManchettesIndex extends Component
@@ -249,7 +250,7 @@ class ManchettesIndex extends Component
     /**
      * NOUVELLE MÉTHODE : Charger TOUS les ECs depuis tous les examens du niveau/parcours
      */
-    private function loadAllEcsFromExamens()
+    public function loadAllEcsFromExamens()
     {
         if (!$this->niveau_id || !$this->salle_id) {
             $this->ecs = collect();
@@ -366,7 +367,7 @@ class ManchettesIndex extends Component
     /**
      * Calculer les compteurs de manchettes pour tous les ECs chargés
      */
-    private function calculateManchettesCountsForAllEcs()
+    public function calculateManchettesCountsForAllEcs():void
     {
         if ($this->ecs->isEmpty()) {
             return;
@@ -543,13 +544,22 @@ class ManchettesIndex extends Component
             return false;
         }
 
-        return Manchette::where('etudiant_id', $etudiantId)
+        $exists = Manchette::where('etudiant_id', $etudiantId)
             ->where('examen_id', $this->examen_id)
             ->where('session_exam_id', $sessionId)
             ->whereHas('codeAnonymat', function ($query) {
                 $query->where('ec_id', $this->ec_id);
             })
             ->exists();
+
+        \Log::info('Vérification manchette existante', [
+            'etudiant_id' => $etudiantId,
+            'session_id' => $sessionId,
+            'ec_id' => $this->ec_id,
+            'exists' => $exists
+        ]);
+
+        return $exists;
     }
 
     /**
@@ -566,28 +576,66 @@ class ManchettesIndex extends Component
         }
 
         $sessionId = $this->getCurrentSessionId();
+        $baseCode = $this->selectedSalleCode;
 
-        // Compter les manchettes pour cette session spécifique
-        $codesIds = CodeAnonymat::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->where('code_complet', 'like', $this->selectedSalleCode . '%')
-            ->pluck('id')
+        // ✅ CORRECTION PRINCIPALE : Compter les codes d'anonymat UTILISÉS dans les manchettes pour cette session
+        $codesUtilises = DB::table('manchettes')
+            ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('manchettes.examen_id', $this->examen_id)
+            ->where('manchettes.session_exam_id', $sessionId)
+            ->where('codes_anonymat.ec_id', $this->ec_id)
+            ->where('codes_anonymat.code_complet', 'like', $baseCode . '%')
+            ->whereNull('manchettes.deleted_at')
+            ->pluck('codes_anonymat.code_complet')
             ->toArray();
 
-        $manchettesCount = empty($codesIds) ? 0 : Manchette::whereIn('code_anonymat_id', $codesIds)
-            ->where('session_exam_id', $sessionId)
-            ->count();
+        \Log::info('Codes d\'anonymat utilisés dans les manchettes', [
+            'session_id' => $sessionId,
+            'ec_id' => $this->ec_id,
+            'base_code' => $baseCode,
+            'codes_utilises' => $codesUtilises
+        ]);
 
-        $nextNumber = $manchettesCount + 1;
-        $proposedCode = $this->selectedSalleCode . $nextNumber;
+        // Extraire les numéros utilisés
+        $numerosUtilises = [];
+        foreach ($codesUtilises as $code) {
+            if (preg_match('/^' . preg_quote($baseCode) . '(\d+)$/', $code, $matches)) {
+                $numerosUtilises[] = (int)$matches[1];
+            }
+        }
 
-        // Vérifier que le code n'existe pas déjà pour cette session
-        while ($this->codeExistsForCurrentSession($proposedCode)) {
+        // Trouver le premier numéro disponible
+        $nextNumber = 1;
+        while (in_array($nextNumber, $numerosUtilises)) {
             $nextNumber++;
-            $proposedCode = $this->selectedSalleCode . $nextNumber;
+        }
+
+        $proposedCode = $baseCode . $nextNumber;
+
+        // ✅ DOUBLE VÉRIFICATION : S'assurer que le code n'est pas utilisé
+        $maxAttempts = 50; // Éviter les boucles infinies
+        $attempts = 0;
+
+        while ($this->codeExistsForCurrentSession($proposedCode) && $attempts < $maxAttempts) {
+            $nextNumber++;
+            $proposedCode = $baseCode . $nextNumber;
+            $attempts++;
+        }
+
+        if ($attempts >= $maxAttempts) {
+            throw new \Exception("Impossible de générer un code d'anonymat unique après {$maxAttempts} tentatives.");
         }
 
         $this->code_anonymat = $proposedCode;
+
+        \Log::info('Code d\'anonymat généré', [
+            'session_id' => $sessionId,
+            'ec_id' => $this->ec_id,
+            'base_code' => $baseCode,
+            'numero_choisi' => $nextNumber,
+            'code_final' => $proposedCode,
+            'tentatives' => $attempts
+        ]);
     }
 
     /**
@@ -600,14 +648,27 @@ class ManchettesIndex extends Component
             return false;
         }
 
-        return CodeAnonymat::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->where('code_complet', $code)
-            ->whereHas('manchettes', function($query) use ($sessionId) {
-                $query->where('session_exam_id', $sessionId);
-            })
+        // Vérifier dans les manchettes actives
+        $existsInManchettes = DB::table('manchettes')
+            ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('manchettes.examen_id', $this->examen_id)
+            ->where('manchettes.session_exam_id', $sessionId)
+            ->where('codes_anonymat.ec_id', $this->ec_id)
+            ->where('codes_anonymat.code_complet', $code)
+            ->whereNull('manchettes.deleted_at')
             ->exists();
+
+        \Log::debug('Vérification existence code', [
+            'code' => $code,
+            'session_id' => $sessionId,
+            'ec_id' => $this->ec_id,
+            'exists_in_manchettes' => $existsInManchettes
+        ]);
+
+        return $existsInManchettes;
     }
+
+
 
     protected function storeFiltres()
     {
@@ -1211,7 +1272,7 @@ class ManchettesIndex extends Component
 
     /**
      * MÉTHODE CORRIGÉE : Mise à jour du saveManchette pour garder la modal ouverte
-     */
+    */
     public function saveManchette()
     {
         // Vérification des autorisations de session
@@ -1243,7 +1304,7 @@ class ManchettesIndex extends Component
             }
 
             if (!isset($this->editingManchetteId)) {
-                // Vérifier l'existence pour la session ACTIVE
+                // ✅ VÉRIFICATION RENFORCÉE : Manchette existante pour cet étudiant
                 $existingManchette = Manchette::where('etudiant_id', $this->etudiant_id)
                     ->where('examen_id', $this->examen_id)
                     ->where('session_exam_id', $sessionId)
@@ -1258,28 +1319,45 @@ class ManchettesIndex extends Component
                 }
             }
 
-            $codeAnonymat = CodeAnonymat::firstOrCreate(
-                [
+            // ✅ NOUVELLE LOGIQUE : Créer d'abord le code d'anonymat avec session_exam_id
+            $codeAnonymat = CodeAnonymat::where('examen_id', $this->examen_id)
+                ->where('session_exam_id', $sessionId)
+                ->where('ec_id', $this->ec_id)
+                ->where('code_complet', $this->code_anonymat)
+                ->first();
+
+            if (!$codeAnonymat) {
+                // Créer un nouveau code d'anonymat
+                $codeAnonymat = CodeAnonymat::create([
                     'examen_id' => $this->examen_id,
+                    'session_exam_id' => $sessionId,
                     'ec_id' => $this->ec_id,
                     'code_complet' => $this->code_anonymat,
-                ],
-                [
                     'sequence' => null,
-                ]
-            );
+                ]);
 
-            // Vérifier l'utilisation du code pour la session ACTIVE
+                \Log::info('Nouveau code d\'anonymat créé', [
+                    'code_id' => $codeAnonymat->id,
+                    'examen_id' => $this->examen_id,
+                    'session_id' => $sessionId,
+                    'ec_id' => $this->ec_id,
+                    'code_complet' => $this->code_anonymat
+                ]);
+            }
+
+            // ✅ VÉRIFICATION STRICTE : Code utilisé par un autre étudiant dans cette session
             $existingManchetteWithCode = Manchette::where('code_anonymat_id', $codeAnonymat->id)
                 ->where('session_exam_id', $sessionId)
                 ->when(isset($this->editingManchetteId), function ($query) {
                     return $query->where('id', '!=', $this->editingManchetteId);
                 })
+                ->with('etudiant')
                 ->first();
 
             if ($existingManchetteWithCode) {
                 $sessionLibelle = ucfirst($sessionType);
-                throw new \Exception("Ce code d'anonymat est déjà utilisé en session {$sessionLibelle} par l'étudiant {$existingManchetteWithCode->etudiant->nom} {$existingManchetteWithCode->etudiant->prenom}.");
+                $etudiantExistant = $existingManchetteWithCode->etudiant;
+                throw new \Exception("Ce code d'anonymat ({$this->code_anonymat}) est déjà utilisé en session {$sessionLibelle} par l'étudiant {$etudiantExistant->nom} {$etudiantExistant->prenom}.");
             }
 
             // Rechercher une manchette supprimée pour cette session
@@ -1291,6 +1369,7 @@ class ManchettesIndex extends Component
                 ->first();
 
             if ($deletedManchette) {
+                // Restaurer une manchette supprimée
                 $deletedManchette->restore();
                 $deletedManchette->update([
                     'etudiant_id' => $this->etudiant_id,
@@ -1300,11 +1379,13 @@ class ManchettesIndex extends Component
                 $sessionLibelle = ucfirst($sessionType);
                 $this->message = "Manchette restaurée et mise à jour avec succès pour la session {$sessionLibelle}";
             } elseif (isset($this->editingManchetteId)) {
+                // Mode modification
                 $manchette = Manchette::find($this->editingManchetteId);
                 if (!$manchette) {
                     throw new \Exception('La manchette à modifier est introuvable.');
                 }
 
+                // Vérifier si on change d'étudiant
                 if ($manchette->etudiant_id != $this->etudiant_id) {
                     $etudiantHasEC = Manchette::where('etudiant_id', $this->etudiant_id)
                         ->where('examen_id', $this->examen_id)
@@ -1330,7 +1411,7 @@ class ManchettesIndex extends Component
                 $sessionLibelle = ucfirst($sessionType);
                 $this->message = "Manchette modifiée avec succès pour la session {$sessionLibelle}";
             } else {
-                // NOUVELLE CRÉATION avec session_exam_id
+                // ✅ NOUVELLE CRÉATION
                 Manchette::create([
                     'examen_id' => $this->examen_id,
                     'code_anonymat_id' => $codeAnonymat->id,
@@ -1341,30 +1422,35 @@ class ManchettesIndex extends Component
                 ]);
                 $sessionLibelle = ucfirst($sessionType);
                 $this->message = "Manchette enregistrée avec succès pour la session {$sessionLibelle}";
+
+                \Log::info('Nouvelle manchette créée', [
+                    'etudiant_id' => $this->etudiant_id,
+                    'code_anonymat_id' => $codeAnonymat->id,
+                    'session_id' => $sessionId,
+                    'code_complet' => $this->code_anonymat
+                ]);
             }
 
-            // NOUVEAU : Gestion post-sauvegarde améliorée
+            // ✅ GESTION POST-SAUVEGARDE AMÉLIORÉE
             if (!isset($this->editingManchetteId)) {
                 // Réinitialiser seulement les champs étudiant
                 $this->etudiant_id = null;
                 $this->matricule = '';
                 $this->searchQuery = '';
                 $this->searchResults = [];
-                $this->quickFilter = ''; // Réinitialiser le filtre rapide
+                $this->quickFilter = '';
 
                 // Générer le prochain code pour la session courante
                 $this->generateNextCodeForCurrentSession();
 
-                // Recharger la liste des étudiants pour mettre à jour l'affichage
+                // Recharger la liste des étudiants
                 $this->chargerEtudiants();
 
-                // GARDER LA MODAL OUVERTE et préparer pour le prochain étudiant
+                // Garder la modal ouverte
                 $this->showManchetteModal = true;
-
-                // Focus automatique sur le champ de recherche
                 $this->dispatch('focus-search-field');
 
-                // Message encourageant à continuer avec compteur optimisé
+                // Message avec compteur
                 $etudiantsSansCount = count($this->etudiantsSansManchette ?? []);
                 if ($etudiantsSansCount > 0) {
                     if ($etudiantsSansCount <= 10) {
@@ -1382,17 +1468,25 @@ class ManchettesIndex extends Component
                 toastr()->success($this->message);
             }
 
-            // Mettre à jour les compteurs pour la session courante
+            // Mettre à jour les compteurs
             $this->updateCountersForCurrentSession();
-
             $this->messageType = 'success';
 
         } catch (\Exception $e) {
             $this->message = 'Erreur: ' . $e->getMessage();
             $this->messageType = 'error';
             toastr()->error($this->message);
+
+            \Log::error('Erreur dans saveManchette', [
+                'error' => $e->getMessage(),
+                'etudiant_id' => $this->etudiant_id,
+                'code_anonymat' => $this->code_anonymat,
+                'session_id' => $this->getCurrentSessionId(),
+                'trace' => $e->getTraceAsString()
+            ]);
         }
     }
+
 
     /**
      * Génère le prochain code pour la session courante
@@ -1401,17 +1495,52 @@ class ManchettesIndex extends Component
     {
         if (preg_match('/^([A-Za-z]+)(\d+)$/', $this->code_anonymat, $matches)) {
             $prefix = $matches[1];
-            $number = (int)$matches[2] + 1;
-            $newCode = $prefix . $number;
+            $currentNumber = (int)$matches[2];
+            $sessionId = $this->getCurrentSessionId();
 
-            while ($this->codeExistsForCurrentSession($newCode)) {
-                $number++;
-                $newCode = $prefix . $number;
+            // Récupérer tous les codes utilisés dans cette session pour cette EC
+            $codesUtilises = DB::table('manchettes')
+                ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
+                ->where('manchettes.examen_id', $this->examen_id)
+                ->where('manchettes.session_exam_id', $sessionId)
+                ->where('codes_anonymat.ec_id', $this->ec_id)
+                ->where('codes_anonymat.code_complet', 'like', $prefix . '%')
+                ->whereNull('manchettes.deleted_at')
+                ->pluck('codes_anonymat.code_complet')
+                ->toArray();
+
+            // Extraire les numéros utilisés
+            $numerosUtilises = [];
+            foreach ($codesUtilises as $code) {
+                if (preg_match('/^' . preg_quote($prefix) . '(\d+)$/', $code, $matches)) {
+                    $numerosUtilises[] = (int)$matches[1];
+                }
             }
 
-            $this->code_anonymat = $newCode;
+            // Trouver le premier numéro disponible après le numéro actuel
+            $nextNumber = $currentNumber + 1;
+            while (in_array($nextNumber, $numerosUtilises)) {
+                $nextNumber++;
+            }
+
+            $newCode = $prefix . $nextNumber;
+
+            // Vérification finale
+            if (!$this->codeExistsForCurrentSession($newCode)) {
+                $this->code_anonymat = $newCode;
+            } else {
+                // Fallback : utiliser la méthode complète de génération
+                $this->generateCodeAnonymat();
+            }
+
+            \Log::info('Prochain code généré', [
+                'code_precedent' => $matches[0],
+                'nouveau_code' => $this->code_anonymat,
+                'numeros_utilises' => $numerosUtilises
+            ]);
         }
     }
+
 
     /**
      * NOUVELLE MÉTHODE : Fermer la modal manuellement avec confirmation si des étudiants restent

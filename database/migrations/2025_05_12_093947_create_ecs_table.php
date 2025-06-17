@@ -18,6 +18,7 @@ return new class extends Migration
             $table->decimal('coefficient', 3, 1)->default(1.0);
             $table->unsignedBigInteger('ue_id')->comment('UE à laquelle appartient l\'EC');
             $table->string('enseignant')->comment('Enseignant responsable de l\'EC');
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
 

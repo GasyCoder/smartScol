@@ -35,16 +35,41 @@ class CalculAcademiqueService
             // 2. Récupérer les résultats de l'étudiant
             $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
 
-            $resultats = $modelClass::where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', $useResultatFinal ? ResultatFinal::STATUT_PUBLIE : 'valide')
-                ->with(['ec.ue', 'etudiant'])
+            // ✅ CORRECTION : Ajouter session_exam_id dans la logique de filtrage
+            $query = $modelClass::where('session_exam_id', $sessionId)
+                ->where('etudiant_id', $etudiantId);
+
+            if ($useResultatFinal) {
+                // Pour ResultatFinal : accepter PUBLIE ET EN_ATTENTE
+                $query->whereIn('statut', [ResultatFinal::STATUT_PUBLIE, ResultatFinal::STATUT_EN_ATTENTE]);
+            } else {
+                // Pour ResultatFusion : garder la logique existante
+                $query->where('statut', 'valide');
+            }
+
+            $resultats = $query->with(['ec.ue', 'etudiant', 'codeAnonymat.sessionExam'])
+                ->orderBy('ec_id')
                 ->get();
 
             if ($resultats->isEmpty()) {
                 throw new \Exception("Aucun résultat trouvé pour l'étudiant {$etudiantId} en session {$sessionId}");
             }
 
+            // ✅ VALIDATION : S'assurer que tous les résultats appartiennent à la bonne session
+            $invalidResults = $resultats->filter(function($resultat) use ($sessionId) {
+                return $resultat->codeAnonymat &&
+                    $resultat->codeAnonymat->session_exam_id !== $sessionId;
+            });
+
+            if ($invalidResults->isNotEmpty()) {
+                Log::warning('Résultats avec codes d\'anonymat de sessions différentes détectés', [
+                    'etudiant_id' => $etudiantId,
+                    'session_attendue' => $sessionId,
+                    'resultats_invalides' => $invalidResults->pluck('id')->toArray()
+                ]);
+            }
+
+            // ✅ LE RESTE DE VOTRE CODE RESTE IDENTIQUE
             $etudiant = $resultats->first()->etudiant;
 
             // 3. Calculer les résultats par UE selon logique médecine
@@ -68,7 +93,7 @@ class CalculAcademiqueService
                 'session' => [
                     'id' => $session->id,
                     'type' => $session->type,
-                    'nom' => $session->nom,
+                    'nom' => $session->nom ?? "Session {$session->type}",
                     'annee' => $session->anneeUniversitaire->libelle ?? 'N/A'
                 ],
                 'resultats_ue' => $resultatsUE,
@@ -76,14 +101,15 @@ class CalculAcademiqueService
                 'decision' => $decision,
                 'metadonnees' => [
                     'date_calcul' => now()->format('Y-m-d H:i:s'),
-                    'methode' => 'logique_medecine',
+                    'methode' => 'logique_medecine_avec_session',
                     'nb_ue' => count($resultatsUE),
-                    'nb_ec' => $resultats->count()
+                    'nb_ec' => $resultats->count(),
+                    'session_exam_id' => $sessionId
                 ]
             ];
 
         } catch (\Exception $e) {
-            Log::error('Erreur calcul résultats complets', [
+            Log::error('Erreur calcul résultats complets avec session', [
                 'etudiant_id' => $etudiantId,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage()
@@ -93,6 +119,7 @@ class CalculAcademiqueService
         }
     }
 
+
     // ✅ MÉTHODE : Calcule les résultats par UE selon logique médecine
     private function calculerResultatsUE_LogiqueMedecine($resultats)
     {
@@ -101,8 +128,18 @@ class CalculAcademiqueService
         // Grouper par UE
         $resultatsParUE = $resultats->groupBy('ec.ue_id');
 
+        Log::info('🔢 Début calcul UE médecine', [
+            'nb_ue_detectees' => $resultatsParUE->count(),
+            'ue_ids' => $resultatsParUE->keys()->toArray()
+        ]);
+
         foreach ($resultatsParUE as $ueId => $notesUE) {
             $ue = $notesUE->first()->ec->ue;
+
+            if (!$ue) {
+                Log::warning('❌ UE introuvable', ['ue_id' => $ueId]);
+                continue;
+            }
 
             // Récupérer toutes les notes de l'UE
             $notes = $notesUE->pluck('note')->toArray();
@@ -116,12 +153,11 @@ class CalculAcademiqueService
                 ];
             })->toArray();
 
-            // Vérifier s'il y a une note éliminatoire (0)
+            // ✅ VÉRIFICATION : Est-ce qu'il y a une note éliminatoire (0)
             $hasNoteEliminatoire = in_array(self::NOTE_ELIMINATOIRE, $notes);
 
-            // Calcul de la moyenne UE selon logique médecine
+            // ✅ CORRECTION : Calcul de la moyenne UE
             if ($hasNoteEliminatoire) {
-                // En médecine : note 0 = UE éliminée
                 $moyenneUE = 0;
                 $ueValidee = false;
                 $statutUE = 'eliminee';
@@ -130,14 +166,28 @@ class CalculAcademiqueService
                 $moyenneUE = count($notes) > 0 ? array_sum($notes) / count($notes) : 0;
                 $moyenneUE = round($moyenneUE, 2);
 
-                // Validation UE selon seuil
+                // ✅ VALIDATION UE selon seuil (10.0)
                 $ueValidee = $moyenneUE >= self::SEUIL_VALIDATION_UE;
                 $statutUE = $ueValidee ? 'validee' : 'non_validee';
             }
 
-            // Calcul crédits
+            // ✅ CALCUL CRÉDITS - CRUCIAL !
             $creditsUE = $ue->credits ?? 0;
             $creditsValides = $ueValidee ? $creditsUE : 0;
+
+            // 🔍 LOG DÉTAILLÉ POUR CHAQUE UE
+            Log::info("📚 UE analysée", [
+                'ue_id' => $ueId,
+                'ue_nom' => $ue->nom,
+                'ue_credits' => $creditsUE,
+                'moyenne_ue' => $moyenneUE,
+                'validee' => $ueValidee,
+                'credits_valides' => $creditsValides,
+                'has_note_eliminatoire' => $hasNoteEliminatoire,
+                'nb_notes' => count($notes),
+                'notes_detail' => $notes,
+                'seuil_validation' => self::SEUIL_VALIDATION_UE
+            ]);
 
             $resultatsUE[] = [
                 'ue_id' => $ueId,
@@ -153,6 +203,15 @@ class CalculAcademiqueService
                 'nb_ec' => count($notesEC)
             ];
         }
+
+        // 🔍 LOG RÉCAPITULATIF
+        $totalCreditsCalculés = array_sum(array_column($resultatsUE, 'credits_valides'));
+        Log::info('✅ Calcul UE terminé', [
+            'nb_ue_traitees' => count($resultatsUE),
+            'total_credits_valides' => $totalCreditsCalculés,
+            'ue_validees' => array_sum(array_column($resultatsUE, 'validee')),
+            'ue_eliminees' => collect($resultatsUE)->where('has_note_eliminatoire', true)->count()
+        ]);
 
         return $resultatsUE;
     }
@@ -196,15 +255,48 @@ class CalculAcademiqueService
         ];
     }
 
-    // ✅ MÉTHODE : Détermine la décision selon logique médecine
+        // ✅ MÉTHODE : Détermine la décision selon logique médecine
     private function determinerDecision_LogiqueMedecine($synthese, $session)
     {
         $creditsValides = $synthese['credits_valides'];
         $hasNoteEliminatoire = $synthese['a_note_eliminatoire'];
+        $moyenneGenerale = $synthese['moyenne_generale'];
 
-        if ($session->type === 'Normale') {
-            // Session 1 - Logique médecine stricte
+        // 🔍 AJOUT DE LOGS POUR DEBUG
+        Log::info('🎯 Détermination décision médecine', [
+            'session_type' => $session['type'],
+            'credits_valides' => $creditsValides,
+            'has_note_eliminatoire' => $hasNoteEliminatoire,
+            'moyenne_generale' => $moyenneGenerale,
+            'total_credits' => $synthese['total_credits']
+        ]);
+
+        if ($session['type'] === 'Normale') {
+            // ✅ CORRECTION : Vérifier d'abord les crédits, puis les notes éliminatoires
+
+            // 1. Si 60 crédits ET pas de note éliminatoire → ADMIS
+            if ($creditsValides >= self::CREDIT_TOTAL_REQUIS && !$hasNoteEliminatoire) {
+                Log::info('✅ Décision: ADMIS', [
+                    'motif' => 'Credits suffisants sans note eliminatoire',
+                    'credits' => $creditsValides
+                ]);
+
+                return [
+                    'code' => 'admis',
+                    'libelle' => 'Admis(e)',
+                    'motif' => 'Validation de tous les crédits requis',
+                    'credits_requis' => self::CREDIT_TOTAL_REQUIS,
+                    'credits_obtenus' => $creditsValides
+                ];
+            }
+
+            // 2. Si note éliminatoire → RATTRAPAGE (même avec 60 crédits)
             if ($hasNoteEliminatoire) {
+                Log::info('⚠️ Décision: RATTRAPAGE', [
+                    'motif' => 'Note eliminatoire presente',
+                    'credits' => $creditsValides
+                ]);
+
                 return [
                     'code' => 'rattrapage',
                     'libelle' => 'Autorisé(e) au rattrapage',
@@ -214,26 +306,23 @@ class CalculAcademiqueService
                 ];
             }
 
-            if ($creditsValides >= self::CREDIT_TOTAL_REQUIS) {
-                return [
-                    'code' => 'admis',
-                    'libelle' => 'Admis(e)',
-                    'motif' => 'Validation de tous les crédits requis',
-                    'credits_requis' => self::CREDIT_TOTAL_REQUIS,
-                    'credits_obtenus' => $creditsValides
-                ];
-            } else {
-                return [
-                    'code' => 'rattrapage',
-                    'libelle' => 'Autorisé(e) au rattrapage',
-                    'motif' => 'Crédits insuffisants',
-                    'credits_requis' => self::CREDIT_TOTAL_REQUIS,
-                    'credits_obtenus' => $creditsValides
-                ];
-            }
+            // 3. Sinon → RATTRAPAGE
+            Log::info('📝 Décision: RATTRAPAGE', [
+                'motif' => 'Credits insuffisants',
+                'credits' => $creditsValides,
+                'requis' => self::CREDIT_TOTAL_REQUIS
+            ]);
+
+            return [
+                'code' => 'rattrapage',
+                'libelle' => 'Autorisé(e) au rattrapage',
+                'motif' => 'Crédits insuffisants',
+                'credits_requis' => self::CREDIT_TOTAL_REQUIS,
+                'credits_obtenus' => $creditsValides
+            ];
 
         } else {
-            // Session 2 - Logique médecine rattrapage
+            // SESSION 2 (rattrapage) - logique inchangée
             if ($hasNoteEliminatoire) {
                 return [
                     'code' => 'exclus',

@@ -15,13 +15,33 @@
             </div>
         @else
             <!-- Alerte de session AUSSI verrouillée -->
-            <div class="p-4 border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-700 rounded-xl">
-                <div class="flex items-center">
-                    <em class="mr-3 text-green-600 ni ni-info dark:text-green-400"></em>
-                    <div>
-                        <h4 class="text-sm font-medium text-green-900 dark:text-green-100">Session 2 - Mode Consultation</h4>
-                        <p class="text-sm text-green-700 dark:text-green-300">Les résultats de la session de rattrapage sont publiés et verrouillés. Aucune modification possible.</p>
+            <div class="p-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700 rounded-xl">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <em class="mr-3 text-blue-600 ni ni-info dark:text-blue-400"></em>
+                        <div>
+                            <h4 class="text-sm font-medium text-blue-900 dark:text-blue-100">Session 2 - Mode Consultation</h4>
+                            <p class="text-sm text-blue-700 dark:text-blue-300">
+                                Les résultats de la session de rattrapage sont publiés et verrouillés. Aucune modification possible.
+                                @if(isset($deliberationStatus['delibere']) && $deliberationStatus['delibere'])
+                                    <span class="font-semibold">Délibération appliquée le {{ $deliberationStatus['date_deliberation'] ?? 'N/A' }}</span>
+                                @endif
+                            </p>
+                        </div>
                     </div>
+
+                    {{-- ✅ Badge du statut de délibération --}}
+                    @if(isset($deliberationStatus['delibere']) && $deliberationStatus['delibere'])
+                        <span class="flex items-center px-3 py-1 text-sm text-green-700 bg-green-100 rounded-full dark:bg-green-900/50 dark:text-green-300">
+                            <em class="mr-1 ni ni-shield-check"></em>
+                            Délibéré
+                        </span>
+                    @else
+                        <span class="flex items-center px-3 py-1 text-sm text-gray-600 bg-gray-100 rounded-full dark:bg-gray-700 dark:text-gray-400">
+                            <em class="mr-1 ni ni-cpu"></em>
+                            Automatique
+                        </span>
+                    @endif
                 </div>
             </div>
 

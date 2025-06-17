@@ -14,6 +14,7 @@ class CodeAnonymat extends Model
 
     protected $fillable = [
         'examen_id',
+        'session_exam_id', // ✅ AJOUTÉ
         'ec_id',
         'code_complet',
         'sequence'
@@ -46,54 +47,64 @@ class CodeAnonymat extends Model
         return $this->belongsTo(EC::class, 'ec_id');
     }
 
+    // ✅ NOUVELLE RELATION : Session d'examen
+    public function sessionExam()
+    {
+        return $this->belongsTo(SessionExam::class, 'session_exam_id');
+    }
+
+    // ✅ MODIFIÉ : Relations avec manchettes pour une session spécifique
     public function manchettes()
+    {
+        return $this->hasMany(Manchette::class, 'code_anonymat_id')
+                   ->where('session_exam_id', $this->session_exam_id);
+    }
+
+    // ✅ MODIFIÉ : Relations avec copies pour une session spécifique
+    public function copies()
+    {
+        return $this->hasMany(Copie::class, 'code_anonymat_id')
+                   ->where('session_exam_id', $this->session_exam_id);
+    }
+
+    /**
+     * ✅ NOUVELLE : Relation avec toutes les manchettes (toutes sessions)
+     */
+    public function allManchettes()
     {
         return $this->hasMany(Manchette::class, 'code_anonymat_id');
     }
 
-    public function copies()
+    /**
+     * ✅ NOUVELLE : Relation avec toutes les copies (toutes sessions)
+     */
+    public function allCopies()
     {
         return $this->hasMany(Copie::class, 'code_anonymat_id');
     }
 
     /**
-     * MODIFIÉ : Relation avec une manchette (la plus récente par défaut)
+     * ✅ MODIFIÉ : Relation avec une manchette pour cette session
      */
     public function manchette()
     {
-        return $this->hasOne(Manchette::class, 'code_anonymat_id')->latest();
+        return $this->hasOne(Manchette::class, 'code_anonymat_id')
+                   ->where('session_exam_id', $this->session_exam_id)
+                   ->latest();
     }
 
     /**
-     * MODIFIÉ : Relation avec une copie (la plus récente par défaut)
+     * ✅ MODIFIÉ : Relation avec une copie pour cette session
      */
     public function copie()
     {
-        return $this->hasOne(Copie::class, 'code_anonymat_id')->latest();
-    }
-
-    /**
-     * NOUVEAU : Relation avec les manchettes pour la session active
-     */
-    public function manchetteCurrentSession()
-    {
-        $sessionId = Manchette::getCurrentSessionId();
-        return $this->hasOne(Manchette::class, 'code_anonymat_id')
-                   ->where('session_exam_id', $sessionId);
-    }
-
-    /**
-     * NOUVEAU : Relation avec les copies pour la session active
-     */
-    public function copieCurrentSession()
-    {
-        $sessionId = Manchette::getCurrentSessionId();
         return $this->hasOne(Copie::class, 'code_anonymat_id')
-                   ->where('session_exam_id', $sessionId);
+                   ->where('session_exam_id', $this->session_exam_id)
+                   ->latest();
     }
 
     /**
-     * NOUVEAU : Relation avec les manchettes pour une session spécifique
+     * ✅ NOUVELLE : Relation avec les manchettes pour une session spécifique
      */
     public function manchetteForSession($sessionId)
     {
@@ -102,7 +113,7 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Relation avec les copies pour une session spécifique
+     * ✅ NOUVELLE : Relation avec les copies pour une session spécifique
      */
     public function copieForSession($sessionId)
     {
@@ -111,16 +122,16 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * MODIFIÉ : Récupère l'étudiant via la manchette de la session active
+     * ✅ MODIFIÉ : Récupère l'étudiant via la manchette de cette session
      */
     public function getEtudiantAttribute()
     {
-        $manchette = $this->manchetteCurrentSession;
+        $manchette = $this->manchette;
         return $manchette ? $manchette->etudiant : null;
     }
 
     /**
-     * NOUVEAU : Récupère l'étudiant pour une session spécifique
+     * ✅ NOUVELLE : Récupère l'étudiant pour une session spécifique
      */
     public function getEtudiantForSession($sessionId)
     {
@@ -174,94 +185,66 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Vérifie si ce code d'anonymat est utilisé dans la session active
+     * ✅ MODIFIÉ : Vérifie si ce code d'anonymat est utilisé dans cette session
      */
-    public function isUsedInCurrentSession()
+    public function isUsedInSession($sessionId = null)
     {
-        $sessionId = Manchette::getCurrentSessionId();
+        $sessionId = $sessionId ?? $this->session_exam_id;
         if (!$sessionId) {
             return false;
         }
 
-        return $this->manchettes()
+        return $this->allManchettes()
                    ->where('session_exam_id', $sessionId)
                    ->exists();
     }
 
     /**
-     * NOUVEAU : Vérifie si ce code d'anonymat est utilisé dans une session spécifique
+     * ✅ MODIFIÉ : Vérifie si ce code d'anonymat a une copie associée dans cette session
      */
-    public function isUsedInSession($sessionId)
+    public function hasCopieInSession($sessionId = null)
     {
-        return $this->manchettes()
-                   ->where('session_exam_id', $sessionId)
-                   ->exists();
-    }
-
-    /**
-     * NOUVEAU : Vérifie si ce code d'anonymat a une copie associée dans la session active
-     */
-    public function hasCopieInCurrentSession()
-    {
-        $sessionId = Manchette::getCurrentSessionId();
+        $sessionId = $sessionId ?? $this->session_exam_id;
         if (!$sessionId) {
             return false;
         }
 
-        return $this->copies()
+        return $this->allCopies()
                    ->where('session_exam_id', $sessionId)
                    ->exists();
     }
 
     /**
-     * NOUVEAU : Vérifie si ce code d'anonymat a une copie associée dans une session spécifique
+     * ✅ NOUVELLE : Vérifie si ce code d'anonymat est complètement traité (manchette + copie) pour une session
      */
-    public function hasCopieInSession($sessionId)
+    public function isCompleteForSession($sessionId = null)
     {
-        return $this->copies()
-                   ->where('session_exam_id', $sessionId)
-                   ->exists();
-    }
-
-    /**
-     * NOUVEAU : Récupère toutes les sessions où ce code d'anonymat est utilisé
-     */
-    public function getUsedSessions()
-    {
-        return SessionExam::whereIn('id',
-            $this->manchettes()->pluck('session_exam_id')->unique()
-        )->get();
-    }
-
-    /**
-     * NOUVEAU : Vérifie si ce code d'anonymat est complètement traité (manchette + copie) pour une session
-     */
-    public function isCompleteForSession($sessionId)
-    {
+        $sessionId = $sessionId ?? $this->session_exam_id;
         return $this->isUsedInSession($sessionId) && $this->hasCopieInSession($sessionId);
     }
 
     /**
-     * NOUVEAU : Vérifie si ce code d'anonymat est complètement traité pour la session active
+     * ✅ MODIFIÉ : Récupère toutes les sessions où ce code d'anonymat est utilisé
      */
-    public function isCompleteForCurrentSession()
+    public function getUsedSessions()
     {
-        $sessionId = Manchette::getCurrentSessionId();
-        return $sessionId ? $this->isCompleteForSession($sessionId) : false;
+        return SessionExam::whereIn('id',
+            $this->allManchettes()->pluck('session_exam_id')->unique()
+        )->get();
     }
 
     /**
-     * NOUVEAU : Récupère les statistiques d'utilisation de ce code par session
+     * ✅ MODIFIÉ : Récupère les statistiques d'utilisation de ce code par session
      */
     public function getUsageStats()
     {
-        $manchettes = $this->manchettes()
+        $manchettes = $this->allManchettes()
             ->join('session_exams', 'manchettes.session_exam_id', '=', 'session_exams.id')
             ->selectRaw('session_exams.type, COUNT(*) as count')
             ->groupBy('session_exams.type')
             ->pluck('count', 'type');
 
-        $copies = $this->copies()
+        $copies = $this->allCopies()
             ->join('session_exams', 'copies.session_exam_id', '=', 'session_exams.id')
             ->selectRaw('session_exams.type, COUNT(*) as count')
             ->groupBy('session_exams.type')
@@ -274,81 +257,69 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Scope pour filtrer par session
+     * ✅ MODIFIÉ : Scope pour filtrer par session
      */
     public function scopeForSession($query, $sessionId)
     {
-        return $query->whereHas('manchettes', function($q) use ($sessionId) {
-            $q->where('session_exam_id', $sessionId);
-        });
+        return $query->where('session_exam_id', $sessionId);
     }
 
     /**
-     * NOUVEAU : Scope pour filtrer par session active
+     * ✅ NOUVELLE : Scope pour les codes avec manchettes seulement dans une session
      */
-    public function scopeForCurrentSession($query)
+    public function scopeWithManchetteOnly($query, $sessionId)
     {
-        $sessionId = Manchette::getCurrentSessionId();
-        return $sessionId ? $query->forSession($sessionId) : $query->whereRaw('1=0');
+        return $query->where('session_exam_id', $sessionId)
+                    ->whereHas('allManchettes', function($q) use ($sessionId) {
+                        $q->where('session_exam_id', $sessionId);
+                    })
+                    ->whereDoesntHave('allCopies', function($q) use ($sessionId) {
+                        $q->where('session_exam_id', $sessionId);
+                    });
     }
 
     /**
-     * NOUVEAU : Scope pour les codes avec manchettes seulement
+     * ✅ NOUVELLE : Scope pour les codes complets (manchette + copie) dans une session
      */
-    public function scopeWithManchetteOnly($query, $sessionId = null)
+    public function scopeComplete($query, $sessionId)
     {
-        $sessionId = $sessionId ?? Manchette::getCurrentSessionId();
-
-        return $query->whereHas('manchettes', function($q) use ($sessionId) {
-            $q->where('session_exam_id', $sessionId);
-        })->whereDoesntHave('copies', function($q) use ($sessionId) {
-            $q->where('session_exam_id', $sessionId);
-        });
+        return $query->where('session_exam_id', $sessionId)
+                    ->whereHas('allManchettes', function($q) use ($sessionId) {
+                        $q->where('session_exam_id', $sessionId);
+                    })
+                    ->whereHas('allCopies', function($q) use ($sessionId) {
+                        $q->where('session_exam_id', $sessionId);
+                    });
     }
 
     /**
-     * NOUVEAU : Scope pour les codes complets (manchette + copie)
+     * ✅ NOUVELLE : Scope pour les codes non utilisés dans une session
      */
-    public function scopeComplete($query, $sessionId = null)
+    public function scopeUnused($query, $sessionId)
     {
-        $sessionId = $sessionId ?? Manchette::getCurrentSessionId();
-
-        return $query->whereHas('manchettes', function($q) use ($sessionId) {
-            $q->where('session_exam_id', $sessionId);
-        })->whereHas('copies', function($q) use ($sessionId) {
-            $q->where('session_exam_id', $sessionId);
-        });
+        return $query->where('session_exam_id', $sessionId)
+                    ->whereDoesntHave('allManchettes', function($q) use ($sessionId) {
+                        $q->where('session_exam_id', $sessionId);
+                    });
     }
 
     /**
-     * NOUVEAU : Scope pour les codes non utilisés dans une session
+     * ✅ MODIFIÉ : Méthode statique pour obtenir les statistiques d'utilisation globales par session
      */
-    public function scopeUnused($query, $sessionId = null)
+    public static function getGlobalUsageStats($examenId, $sessionId, $ecId = null)
     {
-        $sessionId = $sessionId ?? Manchette::getCurrentSessionId();
-
-        return $query->whereDoesntHave('manchettes', function($q) use ($sessionId) {
-            $q->where('session_exam_id', $sessionId);
-        });
-    }
-
-    /**
-     * NOUVEAU : Méthode statique pour obtenir les statistiques d'utilisation globales
-     */
-    public static function getGlobalUsageStats($examenId, $ecId = null)
-    {
-        $query = self::where('examen_id', $examenId);
+        $query = self::where('examen_id', $examenId)
+                    ->where('session_exam_id', $sessionId);
 
         if ($ecId) {
             $query->where('ec_id', $ecId);
         }
 
         $total = $query->count();
-        $sessionId = Manchette::getCurrentSessionId();
 
-        if (!$sessionId) {
+        if ($total === 0) {
             return [
-                'total' => $total,
+                'total' => 0,
                 'utilises' => 0,
                 'avec_copie' => 0,
                 'complets' => 0,
@@ -357,10 +328,14 @@ class CodeAnonymat extends Model
             ];
         }
 
-        $utilises = $query->forSession($sessionId)->count();
-        $avecCopie = $query->whereHas('copies', function($q) use ($sessionId) {
+        $utilises = $query->whereHas('allManchettes', function($q) use ($sessionId) {
             $q->where('session_exam_id', $sessionId);
         })->count();
+
+        $avecCopie = $query->whereHas('allCopies', function($q) use ($sessionId) {
+            $q->where('session_exam_id', $sessionId);
+        })->count();
+
         $complets = $query->complete($sessionId)->count();
 
         return [
@@ -374,12 +349,13 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Trouve le code d'anonymat suivant dans la séquence pour la même salle/EC
+     * ✅ MODIFIÉ : Trouve le code d'anonymat suivant dans la séquence pour la même salle/EC/session
      */
     public function getNextInSequence()
     {
         return self::where('examen_id', $this->examen_id)
                   ->where('ec_id', $this->ec_id)
+                  ->where('session_exam_id', $this->session_exam_id)
                   ->where('sequence', '>', $this->sequence)
                   ->where('code_complet', 'LIKE', $this->code_salle . '%')
                   ->orderBy('sequence')
@@ -387,12 +363,13 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Trouve le code d'anonymat précédent dans la séquence pour la même salle/EC
+     * ✅ MODIFIÉ : Trouve le code d'anonymat précédent dans la séquence pour la même salle/EC/session
      */
     public function getPreviousInSequence()
     {
         return self::where('examen_id', $this->examen_id)
                   ->where('ec_id', $this->ec_id)
+                  ->where('session_exam_id', $this->session_exam_id)
                   ->where('sequence', '<', $this->sequence)
                   ->where('code_complet', 'LIKE', $this->code_salle . '%')
                   ->orderBy('sequence', 'desc')
@@ -400,11 +377,12 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Génère un nouveau code d'anonymat dans la même séquence
+     * ✅ MODIFIÉ : Génère un nouveau code d'anonymat dans la même séquence pour une session
      */
-    public static function generateNext($examenId, $ecId, $codeSalle)
+    public static function generateNext($examenId, $sessionId, $ecId, $codeSalle)
     {
         $lastSequence = self::where('examen_id', $examenId)
+                           ->where('session_exam_id', $sessionId)
                            ->where('ec_id', $ecId)
                            ->where('code_complet', 'LIKE', $codeSalle . '%')
                            ->max('sequence');
@@ -414,6 +392,7 @@ class CodeAnonymat extends Model
 
         return self::create([
             'examen_id' => $examenId,
+            'session_exam_id' => $sessionId,
             'ec_id' => $ecId,
             'code_complet' => $codeComplet,
             'sequence' => $nextSequence
@@ -421,7 +400,7 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Valide le format du code complet
+     * Valide le format du code complet
      */
     public function validateCodeFormat()
     {
@@ -430,11 +409,12 @@ class CodeAnonymat extends Model
     }
 
     /**
-     * NOUVEAU : Trouve les doublons de codes pour le même examen/EC
+     * ✅ MODIFIÉ : Trouve les doublons de codes pour le même examen/EC/session
      */
-    public static function findDuplicates($examenId, $ecId = null)
+    public static function findDuplicates($examenId, $sessionId, $ecId = null)
     {
-        $query = self::where('examen_id', $examenId);
+        $query = self::where('examen_id', $examenId)
+                    ->where('session_exam_id', $sessionId);
 
         if ($ecId) {
             $query->where('ec_id', $ecId);
@@ -444,5 +424,35 @@ class CodeAnonymat extends Model
                     ->groupBy('code_complet')
                     ->having('count', '>', 1)
                     ->get();
+    }
+
+    /**
+     * ✅ NOUVELLE : Vérifie si un code existe déjà pour un examen/session/EC
+     */
+    public static function codeExists($examenId, $sessionId, $ecId, $codeComplet)
+    {
+        return self::where('examen_id', $examenId)
+                  ->where('session_exam_id', $sessionId)
+                  ->where('ec_id', $ecId)
+                  ->where('code_complet', $codeComplet)
+                  ->exists();
+    }
+
+    /**
+     * ✅ NOUVELLE : Crée ou récupère un code d'anonymat pour une session spécifique
+     */
+    public static function firstOrCreateForSession($examenId, $sessionId, $ecId, $codeComplet)
+    {
+        return self::firstOrCreate(
+            [
+                'examen_id' => $examenId,
+                'session_exam_id' => $sessionId,
+                'ec_id' => $ecId,
+                'code_complet' => $codeComplet,
+            ],
+            [
+                'sequence' => null,
+            ]
+        );
     }
 }
