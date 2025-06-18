@@ -43,6 +43,7 @@ namespace App\Models{
  *
  * @property int $id
  * @property int $examen_id Examen concerné
+ * @property int|null $session_exam_id Référence à la session d'examen
  * @property int|null $ec_id
  * @property string $code_complet Code complet d'anonymat (Ex: TA1, SA2)
  * @property int|null $sequence Numéro séquentiel (Ex: 1 dans TA1)
@@ -80,6 +81,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereSequence($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withManchetteOnly($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withTrashed()

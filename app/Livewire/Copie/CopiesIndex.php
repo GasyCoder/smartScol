@@ -83,14 +83,50 @@ class CopiesIndex extends Component
     public $search = '';
     public $showDeleteModal = false;
     public $copieToDelete = null;
+    public $autoOpenModal = true;
+
+    // NOUVELLES PROPRIÉTÉS pour la double vérification
+    public $enableDoubleVerification = false;
+    public $code_anonymat_confirmation = '';
+    public $note_confirmation = null;
+    
 
     // Mise à jour des règles de validation pour inclure session_exam_id
-    protected $rules = [
-        'code_anonymat' => 'required|string|max:20',
-        'note' => 'required|numeric|min:0|max:20',
-        'ec_id' => 'required|exists:ecs,id',
-        'session_exam_id' => 'required|exists:session_exams,id',
-    ];
+    protected function rules()
+    {
+        $rules = [
+            'code_anonymat' => 'required|string|max:20|regex:/^[A-Za-z]+\d+$/',
+            'note' => 'required|numeric|min:0|max:20',
+            'ec_id' => 'required|exists:ecs,id',
+            'session_exam_id' => 'required|exists:session_exams,id',
+        ];
+
+        // Règles additionnelles si double vérification activée
+        if ($this->enableDoubleVerification) {
+            $rules['code_anonymat_confirmation'] = 'required|same:code_anonymat';
+            $rules['note_confirmation'] = 'required|numeric|same:note';
+        }
+
+        return $rules;
+    }
+
+    protected function messages()
+    {
+        return [
+            'code_anonymat.required' => 'Le code d\'anonymat est obligatoire.',
+            'code_anonymat.regex' => 'Le code d\'anonymat doit contenir des lettres suivies de chiffres (ex: TA1).',
+            'code_anonymat_confirmation.required' => 'Veuillez confirmer le code d\'anonymat.',
+            'code_anonymat_confirmation.same' => 'Les codes d\'anonymat ne correspondent pas.',
+            'note.required' => 'La note est obligatoire.',
+            'note.numeric' => 'La note doit être un nombre.',
+            'note.min' => 'La note ne peut pas être inférieure à 0.',
+            'note.max' => 'La note ne peut pas être supérieure à 20.',
+            'note_confirmation.required' => 'Veuillez confirmer la note.',
+            'note_confirmation.numeric' => 'La confirmation de note doit être un nombre.',
+            'note_confirmation.same' => 'Les notes ne correspondent pas.',
+        ];
+    }
+
 
     public function sortBy($field)
     {
@@ -938,12 +974,166 @@ class CopiesIndex extends Component
         // Sauvegarder les filtres et réinitialiser la pagination
         $this->storeFiltres();
         $this->resetPage();
+        $this->checkAndAutoOpenModal();
     }
 
 
+    /**
+     * ✅ NOUVELLE MÉTHODE À AJOUTER DANS VOTRE CLASSE
+     */
+    private function checkAndAutoOpenModal()
+    {
+        // Vérifications préalables
+        if (!$this->autoOpenModal || !$this->canAddCopies || !$this->ec_id || $this->ec_id === 'all') {
+            return;
+        }
+
+        // Ne pas ouvrir si on est en mode édition
+        if (isset($this->editingCopieId)) {
+            return;
+        }
+
+        // Ne pas ouvrir si la modal est déjà ouverte
+        if ($this->showCopieModal) {
+            return;
+        }
+
+        // ✅ CONDITION STRICTE : Vérifier s'il n'y a AUCUNE copie pour cette matière dans cette session
+        $totalCopiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereNull('deleted_at')
+            ->count();
+
+        // ✅ CONDITION SUPPLÉMENTAIRE : Vérifier qu'il y a des étudiants disponibles
+        $etudiantsDisponibles = count($this->etudiantsSansCopies ?? []);
+
+        // ✅ AUTO-OUVERTURE SEULEMENT SI :
+        // 1. AUCUNE copie n'existe (0 copies)
+        // 2. ET il y a des étudiants sans copie
+        if ($totalCopiesCount === 0 && $etudiantsDisponibles > 0) {
+            
+            // ✅ VÉRIFICATION SUPPLÉMENTAIRE : S'assurer qu'on peut ouvrir la modal
+            $session = SessionExam::find($this->session_exam_id);
+            if (!$session) {
+                \Log::warning('Auto-ouverture annulée : session introuvable', [
+                    'session_id' => $this->session_exam_id
+                ]);
+                return;
+            }
+
+            // ✅ NOUVELLE VÉRIFICATION : Compter les étudiants éligibles selon le type de session
+            if ($session->type === 'Normale') {
+                $etudiantsEligibles = Etudiant::where('niveau_id', $this->niveau_id)
+                    ->where('parcours_id', $this->parcours_id)
+                    ->count();
+            } else {
+                $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                    ->where('type', 'Normale')
+                    ->first();
+                
+                if (!$sessionNormale) {
+                    \Log::warning('Auto-ouverture annulée : session normale introuvable pour rattrapage');
+                    return;
+                }
+
+                $etudiantsEligibles = Etudiant::eligiblesRattrapage(
+                    $this->niveau_id,
+                    $this->parcours_id,
+                    $sessionNormale->id
+                )->count();
+            }
+
+            // ✅ DERNIÈRE VÉRIFICATION : S'assurer qu'il y a des étudiants éligibles
+            if ($etudiantsEligibles === 0) {
+                \Log::warning('Auto-ouverture annulée : aucun étudiant éligible', [
+                    'session_type' => $session->type,
+                    'niveau_id' => $this->niveau_id,
+                    'parcours_id' => $this->parcours_id
+                ]);
+                return;
+            }
+
+            // ✅ TOUT EST OK : Ouvrir la modal directement sans passer par openCopieModal()
+            $this->prepareDirectModalOpening();
+            
+            // Message informatif spécifique à l'auto-ouverture
+            $sessionType = $session->type;
+            toastr()->info("✨ Première saisie pour cette matière en session {$sessionType}. Modal ouverte automatiquement pour {$etudiantsEligibles} étudiant(s) éligible(s).");
+            
+            // Log pour debug
+            \Log::info('Modal auto-ouverte pour première saisie', [
+                'ec_id' => $this->ec_id,
+                'ec_name' => $this->currentEcName,
+                'etudiants_eligibles' => $etudiantsEligibles,
+                'etudiants_disponibles' => $etudiantsDisponibles,
+                'session_id' => $this->session_exam_id,
+                'session_type' => $sessionType
+            ]);
+        } else {
+            // ✅ LOG pour debug quand l'auto-ouverture ne se fait pas
+            \Log::debug('Auto-ouverture non déclenchée', [
+                'total_copies' => $totalCopiesCount,
+                'etudiants_disponibles' => $etudiantsDisponibles,
+                'ec_id' => $this->ec_id,
+                'raison' => $totalCopiesCount > 0 ? 'Des copies existent déjà' : 'Aucun étudiant disponible'
+            ]);
+        }
+    }
+
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Préparer l'ouverture directe de la modal (sans les vérifications de openCopieModal)
+     */
+    private function prepareDirectModalOpening()
+    {
+        // Charger la liste des étudiants sans copie
+        $this->etudiantsSansNote = $this->etudiantsSansCopies;
+
+        // S'assurer que le code de salle est défini
+        if (empty($this->selectedSalleCode)) {
+            $salle = Salle::find($this->salle_id);
+            if ($salle) {
+                $this->selectedSalleCode = $salle->code_base;
+                $this->currentSalleName = $salle->nom;
+            }
+        }
+
+        // Générer le premier code d'anonymat pour cette session
+        $this->generateNextCodeAnonymatForSession();
+
+        // Réinitialiser les champs
+        $this->note = null;
+        $this->note_confirmation = null;
+        $this->code_anonymat_confirmation = '';
+        $this->editingCopieId = null;
+
+        // Ouvrir la modale directement
+        $this->showCopieModal = true;
+    }
+
+
+    /**
+     * ✅ MÉTHODE UTILITAIRE : Vérifier si l'auto-ouverture est possible
+     */
+    public function canAutoOpen()
+    {
+        if (!$this->autoOpenModal || !$this->ec_id || $this->ec_id === 'all') {
+            return false;
+        }
+
+        $totalCopiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereNull('deleted_at')
+            ->count();
+
+        return $totalCopiesCount === 0 && count($this->etudiantsSansCopies ?? []) > 0;
+    }
+
     public function openCopieModal()
     {
-        // Vérifier que le contexte est complet
+        // Vérifications préalables (code existant)...
         if (!$this->examen_id || !$this->ec_id || !$this->salle_id) {
             $this->message = 'Veuillez sélectionner une salle et une matière';
             $this->messageType = 'error';
@@ -951,7 +1141,6 @@ class CopiesIndex extends Component
             return;
         }
 
-        // Vérifier qu'une matière spécifique est sélectionnée (pas "all")
         if (!$this->ec_id || $this->ec_id === 'all') {
             $this->message = 'Veuillez sélectionner une matière spécifique pour ajouter une note';
             $this->messageType = 'error';
@@ -959,7 +1148,7 @@ class CopiesIndex extends Component
             return;
         }
 
-        // NOUVELLE LOGIQUE : Récupérer la session actuelle
+        // Vérifications de session (code existant)...
         $session = SessionExam::find($this->session_exam_id);
         if (!$session) {
             $this->message = 'Session introuvable';
@@ -968,21 +1157,12 @@ class CopiesIndex extends Component
             return;
         }
 
-        // Vérifier le nombre de copies déjà saisies POUR CETTE SESSION
-        $copiesCount = Copie::where('examen_id', $this->examen_id)
-            ->where('ec_id', $this->ec_id)
-            ->where('session_exam_id', $this->session_exam_id) // IMPORTANT : pour cette session
-            ->whereNull('deleted_at')
-            ->count();
-
-        // NOUVELLE LOGIQUE : Compter les étudiants selon le type de session
+        // Logique de comptage des étudiants (code existant)...
         if ($session->type === 'Normale') {
-            // Session normale : TOUS les étudiants du niveau/parcours
             $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
                 ->where('parcours_id', $this->parcours_id)
                 ->count();
         } else {
-            // Session rattrapage : SEULS les étudiants éligibles
             $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
                 ->where('type', 'Normale')
                 ->first();
@@ -1001,16 +1181,6 @@ class CopiesIndex extends Component
             )->count();
         }
 
-        // Log pour debug
-        \Log::info('openCopieModal - Compteurs calculés', [
-            'session_type' => $session->type,
-            'session_id' => $this->session_exam_id,
-            'etudiants_count' => $etudiantsCount,
-            'copies_count' => $copiesCount,
-            'ec_id' => $this->ec_id
-        ]);
-
-        // Vérifier que des étudiants sont disponibles
         if ($etudiantsCount === 0) {
             $sessionType = $session->type === 'Normale' ? 'normale' : 'rattrapage';
             $this->message = "Aucun étudiant éligible trouvé pour la session {$sessionType}. Veuillez vérifier vos filtres.";
@@ -1019,7 +1189,13 @@ class CopiesIndex extends Component
             return;
         }
 
-        // Vérifier la limite UNIQUEMENT pour cette session
+        // Vérifier la limite pour cette session
+        $copiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereNull('deleted_at')
+            ->count();
+
         if ($copiesCount >= $etudiantsCount) {
             $sessionType = $session->type === 'Normale' ? 'normale' : 'rattrapage';
             $this->message = "Limite atteinte pour la session {$sessionType} : Vous avez déjà saisi {$copiesCount} copies pour {$etudiantsCount} étudiants éligibles.";
@@ -1028,7 +1204,7 @@ class CopiesIndex extends Component
             return;
         }
 
-        // Charger la liste des étudiants sans copie pour cette matière dans cette session
+        // Charger la liste des étudiants sans copie
         $this->etudiantsSansNote = $this->etudiantsSansCopies;
 
         // S'assurer que le code de salle est défini
@@ -1040,41 +1216,27 @@ class CopiesIndex extends Component
             }
         }
 
-        // Définir le code de base
-        $baseCode = $this->selectedSalleCode;
+        // Générer le code d'anonymat pour cette session (CORRIGÉ)
+        $this->generateNextCodeAnonymatForSession();
 
-        // Commencer toujours à 1 et chercher le prochain code disponible POUR CETTE SESSION
-        $nextNumber = 1;
-        $proposedCode = $baseCode . $nextNumber;
-
-        // Vérifier uniquement les codes déjà utilisés dans les COPIES pour cette matière ET cette session
-        while (Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
-            ->where('copies.examen_id', $this->examen_id)
-            ->where('copies.ec_id', $this->ec_id)
-            ->where('copies.session_exam_id', $this->session_exam_id) // IMPORTANT : pour cette session
-            ->where('codes_anonymat.code_complet', $proposedCode)
-            ->whereNull('copies.deleted_at')
-            ->exists()) {
-            $nextNumber++;
-            $proposedCode = $baseCode . $nextNumber;
-        }
-
-        // Préinitialiser le code d'anonymat avec le code unique
-        $this->code_anonymat = $proposedCode;
-        $this->note = '';
+        // Réinitialiser les champs
+        $this->note = null;
+        $this->note_confirmation = null;
+        $this->code_anonymat_confirmation = '';
         $this->editingCopieId = null;
 
         // Message informatif adapté au type de session
         $remainingNotes = $etudiantsCount - $copiesCount;
         $sessionType = $session->type === 'Normale' ? 'normale' : 'rattrapage';
-        $this->message = "Session {$sessionType} : {$copiesCount} notes saisies sur {$etudiantsCount} étudiants éligibles. Il reste {$remainingNotes} notes à saisir.";
+        $doubleVerifStatus = $this->enableDoubleVerification ? ' (Double vérification activée)' : '';
+        
+        $this->message = "Session {$sessionType} : {$copiesCount} notes saisies sur {$etudiantsCount} étudiants éligibles. Il reste {$remainingNotes} notes à saisir.{$doubleVerifStatus}";
         $this->messageType = 'info';
         toastr()->info($this->message);
 
         // Ouvrir la modale
         $this->showCopieModal = true;
     }
-
 
     // méthode savecopie
     public function saveCopie(): void
@@ -1157,14 +1319,14 @@ class CopiesIndex extends Component
                 throw new \Exception("Incohérence détectée : La matière (EC {$this->ec_id}) n'est pas associée à l'examen {$this->examen_id} dans la salle {$this->salle_id}.");
             }
 
-            // Vérifier le nombre de copies pour cette session
+            // ✅ VÉRIFICATION DE LIMITE CORRIGÉE : Compter les copies existantes
             $copiesCount = Copie::where('examen_id', $this->examen_id)
                 ->where('ec_id', $this->ec_id)
                 ->where('session_exam_id', $this->session_exam_id)
                 ->whereNull('deleted_at')
                 ->count();
 
-            // CORRECTION PRINCIPALE : Calculer le nombre d'étudiants selon la logique de session
+            // ✅ CALCUL DU NOMBRE D'ÉTUDIANTS SELON LA LOGIQUE DE SESSION
             if ($sessionExam->type === 'Normale') {
                 // Session normale : TOUS les étudiants du niveau/parcours
                 $etudiantsCount = Etudiant::where('niveau_id', $this->niveau_id)
@@ -1187,23 +1349,39 @@ class CopiesIndex extends Component
                 )->count();
             }
 
-            // Log pour debug
+            // ✅ LOG POUR DEBUG
             \Log::info('Calcul du nombre d\'étudiants pour saveCopie', [
                 'session_type' => $sessionExam->type,
                 'etudiants_count' => $etudiantsCount,
                 'copies_count' => $copiesCount,
                 'niveau_id' => $this->niveau_id,
-                'parcours_id' => $this->parcours_id
+                'parcours_id' => $this->parcours_id,
+                'is_editing' => isset($this->editingCopieId) ? 'oui' : 'non'
             ]);
 
-            // Vérifier la limite avant de sauvegarder (sauf en mode édition)
-            if (!isset($this->editingCopieId) && $copiesCount >= $etudiantsCount) {
-                $sessionType = $sessionExam->type === 'Normale' ? 'normale' : 'rattrapage';
-                $this->message = "Limite atteinte : Vous avez déjà saisi {$copiesCount} notes pour {$etudiantsCount} étudiants éligibles en session {$sessionType}.";
-                $this->messageType = 'warning';
-                toastr()->warning($this->message);
-                $this->showCopieModal = false;
-                return;
+            // ✅ VÉRIFICATION DE LIMITE CORRIGÉE : En mode AJOUT seulement
+            if (!isset($this->editingCopieId)) {
+                // ✅ LOGIQUE CORRIGÉE : Prévoir le nombre de copies après ajout
+                $copiesApresAjout = $copiesCount + 1;
+                
+                if ($copiesApresAjout > $etudiantsCount) {
+                    $sessionType = $sessionExam->type === 'Normale' ? 'normale' : 'rattrapage';
+                    $this->message = "❌ Impossible d'ajouter cette note ! Limite atteinte : Vous avez déjà {$copiesCount} copies pour {$etudiantsCount} étudiants éligibles en session {$sessionType}.";
+                    $this->messageType = 'error';
+                    toastr()->error($this->message);
+                    
+                    \Log::warning('Tentative de dépassement de limite', [
+                        'copies_actuelles' => $copiesCount,
+                        'copies_apres_ajout' => $copiesApresAjout,
+                        'etudiants_eligibles' => $etudiantsCount,
+                        'session_type' => $sessionExam->type,
+                        'ec_id' => $this->ec_id,
+                        'user_id' => Auth::id()
+                    ]);
+                    
+                    // ✅ NE PAS FERMER LA MODAL pour que l'utilisateur voie le message
+                    return;
+                }
             }
 
             // Créer ou récupérer le code d'anonymat AVEC LE BON EXAMEN_ID (cohérent avec manchettes)
@@ -1276,15 +1454,35 @@ class CopiesIndex extends Component
                 ]);
 
             } else {
+                // ✅ DOUBLE VÉRIFICATION DE SÉCURITÉ avant création
+                // Recompter les copies en temps réel (au cas où une autre personne aurait ajouté une copie)
+                $copiesCountRealTime = Copie::where('examen_id', $this->examen_id)
+                    ->where('ec_id', $this->ec_id)
+                    ->where('session_exam_id', $this->session_exam_id)
+                    ->whereNull('deleted_at')
+                    ->count();
+                
+                if ($copiesCountRealTime >= $etudiantsCount) {
+                    $sessionType = $sessionExam->type === 'Normale' ? 'normale' : 'rattrapage';
+                    throw new \Exception("❌ Limite atteinte en temps réel ! {$copiesCountRealTime} copies pour {$etudiantsCount} étudiants en session {$sessionType}. Une autre personne a peut-être ajouté une copie.");
+                }
+
                 // Vérifier qu'une copie n'existe pas déjà pour cette session
                 $existingCopie = Copie::where('examen_id', $this->examen_id)
                     ->where('code_anonymat_id', $codeAnonymat->id)
                     ->where('ec_id', $this->ec_id)
                     ->where('session_exam_id', $this->session_exam_id)
+                    ->whereNull('deleted_at') // ✅ AJOUT DE CETTE LIGNE
                     ->first();
 
                 if ($existingCopie) {
                     throw new \Exception("Ce code d'anonymat est déjà utilisé pour cette matière dans cette session.");
+                }
+
+                // ✅ VÉRIFICATION FINALE : S'assurer qu'on ne dépasse pas la limite
+                $totalCopiesAfterCreation = $copiesCountRealTime + 1;
+                if ($totalCopiesAfterCreation > $etudiantsCount) {
+                    throw new \Exception("❌ Création impossible : {$totalCopiesAfterCreation} copies dépasserait la limite de {$etudiantsCount} étudiants.");
                 }
 
                 // Créer une nouvelle copie
@@ -1299,11 +1497,14 @@ class CopiesIndex extends Component
                 ]);
 
                 $this->message = 'Note enregistrée avec succès';
-                \Log::info('Nouvelle copie créée', [
+                \Log::info('Nouvelle copie créée avec vérifications de sécurité', [
                     'copie_id' => $nouvelleCopie->id,
                     'examen_id' => $this->examen_id,
                     'ec_id' => $this->ec_id,
-                    'session_id' => $this->session_exam_id
+                    'session_id' => $this->session_exam_id,
+                    'copies_avant' => $copiesCountRealTime,
+                    'copies_apres' => $copiesCountRealTime + 1,
+                    'limite_etudiants' => $etudiantsCount
                 ]);
             }
 
@@ -1323,6 +1524,23 @@ class CopiesIndex extends Component
             if (!isset($this->editingCopieId)) {
                 // Mode ajout : préparer pour la prochaine saisie
                 $this->note = '';
+
+                // ✅ VÉRIFIER S'IL RESTE DE LA PLACE POUR UNE AUTRE COPIE
+                $copiesCountAfterSave = Copie::where('examen_id', $this->examen_id)
+                    ->where('ec_id', $this->ec_id)
+                    ->where('session_exam_id', $this->session_exam_id)
+                    ->whereNull('deleted_at')
+                    ->count();
+
+                if ($copiesCountAfterSave >= $etudiantsCount) {
+                    // ✅ LIMITE ATTEINTE : Fermer la modal et informer
+                    $sessionType = $sessionExam->type === 'Normale' ? 'normale' : 'rattrapage';
+                    $this->message = "🎯 Saisie terminée ! Toutes les notes ont été saisies pour cette matière en session {$sessionType} ({$copiesCountAfterSave}/{$etudiantsCount}).";
+                    $this->messageType = 'success';
+                    $this->showCopieModal = false;
+                    toastr()->success($this->message);
+                    return;
+                }
 
                 // Générer le prochain code d'anonymat pour cette session
                 $baseCode = $this->selectedSalleCode;
@@ -1405,6 +1623,7 @@ class CopiesIndex extends Component
             ]);
         }
     }
+
 
     public function editCopie($id)
     {
@@ -1557,6 +1776,412 @@ class CopiesIndex extends Component
             $this->messageType = 'error';
             toastr()->error($this->message);
         }
+    }
+
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifie si le formulaire peut être soumis
+     */
+    public function canSubmit()
+    {
+        // Vérifications de base
+        if (empty($this->code_anonymat) || $this->note === null || $this->note === '') {
+            return false;
+        }
+
+        // Vérifier le format du code d'anonymat
+        if (!preg_match('/^[A-Za-z]+\d+$/', $this->code_anonymat)) {
+            return false;
+        }
+
+        // Vérifier la plage de la note
+        if ($this->note < 0 || $this->note > 20) {
+            return false;
+        }
+
+        // Si double vérification activée, vérifier les confirmations
+        if ($this->enableDoubleVerification) {
+            if (empty($this->code_anonymat_confirmation) || $this->note_confirmation === null) {
+                return false;
+            }
+
+            if ($this->code_anonymat !== $this->code_anonymat_confirmation) {
+                return false;
+            }
+
+            if ((float)$this->note !== (float)$this->note_confirmation) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Validation en temps réel du code d'anonymat
+     */
+    public function updatedCodeAnonymat($value)
+    {
+        // Nettoyer et formater le code
+        $this->code_anonymat = strtoupper(trim($value));
+        
+        // Vérifier le format en temps réel
+        if (!empty($this->code_anonymat)) {
+            if (!preg_match('/^[A-Za-z]+\d+$/', $this->code_anonymat)) {
+                $this->addError('code_anonymat', 'Format invalide. Utilisez des lettres suivies de chiffres (ex: TA1).');
+            } else {
+                $this->resetErrorBag('code_anonymat');
+                
+                // Vérifier la cohérence avec la salle
+                if (!str_starts_with($this->code_anonymat, strtoupper($this->selectedSalleCode))) {
+                    $this->addError('code_anonymat', "Le code devrait commencer par {$this->selectedSalleCode}");
+                }
+            }
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Validation en temps réel de la note
+     */
+    public function updatedNote($value)
+    {
+        if ($value !== null && $value !== '') {
+            $note = (float)$value;
+            if ($note < 0 || $note > 20) {
+                $this->addError('note', 'La note doit être entre 0 et 20.');
+            } else {
+                $this->resetErrorBag('note');
+            }
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Validation de la confirmation du code
+     */
+    public function updatedCodeAnonymatConfirmation($value)
+    {
+        if ($this->enableDoubleVerification && !empty($value)) {
+            if ($value !== $this->code_anonymat) {
+                $this->addError('code_anonymat_confirmation', 'Les codes d\'anonymat ne correspondent pas.');
+            } else {
+                $this->resetErrorBag('code_anonymat_confirmation');
+            }
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Validation de la confirmation de la note
+     */
+    public function updatedNoteConfirmation($value)
+    {
+        if ($this->enableDoubleVerification && $value !== null) {
+            if ((float)$value !== (float)$this->note) {
+                $this->addError('note_confirmation', 'Les notes ne correspondent pas.');
+            } else {
+                $this->resetErrorBag('note_confirmation');
+            }
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Gestion du toggle de double vérification
+     */
+    public function updatedEnableDoubleVerification($value)
+    {
+        // Réinitialiser les champs de confirmation
+        if (!$value) {
+            $this->code_anonymat_confirmation = '';
+            $this->note_confirmation = null;
+            $this->resetErrorBag(['code_anonymat_confirmation', 'note_confirmation']);
+        }
+
+        // Émettre un événement pour le JavaScript
+        $this->dispatch('double-verification-changed', $value);
+        
+        // Message informatif
+        if ($value) {
+            $this->message = 'Double vérification activée - Saisie sécurisée';
+            $this->messageType = 'info';
+        } else {
+            $this->message = 'Double vérification désactivée - Saisie rapide';
+            $this->messageType = 'info';
+        }
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Réinitialiser pour la prochaine saisie
+     */
+    private function resetForNextEntry()
+    {
+        // Sauvegarder l'état de la double vérification
+        $doubleVerificationState = $this->enableDoubleVerification;
+        
+        // Réinitialiser les champs de saisie
+        $this->note = null;
+        $this->note_confirmation = null;
+        $this->code_anonymat_confirmation = '';
+        
+        // Générer le prochain code d'anonymat pour cette session
+        $this->generateNextCodeAnonymatForSession(); // CORRECTION ICI
+        
+        // Restaurer l'état de la double vérification
+        $this->enableDoubleVerification = $doubleVerificationState;
+        
+        // Recharger la liste des étudiants
+        $this->chargerEtatEtudiants();
+        
+        // Garder la modal ouverte
+        $this->showCopieModal = true;
+        $this->dispatch('focus-note-field');
+        
+        // Message avec compteur
+        $etudiantsSansCount = count($this->etudiantsSansCopies ?? []);
+        if ($etudiantsSansCount > 0) {
+            if ($etudiantsSansCount <= 5) {
+                toastr()->success("Note enregistrée ! Plus que {$etudiantsSansCount} copie(s) à saisir ! 🎯");
+            } else {
+                toastr()->success("Note enregistrée ! {$etudiantsSansCount} copie(s) restante(s)");
+            }
+        } else {
+            toastr()->success("Note enregistrée ! Toutes les copies ont été saisies ! 🎉");
+        }
+    }
+    /**
+     * NOUVELLE MÉTHODE : Réinitialiser complètement le formulaire
+     */
+    private function resetFormFields()
+    {
+        $this->reset([
+            'code_anonymat', 
+            'note', 
+            'editingCopieId',
+            'code_anonymat_confirmation',
+            'note_confirmation'
+        ]);
+        $this->resetErrorBag();
+    }
+
+
+        /**
+     * NOUVELLE MÉTHODE : Générer le prochain code d'anonymat pour la session courante
+     */
+    private function generateNextCodeAnonymatForSession()
+    {
+        $baseCode = $this->selectedSalleCode;
+        $nextNumber = 1;
+        
+        // Récupérer tous les codes utilisés dans cette session pour cette EC
+        $codesUtilises = Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('copies.examen_id', $this->examen_id)
+            ->where('copies.ec_id', $this->ec_id)
+            ->where('copies.session_exam_id', $this->session_exam_id)
+            ->where('codes_anonymat.code_complet', 'like', $baseCode . '%')
+            ->whereNull('copies.deleted_at')
+            ->pluck('codes_anonymat.code_complet')
+            ->toArray();
+
+        // Extraire les numéros utilisés
+        $numerosUtilises = [];
+        foreach ($codesUtilises as $code) {
+            if (preg_match('/^' . preg_quote($baseCode) . '(\d+)$/', $code, $matches)) {
+                $numerosUtilises[] = (int)$matches[1];
+            }
+        }
+
+        // Trouver le premier numéro disponible
+        while (in_array($nextNumber, $numerosUtilises)) {
+            $nextNumber++;
+        }
+
+        $proposedCode = $baseCode . $nextNumber;
+
+        // Vérification finale que le code n'existe pas déjà
+        $maxAttempts = 50;
+        $attempts = 0;
+
+        while ($this->codeExistsInCurrentSession($proposedCode) && $attempts < $maxAttempts) {
+            $nextNumber++;
+            $proposedCode = $baseCode . $nextNumber;
+            $attempts++;
+        }
+
+        if ($attempts >= $maxAttempts) {
+            throw new \Exception("Impossible de générer un code d'anonymat unique après {$maxAttempts} tentatives.");
+        }
+
+        $this->code_anonymat = $proposedCode;
+
+        \Log::info('Code d\'anonymat généré pour session spécifique', [
+            'session_id' => $this->session_exam_id,
+            'ec_id' => $this->ec_id,
+            'base_code' => $baseCode,
+            'numero_choisi' => $nextNumber,
+            'code_final' => $proposedCode,
+            'codes_existants' => $codesUtilises
+        ]);
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Vérifier si un code existe dans la session courante
+     */
+    private function codeExistsInCurrentSession($code)
+    {
+        return Copie::join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+            ->where('copies.examen_id', $this->examen_id)
+            ->where('copies.ec_id', $this->ec_id)
+            ->where('copies.session_exam_id', $this->session_exam_id)
+            ->where('codes_anonymat.code_complet', $code)
+            ->whereNull('copies.deleted_at')
+            ->exists();
+    }
+
+
+        /**
+     * MÉTHODE MODIFIÉE : Mise à jour des compteurs pour la session courante
+     */
+    private function updateCountersForCurrentSession()
+    {
+        $this->totalCopiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->count();
+
+        $this->userCopiesCount = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->where('saisie_par', Auth::id())
+            ->count();
+
+        \Log::info('Compteurs mis à jour après sauvegarde', [
+            'session_id' => $this->session_exam_id,
+            'ec_id' => $this->ec_id,
+            'total_copies' => $this->totalCopiesCount,
+            'user_copies' => $this->userCopiesCount
+        ]);
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Validation côté serveur pour AJAX
+     */
+    public function validateField($field, $value)
+    {
+        $this->$field = $value;
+        
+        switch ($field) {
+            case 'code_anonymat':
+                $this->updatedCodeAnonymat($value);
+                break;
+            case 'note':
+                $this->updatedNote($value);
+                break;
+            case 'code_anonymat_confirmation':
+                $this->updatedCodeAnonymatConfirmation($value);
+                break;
+            case 'note_confirmation':
+                $this->updatedNoteConfirmation($value);
+                break;
+        }
+
+        // Retourner l'état de validation
+        return [
+            'valid' => !$this->getErrorBag()->has($field),
+            'errors' => $this->getErrorBag()->get($field),
+            'canSubmit' => $this->canSubmit()
+        ];
+    }
+
+    /**
+     * NOUVELLE MÉTHODE : Obtenir les statistiques de saisie
+     */
+    public function getSaisieStats()
+    {
+        if (!$this->session_exam_id || !$this->ec_id) {
+            return [
+                'total_etudiants' => 0,
+                'copies_saisies' => 0,
+                'pourcentage' => 0,
+                'restantes' => 0
+            ];
+        }
+
+        $session = SessionExam::find($this->session_exam_id);
+        if (!$session) {
+            return ['error' => 'Session introuvable'];
+        }
+
+        // Calculer selon le type de session
+        if ($session->type === 'Normale') {
+            $totalEtudiants = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->count();
+        } else {
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                return ['error' => 'Session normale introuvable'];
+            }
+
+            $totalEtudiants = Etudiant::eligiblesRattrapage(
+                $this->niveau_id,
+                $this->parcours_id,
+                $sessionNormale->id
+            )->count();
+        }
+
+        $copiesSaisies = Copie::where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereNull('deleted_at')
+            ->count();
+
+        return [
+            'total_etudiants' => $totalEtudiants,
+            'copies_saisies' => $copiesSaisies,
+            'pourcentage' => $totalEtudiants > 0 ? round(($copiesSaisies / $totalEtudiants) * 100, 1) : 0,
+            'restantes' => max(0, $totalEtudiants - $copiesSaisies),
+            'session_type' => $session->type,
+            'double_verification' => $this->enableDoubleVerification
+        ];
+    }
+
+    // LOGIQUE CÔTÉ LIVEWIRE UNIQUEMENT - Plus de JavaScript
+
+    public function closeCopieModal()
+    {
+        // Recharger l'état des étudiants pour avoir les données les plus récentes
+        $this->chargerEtatEtudiants();
+        
+        // Compter SEULEMENT les étudiants restants sans copie
+        $etudiantsRestants = count($this->etudiantsSansCopies ?? []);
+
+        // SI il reste des étudiants sans copie, afficher message et ne PAS fermer
+        if ($etudiantsRestants > 0) {
+            $this->message = "⚠️ Attention ! Il reste encore {$etudiantsRestants} étudiant(s) sans note. Cliquez sur 'Forcer la fermeture' si vous voulez vraiment arrêter.";
+            $this->messageType = 'warning';
+            
+            // Activer le mode "demande de confirmation"
+            $this->showForceCloseButton = true;
+            
+            toastr()->warning("Il reste {$etudiantsRestants} étudiant(s) sans note !");
+            return; // Ne pas fermer la modal
+        }
+
+        // SINON fermeture directe (aucun étudiant restant = pas d'alerte)
+        $this->forceCloseModal();
+    }
+
+    // Nouvelle propriété à ajouter en haut de votre classe
+    public $showForceCloseButton = false;
+
+    // Méthode pour forcer la fermeture après confirmation
+    public function forceCloseModal()
+    {
+        $this->showCopieModal = false;
+        $this->showForceCloseButton = false; // Réinitialiser
+        $this->resetFormFields();
+        toastr()->info('Saisie fermée');
     }
 
     public function render()

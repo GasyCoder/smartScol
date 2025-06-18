@@ -5,7 +5,7 @@
 
 /**
  * A helper file for Laravel, to provide autocomplete information to your IDE
- * Generated for Laravel 12.15.0.
+ * Generated for Laravel 12.19.2.
  *
  * This file should not be included in your code, only analyzed by your IDE!
  *
@@ -4837,13 +4837,14 @@ namespace Illuminate\Support\Facades {
          * @param array{ 0: \DateTimeInterface|\DateInterval|int, 1: \DateTimeInterface|\DateInterval|int } $ttl
          * @param (callable(): TCacheValue) $callback
          * @param array{ seconds?: int, owner?: string }|null $lock
+         * @param bool $alwaysDefer
          * @return TCacheValue 
          * @static 
          */
-        public static function flexible($key, $ttl, $callback, $lock = null)
+        public static function flexible($key, $ttl, $callback, $lock = null, $alwaysDefer = false)
         {
             /** @var \Illuminate\Cache\Repository $instance */
-            return $instance->flexible($key, $ttl, $callback, $lock);
+            return $instance->flexible($key, $ttl, $callback, $lock, $alwaysDefer);
         }
 
         /**
@@ -10065,6 +10066,8 @@ namespace Illuminate\Support\Facades {
      * @method static \Illuminate\Http\Client\PendingRequest stub(callable $callback)
      * @method static \Illuminate\Http\Client\PendingRequest async(bool $async = true)
      * @method static \GuzzleHttp\Promise\PromiseInterface|null getPromise()
+     * @method static \Illuminate\Http\Client\PendingRequest truncateExceptionsAt(int $length)
+     * @method static \Illuminate\Http\Client\PendingRequest dontTruncateExceptions()
      * @method static \Illuminate\Http\Client\PendingRequest setClient(\GuzzleHttp\Client $client)
      * @method static \Illuminate\Http\Client\PendingRequest setHandler(callable $handler)
      * @method static array getOptions()
@@ -12553,6 +12556,19 @@ namespace Illuminate\Support\Facades {
         }
 
         /**
+         * Register an event listener for the daemon queue starting.
+         *
+         * @param mixed $callback
+         * @return void 
+         * @static 
+         */
+        public static function starting($callback)
+        {
+            /** @var \Illuminate\Queue\QueueManager $instance */
+            $instance->starting($callback);
+        }
+
+        /**
          * Register an event listener for the daemon queue stopping.
          *
          * @param mixed $callback
@@ -12883,6 +12899,58 @@ namespace Illuminate\Support\Facades {
         {
             /** @var \Illuminate\Support\Testing\Fakes\QueueFake $instance */
             return $instance->size($queue);
+        }
+
+        /**
+         * Get the number of pending jobs.
+         *
+         * @param string|null $queue
+         * @return int 
+         * @static 
+         */
+        public static function pendingSize($queue = null)
+        {
+            /** @var \Illuminate\Support\Testing\Fakes\QueueFake $instance */
+            return $instance->pendingSize($queue);
+        }
+
+        /**
+         * Get the number of delayed jobs.
+         *
+         * @param string|null $queue
+         * @return int 
+         * @static 
+         */
+        public static function delayedSize($queue = null)
+        {
+            /** @var \Illuminate\Support\Testing\Fakes\QueueFake $instance */
+            return $instance->delayedSize($queue);
+        }
+
+        /**
+         * Get the number of reserved jobs.
+         *
+         * @param string|null $queue
+         * @return int 
+         * @static 
+         */
+        public static function reservedSize($queue = null)
+        {
+            /** @var \Illuminate\Support\Testing\Fakes\QueueFake $instance */
+            return $instance->reservedSize($queue);
+        }
+
+        /**
+         * Get the creation timestamp of the oldest pending job, excluding delayed jobs.
+         *
+         * @param string|null $queue
+         * @return int|null 
+         * @static 
+         */
+        public static function creationTimeOfOldestPendingJob($queue = null)
+        {
+            /** @var \Illuminate\Support\Testing\Fakes\QueueFake $instance */
+            return $instance->creationTimeOfOldestPendingJob($queue);
         }
 
         /**
@@ -16335,7 +16403,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Create a new streamed response instance.
          *
-         * @param callable $callback
+         * @param callable|null $callback
          * @param int $status
          * @param array $headers
          * @return \Symfony\Component\HttpFoundation\StreamedResponse 
@@ -28232,6 +28300,19 @@ namespace  {
         {
             /** @var \Illuminate\Database\Query\Builder $instance */
             return $instance->reorder($column, $direction);
+        }
+
+        /**
+         * Add descending "reorder" clause to the query.
+         *
+         * @param \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Contracts\Database\Query\Expression|string|null $column
+         * @return \Illuminate\Database\Eloquent\Builder<static> 
+         * @static 
+         */
+        public static function reorderDesc($column)
+        {
+            /** @var \Illuminate\Database\Query\Builder $instance */
+            return $instance->reorderDesc($column);
         }
 
         /**

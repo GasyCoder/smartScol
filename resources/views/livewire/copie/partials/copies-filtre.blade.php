@@ -51,7 +51,7 @@
 
             @if($ec_id && $ec_id !== 'all')
             <div class="relative group">
-                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium transition-all duration-200 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800">
+                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium transition-all duration-200 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 hover:bg-yellow-200 dark:hover:bg-yellow-800">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
@@ -59,7 +59,7 @@
                         $selectedEc = collect($ecs)->firstWhere('id', $ec_id);
                     @endphp
                     {{ $selectedEc->nom ?? '' }}
-                    <button wire:click="clearFilter('ec_id')" class="ml-1 transition-opacity opacity-0 text-amber-500 group-hover:opacity-100">
+                    <button wire:click="clearFilter('ec_id')" class="ml-1 transition-opacity opacity-0 text-yellow-500 group-hover:opacity-100">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                         </svg>
@@ -70,12 +70,12 @@
 
             @if($ec_id === 'all')
             <div class="relative group">
-                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium transition-all duration-200 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800">
+                <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium transition-all duration-200 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 hover:bg-yellow-200 dark:hover:bg-yellow-800">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
                     Toutes les matières
-                    <button wire:click="clearFilter('ec_id')" class="ml-1 transition-opacity opacity-0 text-amber-500 group-hover:opacity-100">
+                    <button wire:click="clearFilter('ec_id')" class="ml-1 transition-opacity opacity-0 text-yellow-500 group-hover:opacity-100">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                         </svg>
@@ -108,6 +108,15 @@
                             {{ $totalCopiesCount }}/{{ $totalEtudiantsCount }}
                             ({{ $totalEtudiantsCount > 0 ? round(($totalCopiesCount / $totalEtudiantsCount) * 100) : 0 }}%)
                         </span>
+                        @if($restantes > 0)
+                            <span class="px-2 py-1 text-xs font-medium text-yellow-800 bg-yellow-100 rounded-full dark:bg-yellow-900 dark:text-yellow-200">
+                                {{ $restantes }} restante{{ $restantes > 1 ? 's' : '' }}
+                            </span>
+                        @else
+                            <span class="px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-200">
+                                ✅ Terminé
+                            </span>
+                        @endif
                     </div>
                 </div>
 
@@ -129,6 +138,13 @@
                             <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                         </svg>
                         <span>{{ $userCopiesCount }} par vous</span>
+                    </div>
+                     <div class="flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300">
+                        <div class="w-2 h-2 {{ $enableDoubleVerification ? 'bg-blue-500' : 'bg-gray-400' }} rounded-full"></div>
+                        <span class="text-gray-600 dark:text-gray-400">Mode:</span>
+                        <span class="{{ $enableDoubleVerification ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white' }}">
+                            {{ $enableDoubleVerification ? 'Sécurisé' : 'Rapide' }}
+                        </span>
                     </div>
                 </div>
             </div>
