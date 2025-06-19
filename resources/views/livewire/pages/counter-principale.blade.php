@@ -29,12 +29,12 @@
     </div>
 </div><!-- col -->
 
-<div class="col-span-12 sm:col-span-6 lg:col-span-4 xl:col-span-2 2xl:col-span-2">
+<div class="col-span-12 sm:col-span-6 lg:col-span-6 xl:col-span-3 2xl:col-span-3">
     <div class="h-full bg-white border border-gray-300 rounded-md dark:bg-gray-950 dark:border-gray-900">
         <div class="p-4 sm:p-5">
             <div class="flex items-center justify-between mb-2">
                 <h6 class="text-sm font-bold font-heading -tracking-snug leading-tighter text-slate-700 dark:text-white">
-                    Étudiants admis
+                    1er session
                 </h6>
                 @if(isset($sessionDeliberee) && $sessionDeliberee)
                     <span class="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full dark:bg-green-900/20 dark:text-green-300">
@@ -42,7 +42,7 @@
                     </span>
                 @else
                     <span class="px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/20 dark:text-blue-300">
-                        Calcul automatique
+                        Automatique
                     </span>
                 @endif
             </div>
@@ -70,7 +70,7 @@
     </div>
 </div><!-- col -->
 
-<div class="col-span-12 sm:col-span-6 lg:col-span-4 xl:col-span-2 2xl:col-span-2">
+<div class="col-span-12 sm:col-span-6 lg:col-span-6 xl:col-span-3 2xl:col-span-3">
     <div class="h-full bg-white border border-gray-300 rounded-md dark:bg-gray-950 dark:border-gray-900">
         <div class="p-4 sm:p-5">
             <div class="flex items-center justify-between mb-2">
@@ -83,7 +83,7 @@
                     </span>
                 @else
                     <span class="px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/20 dark:text-blue-300">
-                        Calcul automatique
+                        Automatique
                     </span>
                 @endif
             </div>
@@ -119,7 +119,7 @@
     </div>
 </div><!-- col -->
 
-<div class="col-span-12 sm:col-span-6 lg:col-span-6 xl:col-span-3 2xl:col-span-3">
+<div class="col-span-12 sm:col-span-6 lg:col-span-4 xl:col-span-2 2xl:col-span-2">
     <div class="h-full bg-white border border-gray-300 rounded-md dark:bg-gray-950 dark:border-gray-900">
         <div class="p-4 sm:p-5">
             <div class="flex items-center justify-between mb-2">
@@ -132,7 +132,7 @@
                     </span>
                 @else
                     <span class="px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/20 dark:text-blue-300">
-                        Calcul automatique
+                        Automatique
                     </span>
                 @endif
             </div>
@@ -167,7 +167,8 @@
     </div>
 </div><!-- col -->
 
-<div class="col-span-12 sm:col-span-6 lg:col-span-6 xl:col-span-3 2xl:col-span-3">
+
+<div class="col-span-12 sm:col-span-6 lg:col-span-4 xl:col-span-2 2xl:col-span-2">
     <div class="h-full bg-white border border-gray-300 rounded-md dark:bg-gray-950 dark:border-gray-900">
         <div class="p-4 sm:p-5">
             <div class="flex items-center justify-between mb-2">
@@ -180,7 +181,7 @@
                     </span>
                 @else
                     <span class="px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/20 dark:text-blue-300">
-                        Calcul automatique
+                        Automatique
                     </span>
                 @endif
             </div>

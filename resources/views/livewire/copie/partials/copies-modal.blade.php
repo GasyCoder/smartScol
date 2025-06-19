@@ -75,21 +75,15 @@
                         </div>
 
                         <!-- Badge d'anonymat et protection -->
+                        @if($enableDoubleVerification ?? false)
                         <div class="flex items-center justify-between p-3 mb-4 border border-yellow-200 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700">
-                            <div class="flex items-center">
-                                <em class="mr-2 text-yellow-600 icon ni ni-shield-check dark:text-yellow-400"></em>
-                                <span class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                                    Saisie anonyme - Aucune information d'étudiant visible
-                                </span>
-                            </div>
-                            @if($enableDoubleVerification ?? false)
                             <div class="flex items-center px-2 py-1 text-xs text-green-800 bg-green-100 rounded-full dark:bg-green-900 dark:text-green-200">
                                 <em class="mr-1 icon ni ni-check-thick"></em>
                                 Protection activée
                             </div>
-                            @endif
                         </div>
-
+                        @endif
+                        
                         <!-- Formulaire RENFORCÉ -->
                         <form wire:submit.prevent="saveCopie">
                             <div class="space-y-6">

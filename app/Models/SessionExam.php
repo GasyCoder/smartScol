@@ -62,11 +62,6 @@ class SessionExam extends Model
         return $this->hasMany(Examen::class, 'session_id');
     }
 
-    public function deliberations()
-    {
-        return $this->hasMany(Deliberation::class, 'session_id');
-    }
-
 
 
     /**
@@ -92,35 +87,6 @@ class SessionExam extends Model
     public function needsDeliberation()
     {
         return $this->isRattrapage();
-    }
-
-    /**
-     * Créé une délibération pour cette session si nécessaire
-     */
-    public function creerDeliberationSiNecessaire($niveau_id, $president_jury_id)
-    {
-        if (!$this->needsDeliberation()) {
-            return null;
-        }
-
-        // Vérifier si une délibération existe déjà
-        $existante = Deliberation::where('session_id', $this->id)
-            ->where('niveau_id', $niveau_id)
-            ->where('annee_universitaire_id', $this->annee_universitaire_id)
-            ->first();
-
-        if ($existante) {
-            return $existante;
-        }
-
-        // Créer une nouvelle délibération
-        return Deliberation::create([
-            'niveau_id' => $niveau_id,
-            'session_id' => $this->id,
-            'annee_universitaire_id' => $this->annee_universitaire_id,
-            'date_deliberation' => now(),
-            'president_jury' => $president_jury_id
-        ]);
     }
 
     /**
