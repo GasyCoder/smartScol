@@ -42,20 +42,6 @@
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
                 <thead>
                     <tr class="bg-gray-50 dark:bg-gray-900">
-                        <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-400" wire:click="sortBy('code_base')">
-                            <div class="flex items-center space-x-1">
-                                <span>Code salle</span>
-                                @if($sortField === 'code_base')
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        @if($sortDirection === 'asc')
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-                                        @else
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                        @endif
-                                    </svg>
-                                @endif
-                            </div>
-                        </th>
                         <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-400" wire:click="sortBy('nom')">
                             <div class="flex items-center space-x-1">
                                 <span>Nom</span>
@@ -92,9 +78,6 @@
                 <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-950 dark:divide-gray-800">
                     @forelse($salles as $salle)
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-900">
-                            <td class="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                                {{ $salle->code_base }}
-                            </td>
                             <td class="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap dark:text-white">
                                 {{ $salle->nom }}
                             </td>
@@ -156,20 +139,6 @@
                 </button>
             </div>
             <form wire:submit.prevent="saveSalle">
-                <div class="mb-4">
-                    <label for="code_base" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Code salle *</label>
-                    <input
-                        type="text"
-                        id="code_base"
-                        wire:model="code_base"
-                        class="block w-full rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white @error('code_base') border-red-300 text-red-900 placeholder-red-300 focus:outline-none focus:ring-red-500 focus:border-red-500 @enderror"
-                        placeholder="Ex: TA"
-                    >
-                    @error('code_base')
-                        <p class="mt-1 text-sm text-red-600 dark:text-red-500">{{ $message }}</p>
-                    @enderror
-                </div>
-
                 <div class="mb-4">
                     <label for="nom" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nom de la salle *</label>
                     <input

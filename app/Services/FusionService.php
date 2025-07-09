@@ -978,7 +978,7 @@ class FusionService
                 if ($sessionActive->type === 'Rattrapage') {
                     $decision = ResultatFinal::determinerDecisionRattrapage($etudiantId, $sessionActive->id);
                 } else {
-                    $decision = ResultatFinal::determinerDecisionPremiereSession($etudiantId, $sessionActive->id);
+                    $decision = ResultatFinal::determinerDecisionPremiereSession($etudiantId, $sessionActive->id); // ⬅️ CETTE MÉTHODE
                 }
 
                 // Mettre à jour tous les résultats de l'étudiant pour cette session

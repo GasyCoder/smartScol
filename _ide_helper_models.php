@@ -362,14 +362,18 @@ namespace App\Models{
  * @property int $salle_id
  * @property int $examen_id
  * @property int $ec_id
- * @property string|null $date_specifique Date spécifique de l'examen (si applicable)
- * @property string|null $heure_specifique Heure spécifique de l'examen (si applicable)
+ * @property string|null $code_base Code saisi manuellement pour cette matière dans cet examen
+ * @property \Illuminate\Support\Carbon|null $date_specifique Date spécifique de l'examen (si applicable)
+ * @property \Illuminate\Support\Carbon|null $heure_specifique Heure spécifique de l'examen (si applicable)
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\EC $ec
+ * @property-read \App\Models\Examen $examen
  * @property-read \App\Models\Salle $salle
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc whereCodeBase($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc whereDateSpecifique($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ExamenEc whereEcId($value)
@@ -538,6 +542,63 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Permission withoutRole($roles, $guard = null)
  */
 	class Permission extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * 
+ *
+ * @property int $id
+ * @property int $examen_id Examen concerné
+ * @property int|null $session_exam_id Session d'examen
+ * @property int $salle_id Salle concernée
+ * @property int|null $ec_id Matière spécifique (optionnel)
+ * @property int $etudiants_presents Nombre d'étudiants présents
+ * @property int $etudiants_absents Nombre d'étudiants absents
+ * @property int|null $total_attendu Total d'étudiants attendus
+ * @property string|null $observations Observations sur la présence
+ * @property int $saisie_par Utilisateur ayant saisi
+ * @property \Illuminate\Support\Carbon $date_saisie
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \App\Models\EC|null $ec
+ * @property-read \App\Models\Examen $examen
+ * @property-read int $ecart_attendu
+ * @property-read mixed $session_libelle
+ * @property-read mixed $session_type
+ * @property-read float $taux_presence
+ * @property-read int $total_etudiants
+ * @property-read \App\Models\Salle $salle
+ * @property-read \App\Models\SessionExam|null $sessionExam
+ * @property-read \App\Models\User $utilisateurSaisie
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen currentSession()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen forEc($ecId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen forExamen($examenId, $sessionId, $salleId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen sessionNormale()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen sessionRattrapage()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereDateSaisie($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereEcId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereEtudiantsAbsents($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereEtudiantsPresents($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereExamenId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereObservations($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereSaisiePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereSalleId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereSessionExamId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereTotalAttendu($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen withoutTrashed()
+ */
+	class PresenceExamen extends \Eloquent {}
 }
 
 namespace App\Models{

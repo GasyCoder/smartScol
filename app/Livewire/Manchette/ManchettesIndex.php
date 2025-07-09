@@ -2,21 +2,22 @@
 
 namespace App\Livewire\Manchette;
 
-use App\Models\CodeAnonymat;
-use App\Models\Manchette;
-use App\Models\Etudiant;
+use App\Models\EC;
+use App\Models\Salle;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\Salle;
-use App\Models\EC;
+use Livewire\Component;
+use App\Models\Etudiant;
+use App\Models\Manchette;
 use App\Models\SessionExam;
+use App\Models\CodeAnonymat;
+use Livewire\WithPagination;
+use App\Models\PresenceExamen;
 use App\Models\AnneeUniversitaire;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Livewire\Component;
-use Livewire\WithPagination;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * @property \Illuminate\Support\Collection $niveaux
@@ -85,6 +86,7 @@ class ManchettesIndex extends Component
     public $currentSalleName = '';
     public $currentEcDate = '';
     public $currentEcHeure = '';
+    public $currentEcDuree = '';
 
     // Modal de suppression
     public $showDeleteModal = false;
@@ -95,6 +97,14 @@ class ManchettesIndex extends Component
     public $messageType = '';
     public $userManchettesCount = 0;
     public $totalManchettesCount = 0;
+
+    // NOUVELLES PROPRIÉTÉS pour la présence
+    public $showPresenceModal = false;
+    public $etudiants_presents = null;
+    public $etudiants_absents = null;
+    public $observations_presence = '';
+    public $presenceEnregistree = false;
+    public $presenceData = null;
 
     protected $rules = [
         'code_anonymat' => 'required|string|max:20',
@@ -268,18 +278,12 @@ class ManchettesIndex extends Component
             ->pluck('id')
             ->toArray();
 
-        \Log::info('Examens trouvés pour niveau/parcours', [
-            'niveau_id' => $this->niveau_id,
-            'parcours_id' => $this->parcours_id,
-            'examens_ids' => $examens
-        ]);
-
         if (empty($examens)) {
             $this->ecs = collect();
             return;
         }
 
-        // Récupérer TOUS les ECs associés à ces examens pour cette salle
+        // CORRIGÉ : Récupérer TOUS les ECs avec leurs codes_base
         $ecsData = DB::table('ecs')
             ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
             ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
@@ -294,30 +298,23 @@ class ManchettesIndex extends Component
                 'ues.abr as ue_abr',
                 'examen_ec.examen_id',
                 'examen_ec.date_specifique',
-                'examen_ec.heure_specifique'
+                'examen_ec.heure_specifique',
+                'examen_ec.code_base' // CORRIGÉ: code_base au lieu de code_personnalise
             )
             ->distinct()
             ->orderBy('ues.nom')
             ->orderBy('ecs.nom')
             ->get();
 
-        \Log::info('ECs trouvés depuis tous les examens', [
-            'count' => $ecsData->count(),
-            'salle_id' => $this->salle_id,
-            'examens_checked' => $examens,
-            'ecs_found' => $ecsData->pluck('nom')->toArray()
-        ]);
-
         if ($ecsData->isEmpty()) {
             $this->ecs = collect();
             return;
         }
 
-        // Grouper par EC (car un EC peut être dans plusieurs examens)
+        // Grouper par EC avec codes_base
         $ecsGrouped = $ecsData->groupBy('id')->map(function($group) use ($sessionType) {
             $firstEc = $group->first();
 
-            // Prendre le premier examen comme référence si pas encore défini
             if (!$this->examen_id) {
                 $this->examen_id = $firstEc->examen_id;
             }
@@ -334,12 +331,13 @@ class ManchettesIndex extends Component
                 'examen_id' => $firstEc->examen_id,
                 'date_specifique' => $firstEc->date_specifique,
                 'heure_specifique' => $firstEc->heure_specifique,
+                'code_base' => $firstEc->code_base, // CORRIGÉ
                 'date_formatted' => $firstEc->date_specifique ?
                     \Carbon\Carbon::parse($firstEc->date_specifique)->format('d/m/Y') : null,
                 'heure_formatted' => $firstEc->heure_specifique ?
                     \Carbon\Carbon::parse($firstEc->heure_specifique)->format('H:i') : null,
-                'has_manchette' => false, // Sera calculé après
-                'manchettes_count' => 0,  // Sera calculé après
+                'has_manchette' => false,
+                'manchettes_count' => 0,
                 'user_manchettes_count' => 0,
                 'pourcentage' => 0,
                 'session_libelle' => ucfirst($sessionType)
@@ -347,15 +345,7 @@ class ManchettesIndex extends Component
         })->values();
 
         $this->ecs = $ecsGrouped;
-
-        // Calculer les compteurs de manchettes pour tous les ECs
         $this->calculateManchettesCountsForAllEcs();
-
-        \Log::info('ECs finaux chargés', [
-            'count' => $this->ecs->count(),
-            'examen_id_used' => $this->examen_id,
-            'ecs_names' => $this->ecs->pluck('nom')->toArray()
-        ]);
 
         // Sélectionner automatiquement si une seule EC
         if ($this->ecs->count() == 1) {
@@ -364,10 +354,58 @@ class ManchettesIndex extends Component
         }
     }
 
+
+
+    /**
+     * MÉTHODE CORRIGÉE : Récupérer le nombre d'étudiants présents depuis la table presences_examens
+     */
+    private function getEtudiantsPresentsFromTable(): int
+    {
+        if (!$this->examen_id || !$this->salle_id) {
+            return 0;
+        }
+
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return 0;
+        }
+
+        // Récupérer la présence enregistrée pour cette session/examen/salle
+        $presence = PresenceExamen::findForCurrentSession(
+            $this->examen_id, 
+            $this->salle_id, 
+            ($this->ec_id && $this->ec_id !== 'all') ? $this->ec_id : null
+        );
+
+        if ($presence) {
+            \Log::info('Présence trouvée dans presences_examens', [
+                'examen_id' => $this->examen_id,
+                'salle_id' => $this->salle_id,
+                'ec_id' => $this->ec_id,
+                'etudiants_presents' => $presence->etudiants_presents,
+                'etudiants_absents' => $presence->etudiants_absents,
+                'total_etudiants' => $presence->total_etudiants
+            ]);
+            
+            return $presence->etudiants_presents;
+        }
+
+        \Log::info('Aucune présence trouvée dans presences_examens', [
+            'examen_id' => $this->examen_id,
+            'salle_id' => $this->salle_id,
+            'ec_id' => $this->ec_id,
+            'session_id' => $sessionId
+        ]);
+
+        return 0;
+    }
+
+
+
     /**
      * Calculer les compteurs de manchettes pour tous les ECs chargés
      */
-    public function calculateManchettesCountsForAllEcs():void
+    public function calculateManchettesCountsForAllEcs(): void
     {
         if ($this->ecs->isEmpty()) {
             return;
@@ -403,25 +441,56 @@ class ManchettesIndex extends Component
             ->pluck('total', 'ec_id')
             ->toArray();
 
+        // CORRECTION : Récupérer le nombre d'étudiants présents depuis presences_examens
+        $etudiantsPresents = $this->getEtudiantsPresentsFromTable();
+
         // Mettre à jour les compteurs
-        $this->ecs = $this->ecs->map(function($ec) use ($manchettesCounts, $userManchettesCounts) {
+        $this->ecs = $this->ecs->map(function($ec) use ($manchettesCounts, $userManchettesCounts, $etudiantsPresents) {
             $manchettesCount = $manchettesCounts[$ec->id] ?? 0;
             $userCount = $userManchettesCounts[$ec->id] ?? 0;
 
             $ec->manchettes_count = $manchettesCount;
             $ec->user_manchettes_count = $userCount;
             $ec->has_manchette = $manchettesCount > 0;
-            $ec->pourcentage = $this->totalEtudiantsCount > 0 ?
-                round(($manchettesCount / $this->totalEtudiantsCount) * 100, 1) : 0;
+            
+            // CORRIGÉ : Utiliser les données de présence de la table
+            if ($etudiantsPresents > 0) {
+                $ec->pourcentage = round(($manchettesCount / $etudiantsPresents) * 100, 1);
+                $ec->etudiants_presents = $etudiantsPresents; // Stocker pour l'affichage
+            } else {
+                $ec->pourcentage = 0;
+                $ec->etudiants_presents = 0;
+            }
 
             return $ec;
         });
 
-        \Log::info('Compteurs mis à jour pour tous les ECs', [
+        \Log::info('Compteurs mis à jour avec données presences_examens', [
             'manchettes_counts' => $manchettesCounts,
-            'user_counts' => $userManchettesCounts
+            'user_counts' => $userManchettesCounts,
+            'etudiants_presents_table' => $etudiantsPresents,
+            'ec_ids' => $ecIds
         ]);
     }
+
+
+
+    /**
+     * NOUVELLE MÉTHODE : Récupérer le nombre d'étudiants présents
+     */
+    private function getEtudiantsPresentsCount(): int
+    {
+        // Vérifier d'abord si nous avons des données de présence
+        $this->checkPresenceEnregistree();
+        
+        if ($this->presenceData && $this->presenceData->etudiants_presents > 0) {
+            return $this->presenceData->etudiants_presents;
+        }
+        
+        // Fallback : utiliser le total du niveau/parcours si pas de données de présence
+        return $this->totalEtudiantsCount;
+    }
+
 
     /**
      * Gère les changements de session
@@ -567,24 +636,37 @@ class ManchettesIndex extends Component
      */
     private function generateCodeAnonymat()
     {
-        if (empty($this->selectedSalleCode)) {
-            $salle = Salle::find($this->salle_id);
-            if ($salle) {
-                $this->selectedSalleCode = $salle->code_base;
-                $this->currentSalleName = $salle->nom;
-            }
+        // CORRIGÉ: Récupérer le code_base pour cette matière
+        if (!$this->ec_id || !$this->salle_id || !$this->examen_id) {
+            throw new \Exception("Paramètres manquants pour générer le code d'anonymat");
         }
 
-        $sessionId = $this->getCurrentSessionId();
-        $baseCode = $this->selectedSalleCode;
+        // Récupérer le code_base depuis examen_ec
+        $codeBase = DB::table('examen_ec')
+            ->where('examen_id', $this->examen_id)
+            ->where('ec_id', $this->ec_id)
+            ->where('salle_id', $this->salle_id)
+            ->value('code_base');
 
-        // ✅ CORRECTION PRINCIPALE : Compter les codes d'anonymat UTILISÉS dans les manchettes pour cette session
+        if (empty($codeBase)) {
+            throw new \Exception("Aucun code_base trouvé pour cette matière. Veuillez définir un code lors de la création de l'examen.");
+        }
+
+        $this->selectedSalleCode = $codeBase;
+        \Log::info('Code_base utilisé pour génération', [
+            'ec_id' => $this->ec_id,
+            'code_base' => $codeBase
+        ]);
+
+        $sessionId = $this->getCurrentSessionId();
+
+        // Reste de la logique de génération...
         $codesUtilises = DB::table('manchettes')
             ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
             ->where('manchettes.examen_id', $this->examen_id)
             ->where('manchettes.session_exam_id', $sessionId)
             ->where('codes_anonymat.ec_id', $this->ec_id)
-            ->where('codes_anonymat.code_complet', 'like', $baseCode . '%')
+            ->where('codes_anonymat.code_complet', 'like', $codeBase . '%')
             ->whereNull('manchettes.deleted_at')
             ->pluck('codes_anonymat.code_complet')
             ->toArray();
@@ -592,14 +674,14 @@ class ManchettesIndex extends Component
         \Log::info('Codes d\'anonymat utilisés dans les manchettes', [
             'session_id' => $sessionId,
             'ec_id' => $this->ec_id,
-            'base_code' => $baseCode,
+            'base_code' => $codeBase,
             'codes_utilises' => $codesUtilises
         ]);
 
         // Extraire les numéros utilisés
         $numerosUtilises = [];
         foreach ($codesUtilises as $code) {
-            if (preg_match('/^' . preg_quote($baseCode) . '(\d+)$/', $code, $matches)) {
+            if (preg_match('/^' . preg_quote($codeBase) . '(\d+)$/', $code, $matches)) {
                 $numerosUtilises[] = (int)$matches[1];
             }
         }
@@ -610,15 +692,15 @@ class ManchettesIndex extends Component
             $nextNumber++;
         }
 
-        $proposedCode = $baseCode . $nextNumber;
+        $proposedCode = $codeBase . $nextNumber;
 
-        // ✅ DOUBLE VÉRIFICATION : S'assurer que le code n'est pas utilisé
-        $maxAttempts = 50; // Éviter les boucles infinies
+        // Double vérification
+        $maxAttempts = 50;
         $attempts = 0;
 
         while ($this->codeExistsForCurrentSession($proposedCode) && $attempts < $maxAttempts) {
             $nextNumber++;
-            $proposedCode = $baseCode . $nextNumber;
+            $proposedCode = $codeBase . $nextNumber;
             $attempts++;
         }
 
@@ -628,13 +710,12 @@ class ManchettesIndex extends Component
 
         $this->code_anonymat = $proposedCode;
 
-        \Log::info('Code d\'anonymat généré', [
+        \Log::info('Code d\'anonymat généré avec code_base', [
             'session_id' => $sessionId,
             'ec_id' => $this->ec_id,
-            'base_code' => $baseCode,
+            'base_code' => $codeBase,
             'numero_choisi' => $nextNumber,
-            'code_final' => $proposedCode,
-            'tentatives' => $attempts
+            'code_final' => $proposedCode
         ]);
     }
 
@@ -724,6 +805,7 @@ class ManchettesIndex extends Component
             $this->currentSalleName = '';
             $this->currentEcDate = '';
             $this->currentEcHeure = '';
+            $this->currentEcDuree = '';
             $this->currentSessionType = '';
         }
         $this->storeFiltres();
@@ -735,7 +817,7 @@ class ManchettesIndex extends Component
         $this->reset([
             'niveau_id', 'parcours_id', 'salle_id', 'examen_id', 'ec_id',
             'selectedSalleCode', 'currentEcName', 'currentSalleName',
-            'currentEcDate', 'currentEcHeure', 'currentSessionType'
+            'currentEcDate', 'currentEcHeure', 'currentEcDuree', 'currentSessionType'
         ]);
         session()->forget('manchettes.filtres');
         $this->parcours = collect();
@@ -844,14 +926,28 @@ class ManchettesIndex extends Component
      */
     public function chargerEtudiants()
     {
-        if (!$this->examen_id || !$this->ec_id || $this->ec_id === 'all' || !$this->session_exam_id) {
+        if (!$this->examen_id || !$this->session_exam_id) {
             $this->etudiantsSansManchette = collect();
             $this->etudiantsAvecManchettes = collect();
             $this->totalEtudiantsCount = 0;
             return;
         }
 
-        // NOUVELLE LOGIQUE : Récupérer la session actuelle
+        // ✅ NOUVELLE LOGIQUE : Gérer le cas "Toutes les matières"
+        if ($this->ec_id === 'all') {
+            $this->chargerEtudiantsAllMatiere();
+            return;
+        }
+
+        // ✅ LOGIQUE EXISTANTE pour matière spécifique (inchangée)
+        if (!$this->ec_id) {
+            $this->etudiantsSansManchette = collect();
+            $this->etudiantsAvecManchettes = collect();
+            $this->totalEtudiantsCount = 0;
+            return;
+        }
+
+        // Récupérer la session actuelle
         $session = SessionExam::find($this->session_exam_id);
         if (!$session) {
             $this->etudiantsSansManchette = collect();
@@ -863,15 +959,11 @@ class ManchettesIndex extends Component
 
         // LOGIQUE DIFFÉRENTE SELON LE TYPE DE SESSION
         if ($session->type === 'Normale') {
-            // Session normale : TOUS les étudiants du niveau/parcours
             $etudiants = Etudiant::where('niveau_id', $this->niveau_id)
                 ->where('parcours_id', $this->parcours_id)
                 ->get();
-
             $this->sessionInfo = "Session Normale - {$etudiants->count()} étudiant(s) disponible(s)";
-
         } else {
-            // Session rattrapage : SEULS les étudiants éligibles
             $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
                 ->where('type', 'Normale')
                 ->first();
@@ -884,16 +976,14 @@ class ManchettesIndex extends Component
                 return;
             }
 
-            // Utiliser la nouvelle méthode du modèle Etudiant
             $etudiants = Etudiant::eligiblesRattrapage(
                 $this->niveau_id,
                 $this->parcours_id,
                 $sessionNormale->id
             )->get();
 
-            // Message informatif pour session rattrapage
             if ($etudiants->isEmpty()) {
-                $this->sessionInfo = "Session Rattrapage - Aucun étudiant éligible (tous sont déjà admis ou n'ont pas de décision rattrapage)";
+                $this->sessionInfo = "Session Rattrapage - Aucun étudiant éligible";
             } else {
                 $this->sessionInfo = "Session Rattrapage - {$etudiants->count()} étudiant(s) éligible(s)";
             }
@@ -915,34 +1005,110 @@ class ManchettesIndex extends Component
         $this->etudiantsSansManchette = $etudiants->whereNotIn('id', $etudiantsAvecManchettesIds)->values();
         $this->totalEtudiantsCount = $etudiants->count();
         $this->totalEtudiantsExpected = $this->totalEtudiantsCount;
-
-        // Log pour debug
-        \Log::info('Étudiants chargés avec nouvelle logique (Manchettes)', [
-            'session_type' => $session->type,
-            'session_id' => $this->session_exam_id,
-            'total_etudiants_disponibles' => $etudiants->count(),
-            'avec_manchettes' => count($etudiantsAvecManchettesIds),
-            'sans_manchettes' => $this->etudiantsSansManchette->count(),
-            'niveau_id' => $this->niveau_id,
-            'parcours_id' => $this->parcours_id,
-        ]);
     }
+
+
+    // ✅ NOUVELLE MÉTHODE : Charger les étudiants pour "Toutes les matières"
+    private function chargerEtudiantsAllMatiere()
+    {
+        // Récupérer tous les ECs de cette salle
+        $ecIds = DB::table('ecs')
+            ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+            ->where('examen_ec.examen_id', $this->examen_id)
+            ->where('examen_ec.salle_id', $this->salle_id)
+            ->pluck('ecs.id')
+            ->toArray();
+
+        if (empty($ecIds)) {
+            $this->etudiantsSansManchette = collect();
+            $this->etudiantsAvecManchettes = collect();
+            $this->totalEtudiantsCount = 0;
+            return;
+        }
+
+        // Récupérer la session actuelle
+        $session = SessionExam::find($this->session_exam_id);
+        if (!$session) {
+            $this->etudiantsSansManchette = collect();
+            $this->etudiantsAvecManchettes = collect();
+            $this->totalEtudiantsCount = 0;
+            return;
+        }
+
+        // Logique selon le type de session
+        if ($session->type === 'Normale') {
+            $etudiants = Etudiant::where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->get();
+        } else {
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                $this->etudiantsSansManchette = collect();
+                $this->etudiantsAvecManchettes = collect();
+                $this->totalEtudiantsCount = 0;
+                return;
+            }
+
+            $etudiants = Etudiant::eligiblesRattrapage(
+                $this->niveau_id,
+                $this->parcours_id,
+                $sessionNormale->id
+            )->get();
+        }
+
+        // ✅ LOGIQUE SPÉCIALE : Pour "Toutes les matières", un étudiant est considéré comme "avec manchette"
+        // s'il a au moins UNE manchette dans N'IMPORTE QUELLE matière de cette salle
+        $etudiantsAvecManchettesIds = Manchette::where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $this->session_exam_id)
+            ->whereHas('codeAnonymat', function ($query) use ($ecIds) {
+                $query->whereIn('ec_id', $ecIds);
+            })
+            ->pluck('etudiant_id')
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        // Séparer les étudiants
+        $this->etudiantsAvecManchettes = $etudiants->whereIn('id', $etudiantsAvecManchettesIds)->values();
+        $this->etudiantsSansManchette = $etudiants->whereNotIn('id', $etudiantsAvecManchettesIds)->values();
+        $this->totalEtudiantsCount = $etudiants->count();
+        
+        // ✅ Pour "Toutes les matières", le total attendu = nb_etudiants × nb_matières
+        $this->totalEtudiantsExpected = $etudiants->count() * count($ecIds);
+
+        $this->sessionInfo = "Session {$session->type} - {$etudiants->count()} étudiant(s) × " . count($ecIds) . " matière(s) = {$this->totalEtudiantsExpected} manchettes attendues";
+    }
+
 
     public function updatedEcId()
     {
         $this->currentEcName = '';
         $this->currentEcDate = '';
         $this->currentEcHeure = '';
+        $this->selectedSalleCode = '';
 
         if ($this->ec_id === 'all') {
             $this->handleAllEcsSelection();
+            // ✅ AJOUT : Charger les étudiants pour "Toutes les matières"
+            $this->chargerEtudiants();
         } else if ($this->ec_id && $this->salle_id && $this->examen_id) {
             $this->handleSpecificEcSelection();
+            // ✅ CORRECTION : Charger les étudiants pour matière spécifique
+            $this->chargerEtudiants();
+        }
+
+        // NOUVELLE LIGNE À AJOUTER : Vérification présence après sélection EC
+        if ($this->ec_id && $this->ec_id !== 'all') {
+            $this->checkPresenceEnregistree();
         }
 
         $this->message = '';
         $this->storeFiltres();
         $this->resetPage();
+
     }
 
     /**
@@ -974,17 +1140,39 @@ class ManchettesIndex extends Component
         $ecInfo = DB::table('ecs')
             ->join('examen_ec', function ($join) {
                 $join->on('ecs.id', '=', 'examen_ec.ec_id')
-                     ->where('examen_ec.examen_id', $this->examen_id)
-                     ->where('examen_ec.salle_id', $this->salle_id);
+                    ->where('examen_ec.examen_id', $this->examen_id)
+                    ->where('examen_ec.salle_id', $this->salle_id);
             })
             ->where('ecs.id', $this->ec_id)
-            ->select('ecs.nom', 'examen_ec.date_specifique', 'examen_ec.heure_specifique')
+            ->select(
+                'ecs.nom', 
+                'examen_ec.date_specifique', 
+                'examen_ec.heure_specifique',
+                'examen_ec.code_base' // CORRIGÉ: code_base au lieu de code
+            )
             ->first();
 
         if ($ecInfo) {
             $this->currentEcName = $ecInfo->nom;
             $this->currentEcDate = $ecInfo->date_specifique ? \Carbon\Carbon::parse($ecInfo->date_specifique)->format('d/m/Y') : '';
             $this->currentEcHeure = $ecInfo->heure_specifique ? \Carbon\Carbon::parse($ecInfo->heure_specifique)->format('H:i') : '';
+            
+            // CORRIGÉ: Utiliser le code_base au lieu de code
+            if (!empty($ecInfo->code_base)) {
+                $this->selectedSalleCode = $ecInfo->code_base;
+                \Log::info('Code_base personnalisé trouvé pour EC', [
+                    'ec_id' => $this->ec_id,
+                    'code_base' => $ecInfo->code_base
+                ]);
+            } else {
+                // Si pas de code_base dans examen_ec, laisser vide ou utiliser un défaut
+                $this->selectedSalleCode = '';
+                \Log::warning('Aucun code_base trouvé pour cette EC', [
+                    'ec_id' => $this->ec_id,
+                    'examen_id' => $this->examen_id,
+                    'salle_id' => $this->salle_id
+                ]);
+            }
         } else {
             // Essayer de trouver l'EC dans la collection chargée
             $ec = $this->ecs->firstWhere('id', $this->ec_id);
@@ -992,6 +1180,9 @@ class ManchettesIndex extends Component
                 $this->currentEcName = $ec->nom;
                 $this->currentEcDate = $ec->date_formatted ?? '';
                 $this->currentEcHeure = $ec->heure_formatted ?? '';
+                
+                // Récupérer le code_base depuis la collection
+                $this->selectedSalleCode = $ec->code_base ?? '';
             } else {
                 Log::warning('EC info not found', [
                     'ec_id' => $this->ec_id,
@@ -1005,6 +1196,7 @@ class ManchettesIndex extends Component
 
         $this->updateCountersForSpecificEc();
     }
+
 
     /**
      * Met à jour les compteurs pour toutes les matières
@@ -1060,7 +1252,85 @@ class ManchettesIndex extends Component
             $this->userManchettesCount = 0;
         }
 
-        $this->totalEtudiantsExpected = $this->totalEtudiantsCount;
+        // CORRIGÉ : Utiliser les données de présence de la table
+        $etudiantsPresents = $this->getEtudiantsPresentsFromTable();
+        $this->totalEtudiantsExpected = $etudiantsPresents > 0 ? $etudiantsPresents : $this->totalEtudiantsCount;
+    }
+
+
+    /**
+     * NOUVELLE MÉTHODE : Obtenir les stats de présence depuis la table
+     */
+    private function getPresenceStatsIntelligente()
+    {
+        if (!$this->examen_id || !$this->salle_id) {
+            return null;
+        }
+
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return null;
+        }
+
+        // ÉTAPE 1 : Chercher d'abord une présence spécifique à l'EC sélectionnée
+        if ($this->ec_id && $this->ec_id !== 'all') {
+            $presenceSpecifique = PresenceExamen::findForCurrentSession(
+                $this->examen_id, 
+                $this->salle_id, 
+                $this->ec_id
+            );
+
+            if ($presenceSpecifique) {
+                \Log::info('Présence spécifique trouvée pour EC', [
+                    'ec_id' => $this->ec_id,
+                    'presents' => $presenceSpecifique->etudiants_presents
+                ]);
+                
+                return [
+                    'presents' => $presenceSpecifique->etudiants_presents,
+                    'absents' => $presenceSpecifique->etudiants_absents,
+                    'total' => $presenceSpecifique->total_etudiants,
+                    'taux_presence' => $presenceSpecifique->taux_presence,
+                    'ecart_attendu' => $presenceSpecifique->ecart_attendu,
+                    'total_attendu' => $presenceSpecifique->total_attendu,
+                    'type' => 'specifique'
+                ];
+            }
+        }
+
+        // ÉTAPE 2 : Si pas de présence spécifique, chercher une présence globale (ec_id = NULL)
+        $presenceGlobale = PresenceExamen::findForCurrentSession(
+            $this->examen_id, 
+            $this->salle_id, 
+            null // Chercher sans EC spécifique
+        );
+
+        if ($presenceGlobale) {
+            \Log::info('Présence globale trouvée', [
+                'presents' => $presenceGlobale->etudiants_presents,
+                'type' => 'globale'
+            ]);
+            
+            return [
+                'presents' => $presenceGlobale->etudiants_presents,
+                'absents' => $presenceGlobale->etudiants_absents,
+                'total' => $presenceGlobale->total_etudiants,
+                'taux_presence' => $presenceGlobale->taux_presence,
+                'ecart_attendu' => $presenceGlobale->ecart_attendu,
+                'total_attendu' => $presenceGlobale->total_attendu,
+                'type' => 'globale'
+            ];
+        }
+
+        // ÉTAPE 3 : Si aucune présence trouvée
+        \Log::info('Aucune présence trouvée', [
+            'examen_id' => $this->examen_id,
+            'salle_id' => $this->salle_id,
+            'ec_id' => $this->ec_id,
+            'session_id' => $sessionId
+        ]);
+
+        return null;
     }
 
     /**
@@ -1085,8 +1355,15 @@ class ManchettesIndex extends Component
 
     public function openManchetteModal()
     {
-        // Vérification des autorisations de session
+        // VOTRE CODE EXISTANT - Vérification des autorisations de session
         if (!$this->canAddManchettes) {
+            $this->message = $this->sessionInfo;
+            $this->messageType = 'error';
+            toastr()->error($this->message);
+            return;
+        }
+
+    if (!$this->canAddManchettes) {
             $this->message = $this->sessionInfo;
             $this->messageType = 'error';
             toastr()->error($this->message);
@@ -1100,13 +1377,36 @@ class ManchettesIndex extends Component
             return;
         }
 
+        // Vérification présence
+        $this->checkPresenceEnregistree();
+        
+        if (!$this->presenceEnregistree) {
+            toastr()->warning('Veuillez d\'abord enregistrer les données de présence avant de saisir les manchettes');
+            $this->openPresenceModal();
+            return;
+        }
+
+        // NOUVEAU : Vérifier si déjà terminé
+        if ($this->isSaisieTerminee()) {
+            toastr()->info('🎉 Toutes les manchettes ont déjà été saisies pour cette matière !');
+            return;
+        }
+
+        // Ouvrir la modal
         $this->generateCodeAnonymat();
         $this->etudiant_id = null;
         $this->matricule = '';
         $this->searchQuery = '';
         $this->searchResults = [];
         $this->showManchetteModal = true;
+        
+        // Message d'encouragement
+        $etudiantsSansCount = count($this->etudiantsSansManchette ?? []);
+        if ($etudiantsSansCount <= 5) {
+            toastr()->info("Plus que {$etudiantsSansCount} manchette(s) à saisir ! 🎯");
+        }
     }
+
 
     public function updatedSearchQuery()
     {
@@ -1431,7 +1731,7 @@ class ManchettesIndex extends Component
                 ]);
             }
 
-            // ✅ GESTION POST-SAUVEGARDE AMÉLIORÉE
+            // ✅ GESTION POST-SAUVEGARDE AMÉLIORÉE avec fermeture automatique
             if (!isset($this->editingManchetteId)) {
                 // Réinitialiser seulement les champs étudiant
                 $this->etudiant_id = null;
@@ -1440,26 +1740,65 @@ class ManchettesIndex extends Component
                 $this->searchResults = [];
                 $this->quickFilter = '';
 
-                // Générer le prochain code pour la session courante
-                $this->generateNextCodeForCurrentSession();
-
                 // Recharger la liste des étudiants
                 $this->chargerEtudiants();
 
-                // Garder la modal ouverte
-                $this->showManchetteModal = true;
-                $this->dispatch('focus-search-field');
-
-                // Message avec compteur
+                // NOUVEAU : Vérifier si la saisie est terminée
                 $etudiantsSansCount = count($this->etudiantsSansManchette ?? []);
-                if ($etudiantsSansCount > 0) {
-                    if ($etudiantsSansCount <= 10) {
-                        toastr()->success($this->message . " - Plus que {$etudiantsSansCount} étudiant(s) !");
-                    } else {
-                        toastr()->success($this->message . " - {$etudiantsSansCount} étudiant(s) restant(s)");
-                    }
+                
+                if ($etudiantsSansCount == 0) {
+                    // ✅ SAISIE TERMINÉE : Fermer automatiquement la modal
+                    $this->showManchetteModal = false;
+                    $this->reset(['code_anonymat', 'etudiant_id', 'matricule', 'editingManchetteId', 'searchResults', 'searchQuery', 'quickFilter']);
+                    
+                    // Calculer les statistiques finales
+                    $totalManchettesCreated = count($this->etudiantsAvecManchettes ?? []);
+                    $etudiantsPresents = $this->presenceData ? $this->presenceData->etudiants_presents : $this->totalEtudiantsCount;
+                    
+                    toastr()->success("🎉 Félicitations ! Toutes les manchettes ont été saisies avec succès ! ({$totalManchettesCreated}/{$etudiantsPresents})", [
+                        'timeOut' => 8000,
+                        'extendedTimeOut' => 3000
+                    ]);
+                    
+                    // Émettre un événement pour célébrer la fin
+                    $this->dispatch('saisie-terminee', [
+                        'total_manchettes' => $totalManchettesCreated,
+                        'etudiants_presents' => $etudiantsPresents,
+                        'session_type' => ucfirst($sessionType),
+                        'matiere' => $this->currentEcName,
+                        'salle' => $this->currentSalleName
+                    ]);
+                    
                 } else {
-                    toastr()->success($this->message . " - Tous les étudiants ont maintenant une manchette ! 🎉");
+                    // Continuer la saisie : générer le prochain code pour la session courante
+                    $this->generateNextCodeForCurrentSession();
+
+                    // Garder la modal ouverte
+                    $this->showManchetteModal = true;
+                    $this->dispatch('focus-search-field');
+
+                    // Messages d'encouragement selon le nombre restant
+                    if ($etudiantsSansCount == 1) {
+                        toastr()->success($this->message . " - Plus qu'une seule manchette ! Vous y êtes presque ! 🎯", [
+                            'timeOut' => 5000
+                        ]);
+                    } elseif ($etudiantsSansCount <= 3) {
+                        toastr()->success($this->message . " - Plus que {$etudiantsSansCount} manchettes ! Vous touchez au but ! 🚀", [
+                            'timeOut' => 5000
+                        ]);
+                    } elseif ($etudiantsSansCount <= 5) {
+                        toastr()->success($this->message . " - Plus que {$etudiantsSansCount} manchettes ! Courage ! 💪", [
+                            'timeOut' => 4000
+                        ]);
+                    } elseif ($etudiantsSansCount <= 10) {
+                        toastr()->success($this->message . " - Plus que {$etudiantsSansCount} manchettes !", [
+                            'timeOut' => 3000
+                        ]);
+                    } else {
+                        toastr()->success($this->message . " - {$etudiantsSansCount} manchettes restantes", [
+                            'timeOut' => 3000
+                        ]);
+                    }
                 }
             } else {
                 // Mode modification : fermer la modal
@@ -1468,9 +1807,17 @@ class ManchettesIndex extends Component
                 toastr()->success($this->message);
             }
 
-            // Mettre à jour les compteurs
+            // Mettre à jour les compteurs pour la session courante
             $this->updateCountersForCurrentSession();
             $this->messageType = 'success';
+
+            \Log::info('Manchette sauvegardée avec succès', [
+                'etudiant_id' => $this->etudiant_id ?? 'reset',
+                'code_anonymat' => $this->code_anonymat ?? 'reset',
+                'session_id' => $sessionId,
+                'etudiants_sans_manchette' => $etudiantsSansCount ?? 0,
+                'saisie_terminee' => ($etudiantsSansCount ?? 1) == 0
+            ]);
 
         } catch (\Exception $e) {
             $this->message = 'Erreur: ' . $e->getMessage();
@@ -1481,12 +1828,28 @@ class ManchettesIndex extends Component
                 'error' => $e->getMessage(),
                 'etudiant_id' => $this->etudiant_id,
                 'code_anonymat' => $this->code_anonymat,
-                'session_id' => $this->getCurrentSessionId(),
+                'session_id' => $sessionId ?? null,
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
                 'trace' => $e->getTraceAsString()
             ]);
         }
     }
 
+    /**
+     * NOUVELLE MÉTHODE : Vérifier si la saisie est terminée
+     */
+    public function isSaisieTerminee(): bool
+    {
+        if (!$this->presenceData) {
+            return false;
+        }
+        
+        $manchettesSaisies = count($this->etudiantsAvecManchettes ?? []);
+        $etudiantsPresents = $this->presenceData->etudiants_presents;
+        
+        return $manchettesSaisies >= $etudiantsPresents;
+    }
 
     /**
      * Génère le prochain code pour la session courante
@@ -1547,27 +1910,26 @@ class ManchettesIndex extends Component
      */
     public function closeModalWithConfirmation()
     {
-        $etudiantsSansCount = count($this->etudiantsSansManchette ?? []);
-
-        if ($etudiantsSansCount > 0 && !isset($this->editingManchetteId)) {
-            // Demander confirmation si des étudiants n'ont pas encore de manchette
-            $this->dispatch('confirm-close-modal', [
-                'message' => "Il reste encore {$etudiantsSansCount} étudiant(s) sans manchette. Voulez-vous vraiment fermer la saisie ?"
-            ]);
-        } else {
-            // Fermer directement
-            $this->forceCloseModal();
-        }
+        // Fermer la modal
+        $this->showManchetteModal = false;
+        
+        // Reset des champs
+        $this->reset(['code_anonymat', 'etudiant_id', 'matricule', 'editingManchetteId', 'searchResults', 'searchQuery', 'quickFilter']);
+        
+        // Message simple
+        toastr()->success('Saisie des manchettes fermée');
+        
+        // Refresh de la page
+        return redirect()->to(request()->header('Referer'));
     }
 
     /**
-     * NOUVELLE MÉTHODE : Forcer la fermeture de la modal
+     * MÉTHODE SIMPLE : Force close (identique)
      */
     public function forceCloseModal()
     {
-        $this->showManchetteModal = false;
-        $this->reset(['code_anonymat', 'etudiant_id', 'matricule', 'editingManchetteId', 'searchResults', 'searchQuery', 'quickFilter']);
-        toastr()->info('Saisie des manchettes fermée');
+        // Même comportement que closeModalWithConfirmation
+        return $this->closeModalWithConfirmation();
     }
 
     public function editManchette($id)
@@ -1674,136 +2036,527 @@ class ManchettesIndex extends Component
         }
     }
 
-    public function render()
-    {
-        // Mise à jour des informations de session
-        $this->updateSessionInfo();
 
-        Log::debug('Rendering ManchettesIndex', [
+
+public function render()
+{
+    // VOTRE CODE EXISTANT
+    $this->updateSessionInfo();
+
+    // NOUVEAU : Vérifier la présence si examen et salle sont sélectionnés
+    if ($this->examen_id && $this->salle_id) {
+        $this->checkPresenceEnregistree();
+    }
+
+    Log::debug('Rendering ManchettesIndex with Presence', [
+        'niveau_id' => $this->niveau_id,
+        'parcours_id' => $this->parcours_id,
+        'salle_id' => $this->salle_id,
+        'examen_id' => $this->examen_id,
+        'ec_id' => $this->ec_id,
+        'search' => $this->search,
+        'session_id' => $this->getCurrentSessionId(),
+        'session_type' => $this->getCurrentSessionType(),
+        'presence_enregistree' => $this->presenceEnregistree,
+    ]);
+
+    // VOTRE CODE EXISTANT de validation
+    if ($this->examen_id && !Examen::find($this->examen_id)) {
+        Log::warning('Invalid examen_id', ['examen_id' => $this->examen_id]);
+        $this->examen_id = null;
+    }
+    if ($this->ec_id && $this->ec_id !== 'all' && !EC::find($this->ec_id)) {
+        Log::warning('Invalid ec_id', ['ec_id' => $this->ec_id]);
+        $this->ec_id = null;
+    }
+
+    // ✅ CORRECTION COMPLÈTE : Requête manchettes avec gestion de l'ambiguïté
+    if ($this->niveau_id && $this->parcours_id && $this->salle_id && $this->examen_id) {
+        $sessionId = $this->getCurrentSessionId();
+        
+        // ✅ SOLUTION 1 : Requête séparée pour éviter les jointures dans la pagination
+        $manchetteIds = collect();
+        
+        // Construire la requête pour récupérer les IDs d'abord
+        $baseQuery = Manchette::where('manchettes.examen_id', $this->examen_id);
+        
+        if ($sessionId) {
+            $baseQuery->where('manchettes.session_exam_id', $sessionId);
+        } else {
+            $baseQuery->where('manchettes.id', 0);
+        }
+
+        // Filtres EC avec whereHas pour éviter les jointures
+        if ($this->ec_id && $this->ec_id !== 'all') {
+            $baseQuery->whereHas('codeAnonymat', function ($q) {
+                $q->where('ec_id', $this->ec_id)
+                  ->whereNotNull('code_complet')
+                  ->where('code_complet', '!=', '');
+            });
+        } else if ($this->ec_id === 'all' && $this->salle_id) {
+            $salle = Salle::find($this->salle_id);
+            if ($salle && $salle->code_base) {
+                $baseQuery->whereHas('codeAnonymat', function ($q) use ($salle) {
+                    $q->where('code_complet', 'like', $salle->code_base . '%');
+                });
+            } else {
+                Log::warning('Salle or code_base missing', ['salle_id' => $this->salle_id]);
+                $baseQuery = Manchette::where('id', 0);
+            }
+        }
+
+        // Filtre de recherche avec whereHas
+        if ($this->search) {
+            $baseQuery->where(function ($q) {
+                $q->whereHas('codeAnonymat', function ($sq) {
+                    $sq->where('code_complet', 'like', '%' . $this->search . '%');
+                })
+                ->orWhereHas('etudiant', function ($sq) {
+                    $sq->where('matricule', 'like', '%' . $this->search . '%')
+                      ->orWhere('nom', 'like', '%' . $this->search . '%')
+                      ->orWhere('prenom', 'like', '%' . $this->search . '%');
+                });
+            });
+        }
+
+        // ✅ GESTION DU TRI SANS AMBIGUÏTÉ
+        if (isset($this->sortField)) {
+            if ($this->sortField === 'code_anonymat_id') {
+                // Tri par code d'anonymat avec sous-requête
+                $baseQuery->orderBy(
+                    CodeAnonymat::select('code_complet')
+                        ->whereColumn('codes_anonymat.id', 'manchettes.code_anonymat_id')
+                        ->limit(1),
+                    $this->sortDirection
+                );
+            } elseif ($this->sortField === 'etudiant_id') {
+                // Tri par nom étudiant avec sous-requête
+                $baseQuery->orderBy(
+                    Etudiant::select('nom')
+                        ->whereColumn('etudiants.id', 'manchettes.etudiant_id')
+                        ->limit(1),
+                    $this->sortDirection
+                );
+            } elseif ($this->sortField === 'ec_id') {
+                // Tri par nom EC avec sous-requête
+                $baseQuery->orderBy(
+                    EC::select('nom')
+                        ->join('codes_anonymat', 'ecs.id', '=', 'codes_anonymat.ec_id')
+                        ->whereColumn('codes_anonymat.id', 'manchettes.code_anonymat_id')
+                        ->limit(1),
+                    $this->sortDirection
+                );
+            } else {
+                $baseQuery->orderBy($this->sortField, $this->sortDirection);
+            }
+        } else {
+            $baseQuery->orderBy('created_at', 'asc');
+        }
+
+        // ✅ PAGINATION SÉCURISÉE
+        try {
+            $manchettes = $baseQuery->with(['codeAnonymat.ec', 'etudiant', 'utilisateurSaisie', 'sessionExam'])
+                                   ->paginate($this->perPage);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Log de l'erreur pour le debug
+            Log::error('Erreur SQL dans la pagination des manchettes', [
+                'error' => $e->getMessage(),
+                'sql' => $e->getSql() ?? 'N/A',
+                'bindings' => $e->getBindings() ?? [],
+                'examen_id' => $this->examen_id,
+                'session_id' => $sessionId,
+                'ec_id' => $this->ec_id,
+                'sortField' => $this->sortField ?? 'N/A'
+            ]);
+
+            // ✅ REQUÊTE DE FALLBACK ULTRA SIMPLE
+            $manchettes = Manchette::where('examen_id', $this->examen_id)
+                                  ->where('session_exam_id', $sessionId)
+                                  ->with(['codeAnonymat.ec', 'etudiant', 'utilisateurSaisie', 'sessionExam'])
+                                  ->orderBy('created_at', 'asc')
+                                  ->paginate($this->perPage);
+
+            // Notifier l'utilisateur
+            toastr()->warning('Une erreur temporaire s\'est produite. Affichage simplifié des résultats.');
+        }
+
+        $this->updateCountersForCurrentSession();
+    } else {
+        $manchettes = Manchette::where('id', 0)->paginate($this->perPage);
+        Log::debug('No manchettes retrieved due to missing filters', [
             'niveau_id' => $this->niveau_id,
             'parcours_id' => $this->parcours_id,
             'salle_id' => $this->salle_id,
             'examen_id' => $this->examen_id,
             'ec_id' => $this->ec_id,
-            'search' => $this->search,
-            'session_id' => $this->getCurrentSessionId(),
-            'session_type' => $this->getCurrentSessionType(),
-        ]);
-
-        if ($this->examen_id && !Examen::find($this->examen_id)) {
-            Log::warning('Invalid examen_id', ['examen_id' => $this->examen_id]);
-            $this->examen_id = null;
-        }
-        if ($this->ec_id && $this->ec_id !== 'all' && !EC::find($this->ec_id)) {
-            Log::warning('Invalid ec_id', ['ec_id' => $this->ec_id]);
-            $this->ec_id = null;
-        }
-
-        if ($this->niveau_id && $this->parcours_id && $this->salle_id && $this->examen_id) {
-            // Filtrer par session active (session_exam_id)
-            $sessionId = $this->getCurrentSessionId();
-            $query = Manchette::where('examen_id', $this->examen_id);
-
-            if ($sessionId) {
-                $query->where('session_exam_id', $sessionId);
-            } else {
-                // Si pas de session active, ne rien afficher
-                $query->where('id', 0);
-            }
-
-            if ($this->ec_id && $this->ec_id !== 'all') {
-                $query->whereHas('codeAnonymat', function ($q) {
-                    $q->where('ec_id', $this->ec_id)
-                      ->whereNotNull('code_complet')
-                      ->where('code_complet', '!=', '');
-                });
-            } else if ($this->ec_id === 'all' && $this->salle_id) {
-                $salle = Salle::find($this->salle_id);
-                if ($salle && $salle->code_base) {
-                    $query->whereHas('codeAnonymat', function ($q) use ($salle) {
-                        $q->where('code_complet', 'like', $salle->code_base . '%');
-                    });
-                } else {
-                    Log::warning('Salle or code_base missing', ['salle_id' => $this->salle_id]);
-                    $query = Manchette::where('id', 0);
-                }
-            }
-
-            if ($this->search) {
-                $query->where(function ($q) {
-                    $q->whereHas('codeAnonymat', function ($sq) {
-                        $sq->where('code_complet', 'like', '%' . $this->search . '%');
-                    })
-                    ->orWhereHas('etudiant', function ($sq) {
-                        $sq->where('matricule', 'like', '%' . $this->search . '%')
-                           ->orWhere('nom', 'like', '%' . $this->search . '%')
-                           ->orWhere('prenom', 'like', '%' . $this->search . '%');
-                    });
-                });
-            }
-
-            if (isset($this->sortField)) {
-                if ($this->sortField === 'code_anonymat_id') {
-                    $query->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
-                        ->orderBy('codes_anonymat.code_complet', $this->sortDirection)
-                        ->select('manchettes.*');
-                } elseif ($this->sortField === 'etudiant_id') {
-                    $query->join('etudiants', 'manchettes.etudiant_id', '=', 'etudiants.id')
-                        ->orderBy('etudiants.nom', $this->sortDirection)
-                        ->orderBy('etudiants.prenom', $this->sortDirection)
-                        ->select('manchettes.*');
-                } elseif ($this->sortField === 'ec_id') {
-                    $query->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
-                        ->join('ecs', 'codes_anonymat.ec_id', '=', 'ecs.id')
-                        ->orderBy('ecs.nom', $this->sortDirection)
-                        ->select('manchettes.*');
-                } else {
-                    $query->orderBy($this->sortField, $this->sortDirection);
-                }
-            } else {
-                $query->orderBy('created_at', 'asc');
-            }
-
-            $manchettes = $query->with(['codeAnonymat.ec', 'etudiant', 'utilisateurSaisie', 'sessionExam'])
-                ->paginate($this->perPage);
-
-            Log::debug('Manchettes retrieved', [
-                'examen_id' => $this->examen_id,
-                'ec_id' => $this->ec_id,
-                'session_id' => $sessionId,
-                'total' => $manchettes->total(),
-            ]);
-
-            // Mettre à jour les compteurs pour la session courante
-            $this->updateCountersForCurrentSession();
-        } else {
-            $manchettes = Manchette::where('id', 0)->paginate($this->perPage);
-            Log::debug('No manchettes retrieved due to missing filters', [
-                'niveau_id' => $this->niveau_id,
-                'parcours_id' => $this->parcours_id,
-                'salle_id' => $this->salle_id,
-                'examen_id' => $this->examen_id,
-                'ec_id' => $this->ec_id,
-            ]);
-        }
-
-        if ($this->ec_id && $this->ec_id !== 'all' && $this->examen_id) {
-            $this->chargerEtudiants();
-        }
-
-        // Créer un tableau complet pour sessionInfo
-        $sessionInfo = [
-            'message' => $this->sessionInfo,
-            'active' => $this->sessionActive,
-            'active_id' => $this->sessionActiveId,
-            'type' => $this->sessionType,
-            'can_add' => $this->canAddManchettes,
-            'session_libelle' => $this->sessionActive ? $this->sessionActive->type : null
-        ];
-
-        return view('livewire.manchette.manchettes-index', [
-            'manchettes' => $manchettes,
-            'sessionInfo' => $sessionInfo
         ]);
     }
+
+    // VOTRE CODE EXISTANT de chargement étudiants
+    if ($this->examen_id && $this->ec_id) {
+        $this->chargerEtudiants(); // Ça va maintenant gérer 'all' et les matières spécifiques
+    }
+
+    // VOTRE STRUCTURE EXISTANTE sessionInfo
+    $sessionInfo = [
+        'message' => $this->sessionInfo,
+        'active' => $this->sessionActive,
+        'active_id' => $this->sessionActiveId,
+        'type' => $this->sessionType,
+        'can_add' => $this->canAddManchettes,
+        'session_libelle' => $this->sessionActive ? $this->sessionActive->type : null
+    ];
+
+    // NOUVEAU : Retour avec les nouvelles données de présence
+    return view('livewire.manchette.manchettes-index', [
+        'manchettes' => $manchettes,
+        'sessionInfo' => $sessionInfo,
+        // NOUVELLES DONNÉES
+        'presenceStats' => $this->getPresenceStats(),
+        'canStartSaisie' => $this->canStartManchettesSaisie(),
+        'presenceStatusMessage' => $this->getPresenceStatusMessage(),
+    ]);
+}
+    /**
+     * Règles de validation pour la présence
+     */
+    protected function getPresenceRules()
+    {
+        return [
+            'etudiants_presents' => 'required|integer|min:0|max:' . $this->totalEtudiantsCount,
+            'etudiants_absents' => 'required|integer|min:0|max:' . $this->totalEtudiantsCount,
+            'observations_presence' => 'nullable|string|max:500',
+        ];
+    }
+
+    /**
+     * Vérifier si la présence a été enregistrée
+     */
+    public function checkPresenceEnregistree()
+    {
+        if (!$this->examen_id || !$this->salle_id) {
+            $this->presenceEnregistree = false;
+            $this->presenceData = null;
+            return;
+        }
+
+        // UTILISE getCurrentSessionId() de votre modèle Manchette
+        $sessionId = Manchette::getCurrentSessionId();
+        if (!$sessionId) {
+            $this->presenceEnregistree = false;
+            $this->presenceData = null;
+            return;
+        }
+
+        $this->presenceData = PresenceExamen::forExamen($this->examen_id, $sessionId, $this->salle_id)
+            ->when($this->ec_id && $this->ec_id !== 'all', function ($query) {
+                return $query->forEc($this->ec_id);
+            })
+            ->first();
+
+        $this->presenceEnregistree = $this->presenceData !== null;
+
+        if ($this->presenceData) {
+            $this->etudiants_presents = $this->presenceData->etudiants_presents;
+            $this->etudiants_absents = $this->presenceData->etudiants_absents;
+            $this->observations_presence = $this->presenceData->observations;
+        }
+    }
+
+    /**
+     * Ouvrir la modal de saisie de présence
+     */
+    public function openPresenceModal()
+    {
+        if (!$this->canAddManchettes) {
+            toastr()->error($this->sessionInfo);
+            return;
+        }
+
+        if (!$this->examen_id || !$this->salle_id) {
+            toastr()->error('Veuillez sélectionner un examen et une salle');
+            return;
+        }
+
+        $this->checkPresenceEnregistree();
+        
+        // Pré-remplir avec les données existantes ou valeurs par défaut
+        if (!$this->presenceData) {
+            $this->etudiants_presents = null;
+            $this->etudiants_absents = null;
+            $this->observations_presence = '';
+        }
+
+        $this->showPresenceModal = true;
+        $this->dispatch('presence-modal-opened');
+    }
+
+    /**
+     * Fermer la modal de présence
+     */
+    public function closePresenceModal()
+    {
+        $this->showPresenceModal = false;
+        $this->reset(['etudiants_presents', 'etudiants_absents', 'observations_presence']);
+    }
+
+
+
+    /**
+     * Calculer automatiquement les absents quand on saisit les présents
+     */
+    public function updatedEtudiantsPresents()
+    {
+        if ($this->etudiants_presents !== null && $this->etudiants_presents >= 0) {
+            $maxAbsents = $this->totalEtudiantsCount - $this->etudiants_presents;
+            $this->etudiants_absents = max(0, $maxAbsents);
+        }
+    }
+
+    /**
+     * Calculer automatiquement les présents quand on saisit les absents
+     */
+    public function updatedEtudiantsAbsents()
+    {
+        if ($this->etudiants_absents !== null && $this->etudiants_absents >= 0) {
+            $maxPresents = $this->totalEtudiantsCount - $this->etudiants_absents;
+            $this->etudiants_presents = max(0, $maxPresents);
+        }
+    }
+
+    /**
+     * Valider la cohérence des données de présence
+     */
+    public function validatePresenceData()
+    {
+        $total = ($this->etudiants_presents ?? 0) + ($this->etudiants_absents ?? 0);
+        
+        if ($total > $this->totalEtudiantsCount) {
+            $this->addError('etudiants_presents', 
+                "Le total (présents + absents) ne peut pas dépasser {$this->totalEtudiantsCount} étudiants");
+            return false;
+        }
+
+        if ($total < $this->totalEtudiantsCount) {
+            $difference = $this->totalEtudiantsCount - $total;
+            session()->flash('presence_warning', 
+                "Attention: il manque {$difference} étudiant(s) dans votre décompte");
+        }
+
+        return true;
+    }
+
+
+    /**
+     * Enregistrer les données de présence
+     */
+    public function savePresence()
+    {
+        $this->validate($this->getPresenceRules());
+
+        if (!$this->validatePresenceData()) {
+            return;
+        }
+
+        try {
+            // UTILISE getCurrentSessionId() de votre modèle Manchette
+            $sessionId = Manchette::getCurrentSessionId();
+            if (!$sessionId) {
+                throw new \Exception('Aucune session active trouvée');
+            }
+
+            $data = [
+                'examen_id' => $this->examen_id,
+                'session_exam_id' => $sessionId,
+                'salle_id' => $this->salle_id,
+                'ec_id' => ($this->ec_id && $this->ec_id !== 'all') ? $this->ec_id : null,
+                'etudiants_presents' => $this->etudiants_presents,
+                'etudiants_absents' => $this->etudiants_absents,
+                'total_attendu' => $this->totalEtudiantsCount,
+                'observations' => $this->observations_presence,
+                'saisie_par' => Auth::id(),
+                'date_saisie' => now(),
+            ];
+
+            if ($this->presenceData) {
+                // Mise à jour
+                $this->presenceData->update($data);
+                $message = 'Données de présence mises à jour avec succès';
+            } else {
+                // Création
+                PresenceExamen::create($data);
+                $message = 'Données de présence enregistrées avec succès';
+            }
+
+            $this->checkPresenceEnregistree();
+            $this->showPresenceModal = false;
+
+            // UTILISE getCurrentSessionType() de votre modèle
+            $sessionLibelle = ucfirst(Manchette::getCurrentSessionType());
+            toastr()->success($message . " pour la session {$sessionLibelle}");
+
+            $this->dispatch('presence-updated');
+
+        } catch (\Exception $e) {
+            toastr()->error('Erreur lors de l\'enregistrement: ' . $e->getMessage());
+            \Log::error('Erreur savePresence', [
+                'error' => $e->getMessage(),
+                'data' => $data ?? null
+            ]);
+        }
+    }
+
+    /**
+     * Obtenir les statistiques de présence pour l'affichage
+     */
+    public function getPresenceStats()
+    {
+        if (!$this->presenceData) {
+            return null;
+        }
+
+        return [
+            'presents' => $this->presenceData->etudiants_presents,
+            'absents' => $this->presenceData->etudiants_absents,
+            'total' => $this->presenceData->total_etudiants,
+            'taux_presence' => $this->presenceData->taux_presence,
+            'ecart_attendu' => $this->presenceData->ecart_attendu,
+        ];
+    }
+
+    /**
+     * Vérifier si toutes les conditions sont remplies pour saisir les manchettes
+     */
+    public function canStartManchettesSaisie()
+    {
+        if (!$this->examen_id || !$this->salle_id || !$this->ec_id || $this->ec_id === 'all') {
+            return false;
+        }
+
+        if (!$this->canAddManchettes) {
+            return false;
+        }
+
+        $this->checkPresenceEnregistree();
+        return $this->presenceEnregistree;
+    }
+
+    /**
+     * Obtenir le message d'état pour l'interface
+     */
+    public function getPresenceStatusMessage()
+    {
+        if (!$this->examen_id || !$this->salle_id || !$this->ec_id || $this->ec_id === 'all') {
+            return null;
+        }
+
+        if (!$this->presenceEnregistree) {
+            return [
+                'type' => 'warning',
+                'icon' => 'ni-info',
+                'message' => 'Veuillez d\'abord enregistrer les données de présence avant de saisir les manchettes.'
+            ];
+        }
+
+        if ($this->presenceData) {
+            $taux = $this->presenceData->taux_presence;
+            if ($taux >= 75) {
+                return [
+                    'type' => 'success',
+                    'icon' => 'ni-check-circle',
+                    'message' => "Excellente présence ({$taux}%) - Vous pouvez commencer la saisie des manchettes."
+                ];
+            } elseif ($taux >= 50) {
+                return [
+                    'type' => 'info',
+                    'icon' => 'ni-users',
+                    'message' => "Présence correcte ({$taux}%) - Vous pouvez saisir les manchettes."
+                ];
+            } else {
+                return [
+                    'type' => 'warning',
+                    'icon' => 'ni-alert-fill',
+                    'message' => "Faible présence ({$taux}%) - Vérifiez les données avant de continuer."
+                ];
+            }
+        }
+
+        return null;
+    }
+
+
+    /**
+     * NOUVELLE MÉTHODE : Récupérer les stats de présence pour une matière spécifique
+     */
+    public function getPresenceStatsParMatiere($ecId)
+    {
+        if (!$this->examen_id || !$this->salle_id) {
+            return null;
+        }
+
+        $sessionId = $this->getCurrentSessionId();
+        if (!$sessionId) {
+            return null;
+        }
+
+        // Chercher d'abord une présence spécifique à cette matière
+        $presenceSpecifique = PresenceExamen::findForCurrentSession(
+            $this->examen_id, 
+            $this->salle_id, 
+            $ecId
+        );
+
+        if ($presenceSpecifique) {
+            \Log::info('Présence spécifique trouvée pour EC', [
+                'ec_id' => $ecId,
+                'presents' => $presenceSpecifique->etudiants_presents
+            ]);
+            
+            return [
+                'presents' => $presenceSpecifique->etudiants_presents,
+                'absents' => $presenceSpecifique->etudiants_absents,
+                'total' => $presenceSpecifique->total_etudiants,
+                'taux_presence' => $presenceSpecifique->taux_presence,
+                'ecart_attendu' => $presenceSpecifique->ecart_attendu,
+                'total_attendu' => $presenceSpecifique->total_attendu,
+                'type' => 'specifique'
+            ];
+        }
+
+        // Si pas de présence spécifique, utiliser la présence globale
+        $presenceGlobale = PresenceExamen::findForCurrentSession(
+            $this->examen_id, 
+            $this->salle_id, 
+            null // ec_id = NULL pour présence globale
+        );
+
+        if ($presenceGlobale) {
+            \Log::info('Présence globale utilisée pour EC', [
+                'ec_id' => $ecId,
+                'presents' => $presenceGlobale->etudiants_presents,
+                'type' => 'globale'
+            ]);
+            
+            return [
+                'presents' => $presenceGlobale->etudiants_presents,
+                'absents' => $presenceGlobale->etudiants_absents,
+                'total' => $presenceGlobale->total_etudiants,
+                'taux_presence' => $presenceGlobale->taux_presence,
+                'ecart_attendu' => $presenceGlobale->ecart_attendu,
+                'total_attendu' => $presenceGlobale->total_attendu,
+                'type' => 'globale_reutilisee'
+            ];
+        }
+
+        // Aucune présence trouvée
+        \Log::info('Aucune présence trouvée pour EC', [
+            'ec_id' => $ecId,
+            'examen_id' => $this->examen_id,
+            'salle_id' => $this->salle_id,
+            'session_id' => $sessionId
+        ]);
+
+        return null;
+    }
+
 }

@@ -73,7 +73,7 @@
                         <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">Aucun parcours trouvé pour ce niveau</p>
                     @endif
                 </div>
-                <!-- Matière/EC avec icône et animation - VERSION CORRIGÉE -->
+                <!-- Matière/EC avec logique de présence intelligente -->
                 <div class="col-span-6 sm:col-span-2 transition-all min-w-xl duration-300 transform hover:scale-[1.02]">
                     <div class="relative mb-5 last:mb-0">
                         <label for="ec_id" class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -100,19 +100,58 @@
 
                                 @if(count($ecs) > 0)
                                     @foreach($ecs as $ec)
+                                        @php
+                                            $manchettesCount = $ec->manchettes_count ?? 0;
+                                            
+                                            // Récupérer les données de présence SPÉCIFIQUE à cette matière
+                                            $presenceStatsMatiere = $this->getPresenceStatsParMatiere($ec->id);
+                                            $etudiantsPresentsMatiere = $presenceStatsMatiere['presents'] ?? 0;
+                                            $hasPresenceDataMatiere = $presenceStatsMatiere !== null;
+                                            
+                                            $progressionColor = '';
+                                            $statusIcon = '';
+                                            $affichageCompteur = '';
+                                            
+                                            if ($hasPresenceDataMatiere && $etudiantsPresentsMatiere > 0) {
+                                                // Calcul basé sur les données SPÉCIFIQUES à cette matière
+                                                $pourcentage = round(($manchettesCount / $etudiantsPresentsMatiere) * 100);
+                                                $affichageCompteur = "({$manchettesCount}/{$etudiantsPresentsMatiere} - {$pourcentage}%)";
+                                                
+                                                if ($pourcentage >= 100) {
+                                                    $progressionColor = 'text-green-600';
+                                                    $statusIcon = '✅';
+                                                } elseif ($pourcentage >= 75) {
+                                                    $progressionColor = 'text-blue-600';
+                                                    $statusIcon = '🔵';
+                                                } elseif ($pourcentage >= 50) {
+                                                    $progressionColor = 'text-yellow-600';
+                                                    $statusIcon = '🟡';
+                                                } elseif ($pourcentage > 0) {
+                                                    $progressionColor = 'text-orange-600';
+                                                    $statusIcon = '🟠';
+                                                } else {
+                                                    $progressionColor = 'text-red-600';
+                                                    $statusIcon = '❌';
+                                                }
+                                            } else {
+                                                // Pas de données de présence pour cette matière spécifique
+                                                $progressionColor = 'text-gray-500';
+                                                $statusIcon = '⚫';
+                                                if ($manchettesCount > 0) {
+                                                    $affichageCompteur = "({$manchettesCount}/? - Pas de présence)";
+                                                } else {
+                                                    $affichageCompteur = "(0/? - Pas de présence)";
+                                                }
+                                            }
+                                        @endphp
                                         <option value="{{ $ec->id }}"
-                                                class="{{ isset($ec->has_manchette) && $ec->has_manchette ? 'text-green-600' : 'text-red-600' }}"
-                                                data-manchettes="{{ $ec->manchettes_count ?? 0 }}"
-                                                data-total="{{ $totalEtudiantsCount ?? 0 }}">
-                                            @if(isset($ec->has_manchette))
-                                                {{ $ec->has_manchette ? '✅' : '❌' }}
-                                            @else
-                                                ⚫
-                                            @endif
+                                                class="{{ $progressionColor }}"
+                                                data-manchettes="{{ $manchettesCount }}"
+                                                data-presents="{{ $etudiantsPresentsMatiere }}"
+                                                data-has-presence="{{ $hasPresenceDataMatiere ? 'true' : 'false' }}">
+                                            {{ $statusIcon }}
                                             {{ $ec->nom ?? 'Nom indisponible' }}
-                                            @if(isset($ec->manchettes_count) && isset($totalEtudiantsCount))
-                                                ({{ $ec->manchettes_count }}/{{ $totalEtudiantsCount }})
-                                            @endif
+                                            {{ $affichageCompteur }}
                                         </option>
                                     @endforeach
                                 @endif

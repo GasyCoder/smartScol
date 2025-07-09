@@ -148,7 +148,7 @@ class AdmisDeliberationExport implements FromArray, WithColumnWidths, WithTitle,
                         $decision = $item['decision_simulee'] ?? $item['decision_actuelle'] ?? 'non_definie';
                         $decisionText = strtoupper($decision);
                         if (isset($item['changement']) && $item['changement']) {
-                            $decisionText .= ' (Modifié)';
+                            $decisionText .= ' (Déliberé)';
                         }
                         $row[] = $decisionText;
                         break;

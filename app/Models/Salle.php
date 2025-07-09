@@ -10,7 +10,6 @@ class Salle extends Model
     use HasFactory;
 
     protected $fillable = [
-        'code_base',
         'nom',
         'capacite'
     ];
@@ -18,15 +17,6 @@ class Salle extends Model
     protected $casts = [
         'capacite' => 'integer'
     ];
-
-    /**
-     * Relation avec les schémas de codage
-     * Remplace l'ancienne relation avec RegleCodage
-     */
-    public function schemasCodage()
-    {
-        return $this->hasMany(SchemaCodage::class, 'salle_id');
-    }
 
     /**
      * Obtient les codes d'anonymat associés à cette salle via les schémas de codage

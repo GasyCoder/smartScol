@@ -29,11 +29,12 @@ class Examen extends Model
     /**
      * Relations
      */
+
     public function ecs()
     {
         return $this->belongsToMany(EC::class, 'examen_ec', 'examen_id', 'ec_id')
                     ->using(ExamenEc::class)
-                    ->withPivot('salle_id', 'date_specifique', 'heure_specifique')
+                    ->withPivot('salle_id', 'date_specifique', 'heure_specifique', 'code_base') // Ajouter 'code'
                     ->withTimestamps();
     }
 

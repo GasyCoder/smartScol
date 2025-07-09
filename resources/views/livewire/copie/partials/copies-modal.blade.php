@@ -61,7 +61,7 @@
                                 </div>
                                 <div class="flex items-center">
                                     <em class="mr-2 text-gray-500 icon ni ni-hash"></em>
-                                    <span class="text-gray-600 dark:text-gray-300">Code salle: <strong>{{ $selectedSalleCode }}</strong></span>
+                                    <span class="text-gray-600 dark:text-gray-300">Code salle: <strong>{{ $selectedCodeBase }}</strong></span>
                                 </div>
                                 <div class="flex items-center">
                                     <em class="mr-2 text-gray-500 icon ni ni-book"></em>
@@ -101,7 +101,7 @@
                                                 id="code_anonymat"
                                                 class="block w-full px-4 py-3 font-mono text-lg border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400
                                                 {{ $code_anonymat && strlen($code_anonymat) >= 2 ? 'border-green-300 bg-green-50 dark:bg-green-900/20' : '' }}"
-                                                placeholder="Ex: {{ $selectedSalleCode }}1"
+                                                placeholder="Ex: {{ $selectedCodeBase }}1"
                                                 autofocus
                                                 required
                                                 maxlength="10">
@@ -120,7 +120,7 @@
                                             <div class="flex items-center text-xs">
                                                 @php
                                                     $isValidFormat = preg_match('/^[A-Za-z]+\d+$/', $code_anonymat);
-                                                    $matchesSalle = str_starts_with(strtoupper($code_anonymat), strtoupper($selectedSalleCode));
+                                                    $matchesSalle = str_starts_with(strtoupper($code_anonymat), strtoupper($selectedCodeBase));
                                                 @endphp
                                                 
                                                 <!-- Validation du format -->
@@ -147,9 +147,9 @@
                                             </div>
                                             
                                             <!-- Suggestion de code correct -->
-                                            @if($code_anonymat && !$matchesSalle && $selectedSalleCode)
+                                            @if($code_anonymat && !$matchesSalle && $selectedCodeBase)
                                             <div class="text-xs text-blue-600 dark:text-blue-400">
-                                                💡 Code suggéré: <button type="button" onclick="@this.set('code_anonymat', '{{ $selectedSalleCode }}' + '{{ preg_replace('/[^0-9]/', '', $code_anonymat) ?: '1' }}')" class="underline hover:no-underline">{{ $selectedSalleCode }}{{ preg_replace('/[^0-9]/', '', $code_anonymat) ?: '1' }}</button>
+                                                💡 Code suggéré: <button type="button" onclick="@this.set('code_anonymat', '{{ $selectedCodeBase }}' + '{{ preg_replace('/[^0-9]/', '', $code_anonymat) ?: '1' }}')" class="underline hover:no-underline">{{ $selectedCodeBase }}{{ preg_replace('/[^0-9]/', '', $code_anonymat) ?: '1' }}</button>
                                             </div>
                                             @endif
                                         </div>

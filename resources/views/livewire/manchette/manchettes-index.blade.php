@@ -3,10 +3,10 @@
     <!-- En-tête fixe avec titre et actions globales -->
     <div class="sticky top-0 z-10 px-5 py-4 mb-6 bg-white border-b border-gray-200 shadow-sm dark:bg-gray-900 dark:border-gray-800">
         <div class="flex items-center justify-between">
-            <!-- Titre principal avec informations de session -->
+            <!-- VOTRE CODE EXISTANT pour le titre -->
              <div class="flex items-center space-x-3">
                 <h2 class="text-xl font-medium text-slate-700 dark:text-white">Saisie des Manchettes</h2>
-                <!-- NOUVEAU : Affichage des informations de session -->
+                <!-- VOTRE CODE EXISTANT pour les badges de session -->
                 @if($currentSessionType)
                     <span class="px-3 py-1 text-sm font-medium rounded-full
                         {{ $currentSessionType === 'Normale'
@@ -27,7 +27,7 @@
                     </span>
                 @endif
             </div>
-            <!-- Actions globales -->
+            <!-- VOTRE CODE EXISTANT pour les actions globales -->
             <div class="flex items-center space-x-2">
                 <a href="{{ route('manchettes.corbeille') }}" class="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700">
                     <em class="mr-1 icon ni ni-trash-alt"></em>
@@ -37,7 +37,7 @@
         </div>
     </div>
 
-    <!-- NOUVEAU : Alerte d'information de session -->
+    <!-- VOS ALERTES EXISTANTES -->
     @if(isset($sessionInfo) && is_array($sessionInfo) && ($sessionInfo['message'] ?? ''))
     <div class="mb-4">
         <div class="flex items-center p-4 rounded-lg
@@ -59,7 +59,7 @@
     </div>
     @endif
 
-    <!-- Messages d'état -->
+    <!-- VOTRE CODE EXISTANT pour les messages -->
     @if($message)
     <div class="mb-4">
         <div class="{{ $messageType === 'success' ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-200' : 'bg-red-100 border-red-500 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200' }} px-4 py-3 rounded relative border-l-4" role="alert">
@@ -68,7 +68,7 @@
     </div>
     @endif
 
-    <!-- NOUVEAU : Alerte si aucune session active -->
+    <!-- VOTRE ALERTE DE SESSION INACTIVE EXISTANTE -->
     @if(isset($sessionInfo) && is_array($sessionInfo) && !($sessionInfo['can_add'] ?? true))
     <div class="mb-6">
         <div class="p-4 border border-yellow-200 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800">
@@ -90,16 +90,23 @@
     </div>
     @endif
 
-    <!-- Filtres de recherche -->
+    <!-- Filtres de recherche - VOTRE CODE EXISTANT -->
     @include('livewire.manchette.partials.manchettes-filtres')
 
-    <!-- Liste des manchettes -->
+    <!-- NOUVEAU : Bouton et statistiques de présence -->
+    @include('livewire.manchette.partials.presence-button')
+    @include('livewire.manchette.partials.presence-stats')
+
+    <!-- Liste des manchettes - VOTRE CODE EXISTANT -->
     @include('livewire.manchette.manchettes-table')
 
-    <!-- Modal de saisie de note -->
+    <!-- Modal de saisie de manchette - VOTRE CODE EXISTANT -->
     @include('livewire.manchette.partials.manchettes-modal')
 
-    <!-- Modal de confirmation de suppression -->
+    <!-- NOUVEAU : Modal de saisie de présence -->
+    @include('livewire.manchette.partials.presence-modal')
+
+    <!-- VOTRE MODAL DE SUPPRESSION EXISTANTE -->
     @if($showDeleteModal)
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
         <div class="w-full max-w-md p-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
@@ -109,7 +116,6 @@
                 @if($manchetteToDelete)
                 (Code: {{ $manchetteToDelete->codeAnonymat->code_complet ?? 'N/A' }},
                 Étudiant: {{ $manchetteToDelete->etudiant->matricule ?? 'N/A' }})
-                <!-- NOUVEAU : Afficher la session de la manchette -->
                 @if(isset($manchetteToDelete->sessionExam))
                 de la session {{ $manchetteToDelete->sessionExam->type ?? 'Inconnue' }}
                 @endif
@@ -127,7 +133,6 @@
         </div>
     </div>
     @endif
-
 
 
 
@@ -340,52 +345,23 @@ document.addEventListener('livewire:load', function () {
         }, 100);
     });
 
-    // Confirmation avant fermeture si des étudiants restent - CORRIGÉ pour éviter le refresh
-    window.livewire.on('confirm-close-modal', function (data) {
-        if (confirm(data.message)) {
-            // Utiliser Livewire pour fermer au lieu d'un refresh
-            @this.call('forceCloseModal');
-        }
-    });
-
-    // Empêcher le refresh de page sur tous les boutons
-    document.addEventListener('click', function(e) {
-        const button = e.target.closest('button[wire\\:click]');
-        if (button && !button.hasAttribute('type')) {
-            // Ajouter type="button" pour éviter la soumission de formulaire
-            button.setAttribute('type', 'button');
-        }
-
-        // Empêcher spécifiquement les boutons de fermeture de modal
-        if (button && (
-            button.hasAttribute('wire:click.prevent') ||
-            button.textContent.includes('Terminer') ||
-            button.textContent.includes('Annuler')
-        )) {
-            e.preventDefault();
-        }
-    });
-
-    // Raccourcis clavier pour améliorer l'UX
+    // Raccourcis clavier basiques
     document.addEventListener('keydown', function(e) {
-        // Échapper pour fermer la modal avec confirmation
+        const modal = document.querySelector('[aria-modal="true"]');
+        if (!modal) return;
+
+        // Échapper pour fermer la modal
         if (e.key === 'Escape') {
-            const modal = document.querySelector('[aria-modal="true"]');
-            if (modal) {
-                e.preventDefault();
-                @this.call('closeModalWithConfirmation');
-            }
+            e.preventDefault();
+            @this.call('closeModalWithConfirmation');
         }
 
-        // Ctrl+Enter pour sauvegarder rapidement
+        // Ctrl+Enter pour sauvegarder
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            const modal = document.querySelector('[aria-modal="true"]');
-            if (modal) {
-                e.preventDefault();
-                const submitButton = document.querySelector('button[type="submit"]');
-                if (submitButton && !submitButton.disabled) {
-                    submitButton.click();
-                }
+            e.preventDefault();
+            const submitButton = document.querySelector('button[type="submit"]');
+            if (submitButton && !submitButton.disabled) {
+                submitButton.click();
             }
         }
     });
@@ -394,24 +370,11 @@ document.addEventListener('livewire:load', function () {
     window.livewire.on('session-changed', function (data) {
         console.log('Session changée:', data);
     });
-
-    // Animation de succès pour la liste des étudiants
-    window.livewire.on('manchette-saved-success', function() {
-        // Effet visuel de succès
-        const studentList = document.querySelector('.space-y-2.overflow-y-auto');
-        if (studentList) {
-            studentList.style.transform = 'scale(0.98)';
-            studentList.style.transition = 'transform 0.2s ease-in-out';
-            setTimeout(() => {
-                studentList.style.transform = 'scale(1)';
-            }, 200);
-        }
-    });
 });
 
-// Support pour Livewire v3 si nécessaire
+// Support pour Livewire v3
 document.addEventListener('livewire:initialized', function () {
-    // Mêmes événements pour Livewire v3
+    // Focus automatique
     Livewire.on('focus-search-field', function () {
         setTimeout(function() {
             const searchField = document.getElementById('searchQuery');
@@ -422,6 +385,7 @@ document.addEventListener('livewire:initialized', function () {
         }, 200);
     });
 
+    // Focus après sélection
     Livewire.on('etudiant-selected-quick', function () {
         setTimeout(function() {
             const submitButton = document.querySelector('button[type="submit"]');
@@ -429,32 +393,6 @@ document.addEventListener('livewire:initialized', function () {
                 submitButton.focus();
             }
         }, 100);
-    });
-
-    Livewire.on('confirm-close-modal', function (data) {
-        if (confirm(data[0].message)) {
-            // Utiliser la nouvelle méthode Livewire v3
-            Livewire.dispatch('forceCloseModal');
-        }
-    });
-});
-
-// Empêcher tous les refresh de page non désirés
-document.addEventListener('DOMContentLoaded', function() {
-    // Intercepter tous les clics sur les boutons wire:click
-    document.addEventListener('click', function(e) {
-        const element = e.target.closest('[wire\\:click]');
-        if (element && !element.closest('form')) {
-            e.preventDefault();
-        }
-    });
-
-    // Empêcher la soumission accidentelle de formulaires
-    document.addEventListener('submit', function(e) {
-        const form = e.target;
-        if (form.hasAttribute('wire:submit.prevent')) {
-            e.preventDefault();
-        }
     });
 });
 </script>

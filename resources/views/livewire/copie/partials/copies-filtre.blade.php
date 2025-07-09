@@ -1,4 +1,4 @@
-<!-- Barre de filtres et contexte actuel - Design amélioré -->
+<!-- Barre de filtres et contexte actuel - Design amélioré CORRIGÉ -->
 <div class="mb-6 space-y-4">
     <!-- Filtres actuels / Fil d'Ariane avec badges interactifs -->
     @if($niveau_id || $parcours_id || $salle_id || $ec_id)
@@ -48,7 +48,6 @@
             </div>
             @endif
 
-
             @if($ec_id && $ec_id !== 'all')
             <div class="relative group">
                 <span class="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium transition-all duration-200 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 hover:bg-yellow-200 dark:hover:bg-yellow-800">
@@ -60,7 +59,7 @@
                     @endphp
                     {{ $selectedEc->nom ?? '' }}
                     <button wire:click="clearFilter('ec_id')" class="ml-1 transition-opacity opacity-0 text-yellow-500 group-hover:opacity-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <svg xmlns="http://www.w3.h-3" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                         </svg>
                     </button>
@@ -85,7 +84,7 @@
             @endif
         </div>
 
-        <!-- Barre de progression et statistiques -->
+        <!-- Barre de progression et statistiques CORRIGÉE -->
         @if($ec_id && $ec_id !== 'all' && $totalEtudiantsCount > 0)
         <div class="px-4 py-3 border-t border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -93,20 +92,25 @@
                     <div class="text-xs font-medium text-gray-700 dark:text-gray-300">Progression</div>
                     <div class="flex items-center gap-2">
                         <div class="w-32 h-2 overflow-hidden bg-gray-200 rounded-full dark:bg-gray-600">
+                            @php
+                                // ✅ CORRECTION : Calculer $restantes ici
+                                $progression = $totalEtudiantsCount > 0 ? round(($totalCopiesCount / $totalEtudiantsCount) * 100) : 0;
+                                $restantes = max(0, $totalEtudiantsCount - $totalCopiesCount);
+                            @endphp
                             <div class="h-full rounded-full transition-all duration-500 ease-out
-                                @if(($totalCopiesCount / $totalEtudiantsCount) * 100 >= 80)
+                                @if($progression >= 80)
                                     bg-green-500 dark:bg-green-400
-                                @elseif(($totalCopiesCount / $totalEtudiantsCount) * 100 >= 50)
+                                @elseif($progression >= 50)
                                     bg-amber-500 dark:bg-amber-400
                                 @else
                                     bg-red-500 dark:bg-red-400
                                 @endif"
-                                style="width: {{ $totalEtudiantsCount > 0 ? round(($totalCopiesCount / $totalEtudiantsCount) * 100) : 0 }}%">
+                                style="width: {{ $progression }}%">
                             </div>
                         </div>
                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">
                             {{ $totalCopiesCount }}/{{ $totalEtudiantsCount }}
-                            ({{ $totalEtudiantsCount > 0 ? round(($totalCopiesCount / $totalEtudiantsCount) * 100) : 0 }}%)
+                            ({{ $progression }}%)
                         </span>
                         @if($restantes > 0)
                             <span class="px-2 py-1 text-xs font-medium text-yellow-800 bg-yellow-100 rounded-full dark:bg-yellow-900 dark:text-yellow-200">
@@ -131,7 +135,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-red-500" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
                         </svg>
-                        <span>{{ $totalEtudiantsCount - $totalCopiesCount }} en attente</span>
+                        <span>{{ $restantes }} en attente</span>
                     </div>
                     <div class="flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
@@ -228,7 +232,7 @@
                     @endif
                 </div>
 
-                <!-- Matière/EC avec indicateur simple -->
+                <!-- Matière/EC avec logique de présence intelligente -->
                 <div class="col-span-6 sm:col-span-2 transition-all min-w-xl duration-300 transform hover:scale-[1.02]">
                     <div class="relative mb-5 last:mb-0">
                         <label for="ec_id" class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -247,16 +251,70 @@
                                 wire:model.live="ec_id"
                                 class="block w-full py-2 pl-3 pr-10 text-base transition-colors duration-200 border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 {{ count($ecs) ? '' : 'disabled' }}>
+
                                 <option value="">Sélectionner une matière</option>
-                                <option value="all">Toutes les matières</option>
-                                @foreach($ecs->sortByDesc('has_copies') as $ec)
-                                    <option value="{{ $ec->id }}" class="{{ $ec->has_copies ? 'text-green-600' : 'text-red-600' }}">
-                                        {{ $ec->has_copies ? '✅' : '❌' }} {{ $ec->nom }}
-                                        @if(isset($ec->copies_count))
-                                            ({{ $ec->copies_count }}/{{ $totalEtudiantsCount ?? '?' }})
-                                        @endif
-                                    </option>
-                                @endforeach
+
+                                @if(count($ecs) > 1)
+                                    <option value="all">Toutes les matières ({{ count($ecs) }})</option>
+                                @endif
+
+                                @if(count($ecs) > 0)
+                                    @foreach($ecs as $ec)
+                                        @php
+                                            $copiesCount = $ec->copies_count ?? 0;
+                                            
+                                            // Récupérer les données de présence spécifiques à cette matière
+                                            $presenceStatsMatiere = $this->getPresenceStatsParMatiere($ec->id);
+                                            $etudiantsPresentsMatiere = $presenceStatsMatiere['presents'] ?? 0;
+                                            $hasPresenceDataMatiere = $presenceStatsMatiere !== null;
+                                            
+                                            $progressionColor = '';
+                                            $statusIcon = '';
+                                            $affichageCompteur = '';
+                                            
+                                            if ($hasPresenceDataMatiere && $etudiantsPresentsMatiere > 0) {
+                                                // Calcul basé sur les données SPÉCIFIQUES à cette matière
+                                                $pourcentage = round(($copiesCount / $etudiantsPresentsMatiere) * 100);
+                                                $affichageCompteur = "({$copiesCount}/{$etudiantsPresentsMatiere} - {$pourcentage}%)";
+                                                
+                                                if ($pourcentage >= 100) {
+                                                    $progressionColor = 'text-green-600';
+                                                    $statusIcon = '✅';
+                                                } elseif ($pourcentage >= 75) {
+                                                    $progressionColor = 'text-blue-600';
+                                                    $statusIcon = '🔵';
+                                                } elseif ($pourcentage >= 50) {
+                                                    $progressionColor = 'text-yellow-600';
+                                                    $statusIcon = '🟡';
+                                                } elseif ($pourcentage > 0) {
+                                                    $progressionColor = 'text-orange-600';
+                                                    $statusIcon = '🟠';
+                                                } else {
+                                                    $progressionColor = 'text-red-600';
+                                                    $statusIcon = '❌';
+                                                }
+                                            } else {
+                                                // Pas de données de présence pour cette matière spécifique
+                                                $progressionColor = 'text-gray-500';
+                                                $statusIcon = '⚫';
+                                                if ($copiesCount > 0) {
+                                                    $affichageCompteur = "({$copiesCount}/? - Pas de présence)";
+                                                } else {
+                                                    $affichageCompteur = "(0/? - Pas de présence)";
+                                                }
+                                            }
+                                        @endphp
+                                        <option value="{{ $ec->id }}"
+                                                class="{{ $progressionColor }}"
+                                                data-copies="{{ $copiesCount }}"
+                                                data-presents="{{ $etudiantsPresentsMatiere }}"
+                                                data-has-presence="{{ $hasPresenceDataMatiere ? 'true' : 'false' }}">
+                                            {{ $statusIcon }}
+                                            {{ $ec->nom ?? 'Nom indisponible' }}
+                                            {{ $affichageCompteur }}
+                                        </option>
+                                    @endforeach
+                                @endif
                             </select>
                         </div>
                         @if(!count($ecs) && $salle_id)
@@ -264,8 +322,56 @@
                         @endif
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
+
+    <!-- Indicateur de présence (LECTURE SEULE) -->
+@if($ec_id && $ec_id !== 'all' && $session_exam_id)
+    @php
+        $presenceStats = $this->getPresenceStats();
+        $canStartSaisie = $this->canStartCopiesSaisie();
+        $presenceStatus = $this->getPresenceStatusMessage();
+    @endphp
+    
+    <div class="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+        <div class="flex items-center justify-between mb-3">
+            <h4 class="text-sm font-medium text-gray-900 dark:text-white flex items-center">
+                <em class="mr-2 text-blue-600 ni ni-users dark:text-blue-400"></em>
+                Données de présence
+            </h4>
+            
+            @if($presenceStats)
+                <div class="flex items-center space-x-2 text-xs">
+                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded dark:bg-green-900 dark:text-green-200">
+                        ✅ {{ $presenceStats['presents'] }} présent(s)
+                    </span>
+                    <span class="px-2 py-1 bg-red-100 text-red-800 rounded dark:bg-red-900 dark:text-red-200">
+                        ❌ {{ $presenceStats['absents'] }} absent(s)
+                    </span>
+                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded dark:bg-blue-900 dark:text-blue-200">
+                        📊 {{ round($presenceStats['taux_presence']) }}%
+                    </span>
+                </div>
+            @endif
+        </div>
+
+        @if($presenceStatus)
+            <div class="p-3 rounded-lg {{ $presenceStatus['type'] === 'success' ? 'bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-700' : 
+                ($presenceStatus['type'] === 'info' ? 'bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-700' : 
+                'bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700') }}">
+                <div class="flex items-start">
+                    <em class="mr-2 mt-0.5 {{ $presenceStatus['type'] === 'success' ? 'text-green-600 dark:text-green-400' : 
+                        ($presenceStatus['type'] === 'info' ? 'text-blue-600 dark:text-blue-400' : 
+                        'text-yellow-600 dark:text-yellow-400') }} {{ $presenceStatus['icon'] }}"></em>
+                    <div class="text-sm {{ $presenceStatus['type'] === 'success' ? 'text-green-800 dark:text-green-200' : 
+                        ($presenceStatus['type'] === 'info' ? 'text-blue-800 dark:text-blue-200' : 
+                        'text-yellow-800 dark:text-yellow-200') }}">
+                        {{ $presenceStatus['message'] }}
+                    </div>
+                </div>
+            </div>
+        @endif
+    </div>
+@endif
 </div>

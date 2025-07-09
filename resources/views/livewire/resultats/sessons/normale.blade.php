@@ -198,7 +198,7 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                 </div>
             </div>
 
-            {{-- ✅ TABLEAU AMÉLIORÉ avec indicateurs temps réel --}}
+            {{-- ✅ TABLEAU AMÉLIORÉ avec indicateurs temps réel 1e session--}}
             <div class="overflow-x-auto" id="resultats-table">
                 <table class="min-w-full bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-700">
                     <thead class="bg-gray-50 dark:bg-gray-900/20">
@@ -347,15 +347,6 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                             <span class="text-sm font-bold {{ $moyenneClass }}">
                                                 {{ $moyenneDisplay }}
                                             </span>
-                                            <div class="mt-1">
-                                                @if($ueValidee)
-                                                    <span class="px-1 text-xs text-green-500 bg-green-100 rounded dark:bg-green-900/50" title="UE validée">✓</span>
-                                                @elseif($hasNoteZeroInUE)
-                                                    <span class="px-1 text-xs text-red-500 bg-red-100 rounded dark:bg-red-900/50" title="UE éliminée">✗</span>
-                                                @elseif($moyenneDisplay !== '-')
-                                                    <span class="px-1 text-xs text-orange-500 bg-orange-100 rounded dark:bg-orange-900/50" title="UE non validée">✗</span>
-                                                @endif
-                                            </div>
                                         </div>
                                     </td>
                                 @endforeach
@@ -371,7 +362,7 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                     </div>
                                 </td>
                                 {{-- Crédits --}}
-                                <td class="px-4 py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
+                                <td class="px-4 py-4 text-center border-r whitespace-nowrap dark:border-gray-700">
                                     <div class="flex flex-col items-center">
                                         <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
                                             {{ $resultat['credits_valides'] }}
@@ -389,6 +380,7 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                         </div>
                                     </div>
                                 </td>
+                                
                                 {{-- ✅ VERSION SIMPLIFIÉE : Décision avec indicateur jury simple --}}
                                 <td class="px-4 py-3 text-center whitespace-nowrap">
                                     @php
@@ -433,18 +425,6 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                             <div class="flex items-center px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/50 dark:text-blue-300">
                                                 <em class="mr-1 ni ni-shield-check"></em>
                                                 <span class="font-semibold">Délibération</span>
-                                            </div>
-
-                                            {{-- Message spécial pour promotion avec éliminatoire --}}
-                                            @if($decision === 'admis' && $hasNoteEliminatoire)
-                                                <div class="px-2 py-1 text-xs text-center rounded text-amber-700 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300">
-                                                    <strong>Promotion exceptionnelle</strong>
-                                                </div>
-                                            @endif
-                                        @else
-                                            <div class="flex items-center px-2 py-1 text-xs text-gray-500 bg-gray-100 rounded-full dark:bg-gray-700 dark:text-gray-400">
-                                                <em class="mr-1 ni ni-cpu"></em>
-                                                <span>Automatique</span>
                                             </div>
                                         @endif
                                     </div>

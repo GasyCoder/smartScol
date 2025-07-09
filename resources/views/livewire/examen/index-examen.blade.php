@@ -1,983 +1,1117 @@
-<div class="relative">
-    <!-- En-tête fixe -->
-    <div class="sticky top-0 z-10 px-5 py-4 bg-white border-b border-gray-200 shadow-sm dark:bg-gray-900 dark:border-gray-800">
-        <div class="flex items-center justify-between">
-            <!-- Titre principal -->
-            <h5 class="text-xl font-medium text-slate-700 dark:text-white">Gestion des examens</h5>
-
-            <!-- Fil d'Ariane et Boutons de navigation -->
-            <div class="flex items-center space-x-4">
-                <!-- Fil d'Ariane -->
-                <div class="items-center hidden text-sm sm:flex">
-                    <span class="text-slate-600 dark:text-slate-400">
-                        @if($niveauInfo)
-                            <span class="font-medium">{{ $niveauInfo['nom'] }} ({{ $niveauInfo['abr'] }})</span>
-                        @endif
-
-                        @if($parcoursInfo)
-                            <span class="mx-2 text-slate-400">/</span>
-                            <span class="font-medium">{{ $parcoursInfo['nom'] }} ({{ $parcoursInfo['abr'] }})</span>
-                        @endif
-
-                        @if($step === 'examens')
-                            <span class="mx-2 text-slate-400">/</span>
-                            <span class="font-medium text-primary-600 dark:text-primary-400">Examens</span>
-                        @endif
-                    </span>
-                </div>
-
-                <!-- Boutons de navigation -->
-                <div class="flex items-center space-x-2">
-                    <!-- Bouton pour réinitialiser complètement le flux de navigation -->
-                    <button wire:click="resetAll" type="button" class="flex items-center text-sm text-gray-500 hover:text-gray-600 bg-gray-50 dark:bg-gray-900/20 dark:hover:bg-gray-900/30 py-1.5 px-3 rounded-md transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Recommencer
-                    </button>
-
-                    @if($step === 'parcours')
-                    <button wire:click="retourANiveau" type="button" class="flex items-center text-sm text-primary-500 hover:text-primary-600 bg-primary-50 dark:bg-primary-900/20 dark:hover:bg-primary-900/30 py-1.5 px-3 rounded-md transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                        </svg>
-                        Retour au niveau
-                    </button>
-                    @endif
-
-                    @if($step === 'examens')
-                    <button wire:click="retourAParcours" type="button" class="flex items-center text-sm text-primary-500 hover:text-primary-600 bg-primary-50 dark:bg-primary-900/20 dark:hover:bg-primary-900/30 py-1.5 px-3 rounded-md transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                        </svg>
-                        Retour au parcours
-                    </button>
-                    @endif
-                </div>
-            </div>
+<div>
+{{-- Header Navigation avec boutons de retour TOUJOURS VISIBLES --}}
+<div class="mb-6">
+    <div class="flex items-center justify-between">
+        {{-- Fil d'Ariane à gauche --}}
+        <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+            <button wire:click="resetAll" class="text-blue-600 dark:text-blue-400 hover:underline">
+                Accueil
+            </button>
+            @if($step !== 'niveau')
+                <em class="ni ni-bold-right text-xs"></em>
+                <span class="text-gray-900 dark:text-white font-medium">{{ $niveauInfo['nom'] ?? 'Niveau' }}</span>
+            @endif
+            @if($step === 'examens')
+                <em class="ni ni-bold-right text-xs"></em>
+                <span class="text-gray-900 dark:text-white font-medium">{{ $parcoursInfo['nom'] ?? 'Parcours' }}</span>
+            @endif
         </div>
+
+        {{-- Boutons de navigation à droite - TOUJOURS VISIBLES quand on est dans examens --}}
+        @if($step === 'examens')
+        <div class="flex items-center space-x-3">
+            <button wire:click="$set('step', 'parcours')" 
+                    class="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors border border-blue-300 dark:border-blue-600"
+                    title="Changer de parcours">
+                <em class="ni ni-bold-left mr-2"></em>
+                Changer parcours
+            </button>
+            
+            <button wire:click="$set('step', 'niveau')" 
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors border border-gray-300 dark:border-gray-600"
+                    title="Changer de niveau">
+                <em class="ni ni-bold-left mr-2"></em>
+                Changer niveau
+            </button>
+        </div>
+        @endif
+    </div>
+</div>
+
+{{-- Étape 1: Sélection du niveau --}}
+@if($step === 'niveau')
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+    <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Gestion des Examens</h2>
+        <p class="text-gray-600 dark:text-gray-400">Commencez par sélectionner un niveau d'études</p>
     </div>
 
-    <!-- Contenu principal avec padding supérieur pour compenser l'en-tête fixe -->
-    <div class="px-5 pt-6">
-        <!-- Messages de flash -->
-        @if (session()->has('message'))
-            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg dark:bg-green-200 dark:text-green-800">
-                {{ session('message') }}
-            </div>
-        @endif
-
-        @if (session()->has('error'))
-            <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800">
-                {{ session('error') }}
-            </div>
-        @endif
-
-        <!-- Section Niveau - Visible uniquement à l'étape niveau -->
-        @if($step === 'niveau')
-        <div class="[&:not(:last-child)]:pb-7 lg:[&:not(:last-child)]:pb-14">
-            <div id="niveau-section" class="pb-5">
-                <h5 class="mb-2 text-lg font-medium -tracking-snug text-slate-700 dark:text-white leading-tighter">Choisir le niveau d'étude</h5>
-                <p class="mb-5 text-sm leading-6 text-slate-400">
-                    Veuillez sélectionner le niveau d'étude pour lequel vous souhaitez gérer les examens.
-                </p>
-            </div>
-
-            <div class="bg-white border border-gray-300 rounded-lg shadow-sm dark:bg-gray-950 dark:border-gray-900">
-                <div class="p-5">
-                    <div class="flex justify-center">
-                        <div class="w-full max-w-md">
-                            <div class="relative mb-5 last:mb-0">
-                                <label class="inline-block mb-2 text-sm font-medium text-slate-700 dark:text-white" for="niveau-select">
-                                    Niveau d'étude
-                                </label>
-                                <div class="relative">
-                                    <select id="niveau-select" wire:model.live="niveauId" class="js-select block w-full text-sm leading-4.5 pe-10 ps-4 py-1.5 h-10 text-slate-700 dark:text-white placeholder-slate-300 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 outline-none focus:border-primary-500 focus:dark:border-primary-600 focus:outline-offset-0 focus:outline-primary-200 focus:dark:outline-primary-950 disabled:bg-slate-50 disabled:dark:bg-slate-950 disabled:cursor-not-allowed rounded-md transition-all" data-search="true">
-                                        <option value="">Sélectionnez un niveau</option>
-                                        @foreach($niveaux as $niveau)
-                                            <option value="{{ $niveau->id }}">{{ $niveau->nom }} ({{ $niveau->abr }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
+        @forelse($niveaux as $niveau)
+            <button wire:click="$set('niveauId', {{ $niveau->id }})" 
+                    class="group p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center group-hover:bg-blue-700 transition-colors">
+                        <span class="text-lg font-bold text-white">{{ substr($niveau->abr ?: $niveau->nom, 0, 2) }}</span>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-semibold text-gray-900 dark:text-white">{{ $niveau->nom }}</h3>
+                        @if($niveau->abr)
+                            <p class="text-sm text-gray-600 dark:text-gray-400">{{ $niveau->abr }}</p>
+                        @endif
                     </div>
                 </div>
-            </div><!-- card -->
-        </div>
-        @endif
-
-        <!-- Section Parcours - Visible uniquement à l'étape parcours -->
-        @if($step === 'parcours' && $niveauInfo)
-        <div class="[&:not(:last-child)]:pb-7 lg:[&:not(:last-child)]:pb-14">
-            <div id="parcours-section" class="pb-5">
-                <h5 class="mb-2 text-lg font-medium -tracking-snug text-slate-700 dark:text-white leading-tighter">Choisir le parcours</h5>
-                <p class="mb-5 text-sm leading-6 text-slate-400">
-                    Veuillez sélectionner le parcours pour lequel vous souhaitez gérer les examens.
-                </p>
+            </button>
+        @empty
+            <div class="col-span-full text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C20.168 18.477 18.582 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Aucun niveau disponible</h3>
+                <p class="text-gray-600 dark:text-gray-400">Contactez l'administrateur pour configurer les niveaux.</p>
             </div>
+        @endforelse
+    </div>
+</div>
+@endif
 
-            <div class="bg-white border border-gray-300 rounded-lg shadow-sm dark:bg-gray-950 dark:border-gray-900">
-                <div class="p-5">
-                    <div class="flex justify-center">
-                        <div class="w-full max-w-md">
-                            @if(count($parcours) > 0)
-                                <div class="relative mb-5 last:mb-0">
-                                    <label class="inline-block mb-2 text-sm font-medium text-slate-700 dark:text-white" for="parcours-select">
-                                        Parcours disponibles
-                                    </label>
-                                    <div class="relative">
-                                        <select id="parcours-select" wire:model.live="parcoursId" class="js-select block w-full text-sm leading-4.5 pe-10 ps-4 py-1.5 h-10 text-slate-700 dark:text-white placeholder-slate-300 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 outline-none focus:border-primary-500 focus:dark:border-primary-600 focus:outline-offset-0 focus:outline-primary-200 focus:dark:outline-primary-950 disabled:bg-slate-50 disabled:dark:bg-slate-950 disabled:cursor-not-allowed rounded-md transition-all" data-search="true">
-                                            <option value="">Sélectionnez un parcours</option>
-                                            @foreach($parcours as $parcour)
-                                                <option value="{{ $parcour->id }}">{{ $parcour->nom }} ({{ $parcour->abr }})</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                </div>
-                            @else
-                                <div class="p-4 text-center rounded-md text-slate-500 bg-slate-50 dark:bg-gray-900">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 mx-auto mb-2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p>Aucun parcours disponible pour ce niveau d'étude.</p>
-                                </div>
-                            @endif
-                        </div>
+{{-- Étape 2: Sélection du parcours --}}
+@if($step === 'parcours')
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+    <div class="flex items-center justify-between mb-8">
+        <div class="text-center flex-1">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Sélection du Parcours</h2>
+            <p class="text-gray-600 dark:text-gray-400">Niveau: <span class="font-semibold">{{ $niveauInfo['nom'] }}</span></p>
+        </div>
+        
+        {{-- Bouton retour au niveau --}}
+        <button wire:click="$set('step', 'niveau')" 
+                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                title="Retour à la sélection du niveau">
+            <em class="ni ni-bold-left mr-2"></em>
+            Changer de niveau
+        </button>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
+        @forelse($parcours as $parcour)
+            <button wire:click="$set('parcoursId', {{ $parcour->id }})" 
+                    class="group p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-all duration-200">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center group-hover:bg-green-700 transition-colors">
+                        <span class="text-lg font-bold text-white">{{ substr($parcour->abr ?: $parcour->nom, 0, 2) }}</span>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-semibold text-gray-900 dark:text-white">{{ $parcour->nom }}</h3>
+                        @if($parcour->abr)
+                            <p class="text-sm text-gray-600 dark:text-gray-400">{{ $parcour->abr }}</p>
+                        @endif
                     </div>
                 </div>
-            </div><!-- card -->
-        </div>
-        @endif
+            </button>
+        @empty
+            <div class="col-span-full text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Aucun parcours disponible</h3>
+                <p class="text-gray-600 dark:text-gray-400">Aucun parcours configuré pour ce niveau.</p>
+            </div>
+        @endforelse
+    </div>
+</div>
+@endif
 
-        <!-- Section Examens - Visible uniquement à l'étape examens -->
-        @if($step === 'examens' && $niveauInfo && $parcoursInfo)
+{{-- Étape 3: Liste des examens --}}
+@if($step === 'examens')
+{{-- En-tête avec statistiques --}}
+@if(isset($stats))
+<div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-lg p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
         <div>
-            <div class="flex flex-col mb-6 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Examens</h3>
-                    <p class="mt-1 text-sm leading-6 text-slate-400">
-                        Gérez vos examens et matières
-                    </p>
-                </div>
-                <div class="flex flex-wrap gap-2 mt-4 sm:mt-0">
-                    <button wire:click="exportExamens" class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 transition-all duration-200 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 dark:focus:ring-gray-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Exporter
-                    </button>
-                    <a href="{{ route('examens.create', ['niveau' => $niveauInfo['id'], 'parcour' => $parcoursInfo['id']]) }}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-primary-700 dark:hover:bg-primary-800">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Nouveau examen
-                    </a>
-                </div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Examens - {{ $niveauInfo['nom'] }}</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400">{{ $parcoursInfo['nom'] }}</p>
+        </div>
+        
+        <div class="flex space-x-3">
+            @if($hasFilters)
+                <button wire:click="resetFilters" 
+                        class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors">
+                    <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Réinitialiser
+                </button>
+            @endif
+            
+            <a href="{{ route('examens.create', ['niveau' => $niveauInfo['id'], 'parcour' => $parcoursInfo['id']]) }}" 
+               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+                <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Nouvel examen
+            </a>
+        </div>
+    </div>
+    
+    {{-- Statistiques --}}
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $stats['total_examens'] }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Examens</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $stats['total_ecs'] }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Matières</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ $stats['enseignants_uniques'] }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Enseignants</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{ $stats['total_copies'] }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Copies</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ $stats['total_manchettes'] }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Manchettes</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ $stats['examens_complets'] }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Complets</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold {{ $stats['taux_completion'] >= 80 ? 'text-green-600 dark:text-green-400' : ($stats['taux_completion'] >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
+                {{ $stats['taux_completion'] }}%
             </div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">Complétude</div>
+        </div>
+    </div>
+</div>
+@endif
 
-            <!-- Filtres additionnels -->
-            <div class="p-5 mb-6 bg-white border border-gray-200 shadow-sm rounded-xl dark:bg-gray-950 dark:border-gray-800">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Filtres de recherche</h3>
-                    <button wire:click="resetFilters" type="button" class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors bg-gray-100 rounded-md hover:text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Réinitialiser
-                    </button>
-                </div>
-
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <!-- Recherche -->
-                    <div>
-                        <label for="search" class="block mb-2 text-sm font-medium text-slate-700 dark:text-white">Recherche</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                            </div>
-                            <input
-                                type="text"
-                                id="search"
-                                wire:model.live="search"
-                                class="block w-full py-2.5 pl-10 pr-4 text-sm transition-colors bg-white border border-gray-300 rounded-lg dark:bg-gray-950 dark:border-gray-700 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:border-primary-600 dark:focus:ring-primary-900"
-                                placeholder="Rechercher un EC ou une matière..."
-                            >
-                        </div>
-                    </div>
-
-                    <!-- Date de début -->
-                    <div>
-                        <label for="date_from" class="block mb-2 text-sm font-medium text-slate-700 dark:text-white">Date de début</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <input
-                                type="date"
-                                wire:model.live="date_from"
-                                id="date_from"
-                                class="block w-full py-2.5 pl-10 pr-4 text-sm transition-colors bg-white border border-gray-300 rounded-lg dark:bg-gray-950 dark:border-gray-700 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:border-primary-600 dark:focus:ring-primary-900"
-                            >
-                        </div>
-                    </div>
-
-                    <!-- Date de fin -->
-                    <div>
-                        <label for="date_to" class="block mb-2 text-sm font-medium text-slate-700 dark:text-white">Date de fin</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <input
-                                type="date"
-                                wire:model.live="date_to"
-                                id="date_to"
-                                class="block w-full py-2.5 pl-10 pr-4 text-sm transition-colors bg-white border border-gray-300 rounded-lg dark:bg-gray-950 dark:border-gray-700 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:border-primary-600 dark:focus:ring-primary-900"
-                            >
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Affichage des filtres actifs -->
-                @if($search || $date_from || $date_to)
-                <div class="flex flex-wrap gap-2 pt-3 mt-4 border-t border-gray-200 dark:border-gray-700">
-                    @if($search)
-                        <div class="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-primary-50 text-primary-700 rounded-full dark:bg-primary-900/30 dark:text-primary-400">
-                            <span>Recherche : {{ $search }}</span>
-                            <button wire:click="$set('search', '')" type="button" class="ml-2 text-primary-500 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    @endif
-
-                    @if($date_from)
-                        <div class="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-full dark:bg-blue-900/30 dark:text-blue-400">
-                            <span>À partir du : {{ \Carbon\Carbon::parse($date_from)->format('d/m/Y') }}</span>
-                            <button wire:click="$set('date_from', '')" type="button" class="ml-2 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    @endif
-
-                    @if($date_to)
-                        <div class="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 rounded-full dark:bg-green-900/30 dark:text-green-400">
-                            <span>Jusqu'au : {{ \Carbon\Carbon::parse($date_to)->format('d/m/Y') }}</span>
-                            <button wire:click="$set('date_to', '')" type="button" class="ml-2 text-green-500 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    @endif
-                </div>
-                @endif
+{{-- Filtres --}}
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {{-- Recherche --}}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recherche</label>
+            <div class="relative">
+                <input type="text" 
+                       wire:model.live.debounce.300ms="search"
+                       placeholder="Nom, abréviation, enseignant..."
+                       class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <svg class="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
             </div>
+        </div>
 
-            <!-- Vue en cartes des examens -->
-            <div class="space-y-8">
-                @forelse($examens as $examen)
-                    <!-- Carte principale de l'examen -->
-                    <div class="overflow-hidden transition-all duration-300 bg-white border border-gray-200 shadow-lg rounded-2xl dark:bg-gray-950 dark:border-gray-800 hover:shadow-xl">
-                        <!-- En-tête de l'examen -->
-                        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 dark:border-gray-700">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-4">
-                                    <div class="flex items-center justify-center w-12 h-12 shadow-lg rounded-xl bg-gradient-to-br from-primary-500 to-primary-600">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">
-                                            Session d'examen
-                                        </h3>
-                                        <div class="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-300">
-                                            <div class="flex items-center">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                                {{ $examen->first_date ? $examen->first_date->format('d/m/Y') : 'Non définie' }}
-                                            </div>
-                                            <div class="flex items-center">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                {{ $examen->duree }} min ({{ floor($examen->duree / 60) }}h {{ $examen->duree % 60 }}min)
-                                            </div>
-                                            @if($examen->ecs->count() > 1)
-                                                <div class="inline-flex items-center px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded-full dark:bg-amber-900/30 dark:text-amber-400">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    Plusieurs sessions
-                                                </div>
-                                            @endif
-                                        </div>
-                                    </div>
+        {{-- Filtre enseignant --}}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enseignant</label>
+            <select wire:model.live="enseignant_filter"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <option value="">Tous les enseignants</option>
+                @foreach($enseignants as $enseignant)
+                    <option value="{{ $enseignant }}">{{ $enseignant }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        {{-- Date début --}}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date début</label>
+            <input type="date" 
+                   wire:model.live="date_from"
+                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+
+        {{-- Date fin --}}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date fin</label>
+            <input type="date" 
+                   wire:model.live="date_to"
+                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+    </div>
+</div>
+
+{{-- Liste des examens --}}
+<div class="space-y-6">
+    @forelse($examens as $examen)
+        @if($examen->ecsGroupedByUE->isEmpty())
+            {{-- Message quand aucune matière ne correspond aux filtres --}}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
+                <svg class="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Aucune matière trouvée</h3>
+                <p class="text-gray-500 dark:text-gray-400">
+                    @if($enseignant_filter)
+                        Aucune matière trouvée pour l'enseignant "{{ $enseignant_filter }}".
+                    @elseif($search)
+                        Aucune matière ne correspond à votre recherche "{{ $search }}".
+                    @else
+                        Aucune matière ne correspond aux critères de filtrage.
+                    @endif
+                </p>
+            </div>
+        @else
+            {{-- Affichage normal des examens avec matières filtrées --}}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                @foreach($examen->ecsGroupedByUE as $ueGroup)
+                    {{-- En-tête UE --}}
+                    <div class="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                                    <span class="text-xs font-bold text-white">{{ substr($ueGroup['ue_abr'] ?: $ueGroup['ue_nom'], 0, 2) }}</span>
                                 </div>
-
-                                <!-- Actions globales de l'examen -->
-                                <div class="flex items-center space-x-2">
-                                    <a href="{{ route('examens.edit', $examen) }}"
-                                       class="inline-flex items-center px-3 py-2 text-xs font-medium text-blue-700 transition-all duration-200 bg-blue-100 border border-blue-200 rounded-lg hover:bg-blue-200 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/50"
-                                       title="Modifier l'examen global">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                <div>
+                                    <h3 class="font-semibold text-gray-900 dark:text-white">
+                                        {{ $ueGroup['ue_abr'] ? $ueGroup['ue_abr'] . ' - ' : '' }}{{ $ueGroup['ue_nom'] }}
+                                        <span class="text-xs text-gray-500">(Examen #{{ $examen->id }})</span>
+                                    </h3>
+                                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                                        {{ count($ueGroup['ecs']) }} matière(s) | Durée: {{ $examen->duree }}min
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center space-x-3">
+                                @if($enseignant_filter || $search)
+                                    <div class="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
+                                        @if($enseignant_filter)
+                                            Filtré par enseignant
+                                        @elseif($search)
+                                            Résultat de recherche
+                                        @endif
+                                    </div>
+                                @endif
+                                
+                                {{-- Actions de l'examen --}}
+                                <div class="flex space-x-2">
+                                    <a href="{{ route('examens.edit', ['examen' => $examen->id]) }}" 
+                                       class="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded hover:bg-blue-200 transition-colors"
+                                       title="Modifier tout l'examen">
+                                        <svg class="w-3 h-3 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                                         </svg>
-                                        Modifier examen
+                                        Modifier
                                     </a>
-
-                                    <button wire:click="confirmDelete({{ $examen->id }})"
-                                            class="inline-flex items-center px-3 py-2 text-xs font-medium text-red-700 transition-all duration-200 bg-red-100 border border-red-200 rounded-lg hover:bg-red-200 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/50"
-                                            title="Supprimer l'examen">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    <button wire:click="confirmDelete({{ $examen->id }})" 
+                                            class="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                                            title="Supprimer tout l'examen">
+                                        <svg class="w-3 h-3 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                         </svg>
-                                        Supprimer examen
+                                        Supprimer
                                     </button>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Contenu principal : UE et EC -->
-                        <div class="p-6">
-                            @if($examen->ecs->isEmpty())
-                                <div class="flex items-center justify-center py-16">
-                                    <div class="text-center">
-                                        <div class="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full dark:bg-gray-800">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
+                    {{-- Liste des ECs --}}
+                    <div class="p-6">
+                        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            @foreach($ueGroup['ecs'] as $ec)
+                                @php
+                                    $shouldShow = true;
+                                    
+                                    // Si filtre enseignant actif, vérifier que l'EC appartient à cet enseignant
+                                    if(!empty($enseignant_filter) && $ec->enseignant !== $enseignant_filter) {
+                                        $shouldShow = false;
+                                    }
+                                    
+                                    // Si recherche active, vérifier que l'EC correspond à la recherche
+                                    if(!empty($search) && $shouldShow) {
+                                        $searchTerm = strtolower(trim($search));
+                                        $nomMatch = str_contains(strtolower($ec->nom), $searchTerm);
+                                        $abrMatch = str_contains(strtolower($ec->abr ?? ''), $searchTerm);
+                                        $ensMatch = str_contains(strtolower($ec->enseignant ?? ''), $searchTerm);
+                                        
+                                        if(!($nomMatch || $abrMatch || $ensMatch)) {
+                                            $shouldShow = false;
+                                        }
+                                    }
+                                @endphp
+
+                                @if($shouldShow)
+                                    @php
+                                        $dateStr = $ec->pivot->date_specifique 
+                                            ? \Carbon\Carbon::parse($ec->pivot->date_specifique)->format('d/m/Y') 
+                                            : 'Non définie';
+                                        $timeStr = $ec->pivot->heure_specifique 
+                                            ? \Carbon\Carbon::parse($ec->pivot->heure_specifique)->format('H:i') 
+                                            : '--:--';
+                                        $salle = $ec->pivot->salle_id 
+                                            ? App\Models\Salle::find($ec->pivot->salle_id) 
+                                            : null;
+
+                                        $copiesStats = $examen->copiesStatusByEc[$ec->id] ?? ['saisies' => 0, 'total' => 0];
+                                        $manchettesStats = $examen->manchettesStatusByEc[$ec->id] ?? ['saisies' => 0, 'total' => 0];
+                                        $copiesPercent = $copiesStats['total'] > 0 ? round(($copiesStats['saisies'] / $copiesStats['total']) * 100) : 0;
+                                        $manchettesPercent = $manchettesStats['total'] > 0 ? round(($manchettesStats['saisies'] / $manchettesStats['total']) * 100) : 0;
+                                    @endphp
+
+                                    <div class="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 relative
+                                        @if($enseignant_filter && $ec->enseignant === $enseignant_filter)
+                                            ring-2 ring-blue-500 ring-opacity-50
+                                        @endif
+                                    ">
+                                        {{-- Badge de statut --}}
+                                        <div class="absolute top-3 right-3">
+                                            @if($ec->pivot->code_base)
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                                                    {{ $ec->pivot->code_base }}
+                                                </span>
+                                            @elseif($copiesStats['saisies'] == $copiesStats['total'] && $copiesStats['total'] > 0)
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                                                    Complet
+                                                </span>
+                                            @elseif($copiesStats['saisies'] > 0)
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
+                                                    En cours
+                                                </span>
+                                            @endif
                                         </div>
-                                        <h3 class="mb-2 text-lg font-medium text-gray-900 dark:text-white">Aucun EC associé</h3>
-                                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                                            Aucune matière n'est associée à cet examen.
-                                        </p>
+
+                                        <div class="pr-16">
+                                            {{-- Titre EC --}}
+                                            <h4 class="font-semibold text-gray-900 dark:text-white mb-3">
+                                                {{ $ec->abr ? $ec->abr . ' - ' : '' }}{{ $ec->nom }}
+                                            </h4>
+
+                                            {{-- Informations de planning --}}
+                                            <div class="space-y-2 mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                                <div class="flex items-center">
+                                                    <svg class="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                                    </svg>
+                                                    <span>{{ $dateStr }}</span>
+                                                </div>
+                                                <div class="flex items-center">
+                                                    <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                    </svg>
+                                                    <span>{{ $timeStr }}</span>
+                                                </div>
+                                                @if($salle)
+                                                <div class="flex items-center">
+                                                    <em class="ni ni-building mr-2 text-purple-500"></em>
+                                                    <span>{{ $salle->nom }}</span>
+                                                </div>
+                                                @endif
+                                                <div class="flex items-center
+                                                    @if($enseignant_filter && $ec->enseignant === $enseignant_filter)
+                                                        text-blue-600 dark:text-blue-400 font-medium
+                                                    @endif
+                                                ">
+                                                    <em class="ni ni-single-02 mr-2 text-indigo-500"></em>
+                                                    <span>{{ $ec->enseignant ?: 'Non assigné' }}</span>
+                                                    @if($enseignant_filter && $ec->enseignant === $enseignant_filter)
+                                                        <em class="ni ni-check-bold ml-2 text-blue-500"></em>
+                                                    @endif
+                                                </div>
+                                            </div>
+
+                                            {{-- Barres de progression --}}
+                                            <div class="space-y-3 mb-4">
+                                                {{-- Copies --}}
+                                                <div>
+                                                    <div class="flex justify-between text-xs mb-1">
+                                                        <span class="text-gray-600 dark:text-gray-400">Copies</span>
+                                                        <span class="font-medium">{{ $copiesStats['saisies'] }}/{{ $copiesStats['total'] }}</span>
+                                                    </div>
+                                                    <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                                                        <div class="h-2 rounded-full {{ $copiesPercent >= 100 ? 'bg-green-500' : ($copiesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}" 
+                                                             style="width: {{ $copiesPercent }}%"></div>
+                                                    </div>
+                                                </div>
+
+                                                {{-- Manchettes --}}
+                                                <div>
+                                                    <div class="flex justify-between text-xs mb-1">
+                                                        <span class="text-gray-600 dark:text-gray-400">Manchettes</span>
+                                                        <span class="font-medium">{{ $manchettesStats['saisies'] }}/{{ $manchettesStats['total'] }}</span>
+                                                    </div>
+                                                    <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                                                        <div class="h-2 rounded-full {{ $manchettesPercent >= 100 ? 'bg-green-500' : ($manchettesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}" 
+                                                             style="width: {{ $manchettesPercent }}%"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Actions EC individuelles --}}
+                                            <div class="flex space-x-2">
+                                                <button wire:click="editEC({{ $examen->id }}, {{ $ec->id }})" 
+                                                        class="flex-1 px-3 py-2 text-xs font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors">
+                                                    <em class="ni ni-settings mr-1"></em>
+                                                    Modifier
+                                                </button>
+                                                <button wire:click="confirmDeleteEC({{ $examen->id }}, {{ $ec->id }})" 
+                                                        class="flex-1 px-3 py-2 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 transition-colors">
+                                                    <em class="ni ni-fat-remove mr-1"></em>
+                                                    Supprimer
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            @else
-                                <div class="space-y-6">
-                                    @foreach($examen->ecsGroupedByUE as $ueGroup)
-                                        <!-- Carte UE -->
-                                        <div class="border border-gray-200 rounded-xl dark:border-gray-700 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/50 dark:to-gray-900/50">
-                                            <!-- En-tête UE -->
-                                            <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-t-xl">
-                                                <div class="flex items-center justify-between">
-                                                    <div class="flex items-center space-x-3">
-                                                        <div class="flex items-center justify-center w-10 h-10 rounded-lg shadow-lg bg-gradient-to-br from-indigo-500 to-purple-600">
-                                                            <span class="text-sm font-bold text-white">{{ substr($ueGroup['ue_abr'] ?: $ueGroup['ue_nom'], 0, 2) }}</span>
-                                                        </div>
-                                                        <div>
-                                                            <h4 class="text-lg font-bold text-gray-900 dark:text-white">
-                                                                {{ $ueGroup['ue_abr'] ? $ueGroup['ue_abr'] . ' - ' : '' }}{{ $ueGroup['ue_nom'] }}
-                                                            </h4>
-                                                            <p class="text-sm text-gray-600 dark:text-gray-300">
-                                                                {{ count($ueGroup['ecs']) }} matière(s)
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Actions UE -->
-                                                    <div class="flex items-center space-x-2">
-                                                        <button class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-100 rounded-lg hover:bg-indigo-200 transition-all duration-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
-                                                                title="Modifier cette UE">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                            </svg>
-                                                            Modifier UE
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Liste des EC de cette UE -->
-                                            <div class="p-5">
-                                                <div class="grid gap-4 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-                                                    @foreach($ueGroup['ecs'] as $ec)
-                                                        @php
-                                                            $dateStr = $ec->pivot->date_specifique
-                                                                ? \Carbon\Carbon::parse($ec->pivot->date_specifique)->format('d/m/Y')
-                                                                : 'Non définie';
-                                                            $timeStr = $ec->pivot->heure_specifique
-                                                                ? \Carbon\Carbon::parse($ec->pivot->heure_specifique)->format('H:i')
-                                                                : '--:--';
-                                                            $salle = $ec->pivot->salle_id
-                                                                ? App\Models\Salle::find($ec->pivot->salle_id)
-                                                                : null;
-
-                                                            // Statistiques des copies et manchettes
-                                                            $copiesStats = $examen->copiesStatusByEc[$ec->id] ?? ['saisies' => 0, 'total' => 0];
-                                                            $manchettesStats = $examen->manchettesStatusByEc[$ec->id] ?? ['saisies' => 0, 'total' => 0];
-
-                                                            // Calcul du pourcentage de completion
-                                                            $copiesPercent = $copiesStats['total'] > 0 ? round(($copiesStats['saisies'] / $copiesStats['total']) * 100) : 0;
-                                                            $manchettesPercent = $manchettesStats['total'] > 0 ? round(($manchettesStats['saisies'] / $manchettesStats['total']) * 100) : 0;
-                                                        @endphp
-
-                                                        <!-- Carte EC -->
-                                                        <div class="relative p-4 transition-all duration-300 bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-900 dark:border-gray-700 hover:shadow-md group">
-                                                            <!-- Badge de statut en haut à droite -->
-                                                            <div class="absolute top-3 right-3">
-                                                                @if($copiesStats['saisies'] == $copiesStats['total'] && $copiesStats['total'] > 0)
-                                                                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full dark:bg-green-900/30 dark:text-green-300">
-                                                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                                                                        </svg>
-                                                                        Complet
-                                                                    </span>
-                                                                @elseif($copiesStats['saisies'] > 0)
-                                                                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-yellow-800 bg-yellow-100 rounded-full dark:bg-yellow-900/30 dark:text-yellow-300">
-                                                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                                                                        </svg>
-                                                                        En cours
-                                                                    </span>
-                                                                @else
-                                                                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full dark:bg-gray-800 dark:text-gray-400">
-                                                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z" clip-rule="evenodd"></path>
-                                                                        </svg>
-                                                                        À faire
-                                                                    </span>
-                                                                @endif
-                                                            </div>
-
-                                                            <!-- Contenu principal de l'EC -->
-                                                            <div class="pr-16"> <!-- Padding à droite pour éviter le badge -->
-                                                                <div class="mb-3">
-                                                                    <h5 class="text-base font-bold text-gray-900 transition-colors dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
-                                                                        {{ $ec->abr ? $ec->abr . ' - ' : '' }}{{ $ec->nom }}
-                                                                    </h5>
-                                                                </div>
-
-                                                                <!-- Informations de planification -->
-                                                                <div class="mb-4 space-y-2">
-                                                                    <div class="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                                        </svg>
-                                                                        <span class="font-medium">{{ $dateStr }}</span>
-                                                                    </div>
-                                                                    <div class="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                        </svg>
-                                                                        <span class="font-medium">{{ $timeStr }}</span>
-                                                                    </div>
-                                                                    @if($salle)
-                                                                        <div class="flex items-center text-sm text-gray-600 dark:text-gray-300">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                                                            </svg>
-                                                                            <span class="px-2 py-1 text-xs font-medium text-purple-800 bg-purple-100 rounded-md dark:bg-purple-900/30 dark:text-purple-300">{{ $salle->nom }}</span>
-                                                                        </div>
-                                                                    @endif
-                                                                </div>
-
-                                                                <!-- Statistiques avec barres de progression -->
-                                                                <div class="mb-4 space-y-3">
-                                                                    <!-- Copies -->
-                                                                    <div>
-                                                                        <div class="flex items-center justify-between mb-1">
-                                                                            <span class="flex items-center text-xs font-medium text-gray-700 dark:text-gray-300">
-                                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mr-1.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                                                </svg>
-                                                                                Copies
-                                                                            </span>
-                                                                            <span class="text-xs font-bold text-gray-900 dark:text-white">{{ $copiesStats['saisies'] }}/{{ $copiesStats['total'] }}</span>
-                                                                        </div>
-                                                                        <div class="w-full h-2 bg-gray-200 rounded-full dark:bg-gray-700">
-                                                                            <div class="h-2 rounded-full transition-all duration-500 {{ $copiesPercent >= 100 ? 'bg-green-500' : ($copiesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}"
-                                                                                 style="width: {{ $copiesPercent }}%"></div>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <!-- Manchettes -->
-                                                                    <div>
-                                                                        <div class="flex items-center justify-between mb-1">
-                                                                            <span class="flex items-center text-xs font-medium text-gray-700 dark:text-gray-300">
-                                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mr-1.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                                                                                </svg>
-                                                                                Manchettes
-                                                                            </span>
-                                                                            <span class="text-xs font-bold text-gray-900 dark:text-white">{{ $manchettesStats['saisies'] }}/{{ $manchettesStats['total'] }}</span>
-                                                                        </div>
-                                                                        <div class="w-full h-2 bg-gray-200 rounded-full dark:bg-gray-700">
-                                                                            <div class="h-2 rounded-full transition-all duration-500 {{ $manchettesPercent >= 100 ? 'bg-green-500' : ($manchettesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}"
-                                                                                 style="width: {{ $manchettesPercent }}%"></div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                <!-- Actions EC -->
-                                                                <div class="flex items-center space-x-2">
-                                                                    <button class="inline-flex items-center justify-center flex-1 px-3 py-2 text-xs font-medium text-blue-700 transition-all duration-200 bg-blue-100 border border-blue-200 rounded-lg hover:bg-blue-200 hover:text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/50"
-                                                                            title="Modifier cet EC">
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                                        </svg>
-                                                                        Modifier
-                                                                    </button>
-
-                                                                    <button class="inline-flex items-center justify-center flex-1 px-3 py-2 text-xs font-medium text-red-700 transition-all duration-200 bg-red-100 border border-red-200 rounded-lg hover:bg-red-200 hover:text-red-800 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/50"
-                                                                            title="Supprimer cet EC">
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                        </svg>
-                                                                        Supprimer
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    @endforeach
-                                                </div>
-                                            </div>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            @endif
+                                @endif
+                            @endforeach
                         </div>
-                    </div>
-                @empty
-                    <!-- État vide amélioré -->
-                    <div class="flex items-center justify-center py-24">
-                        <div class="max-w-md mx-auto text-center">
-                            <div class="flex items-center justify-center w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
+                        
+                        {{-- Si aucune EC visible dans cette UE après filtrage --}}
+                        @php
+                            $visibleEcs = 0;
+                            foreach($ueGroup['ecs'] as $ec) {
+                                $shouldShow = true;
+                                if(!empty($enseignant_filter) && $ec->enseignant !== $enseignant_filter) {
+                                    $shouldShow = false;
+                                }
+                                if(!empty($search) && $shouldShow) {
+                                    $searchTerm = strtolower(trim($search));
+                                    $nomMatch = str_contains(strtolower($ec->nom), $searchTerm);
+                                    $abrMatch = str_contains(strtolower($ec->abr ?? ''), $searchTerm);
+                                    $ensMatch = str_contains(strtolower($ec->enseignant ?? ''), $searchTerm);
+                                    if(!($nomMatch || $abrMatch || $ensMatch)) {
+                                        $shouldShow = false;
+                                    }
+                                }
+                                if($shouldShow) $visibleEcs++;
+                            }
+                        @endphp
+                        
+                        @if($visibleEcs === 0)
+                            <div class="text-center py-8">
+                                <p class="text-gray-500 dark:text-gray-400">Aucune matière visible dans cette UE avec les filtres appliqués</p>
                             </div>
-                            <h3 class="mb-4 text-2xl font-bold text-gray-900 dark:text-white">Aucun examen trouvé</h3>
-                            <p class="mb-8 text-lg text-gray-500 dark:text-gray-400">
-                                Commencez par créer votre premier examen pour ce parcours.
-                            </p>
-                            <a href="{{ route('examens.create', ['niveau' => $niveauInfo['id'], 'parcour' => $parcoursInfo['id']]) }}"
-                               class="inline-flex items-center px-6 py-3 text-base font-medium text-white transition-all duration-200 transform border border-transparent shadow-lg rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 hover:shadow-xl hover:scale-105">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                                </svg>
-                                Créer le premier examen
-                            </a>
-                        </div>
+                        @endif
                     </div>
-                @endforelse
+                @endforeach
             </div>
+        @endif
+    @empty
+        {{-- État vide --}}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+            <em class="ni ni-archive-2 text-6xl text-gray-400 mb-6 block"></em>
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Aucun examen trouvé</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-8">Commencez par créer votre premier examen pour ce parcours.</p>
+            <a href="{{ route('examens.create', ['niveau' => $niveauInfo['id'], 'parcour' => $parcoursInfo['id']]) }}" 
+               class="inline-flex items-center px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+                <em class="ni ni-fat-add mr-2"></em>
+                Créer le premier examen
+            </a>
+        </div>
+    @endforelse
+</div>
 
-            <!-- Pagination améliorée -->
-            @if($examens->hasPages())
-            <div class="px-6 py-4 mt-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:bg-gray-950 dark:border-gray-800">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                        <span>Affichage de {{ $examens->firstItem() ?? 0 }} à {{ $examens->lastItem() ?? 0 }} sur {{ $examens->total() }} résultats</span>
-                    </div>
-                    <div>
-                        {{ $examens->links() }}
-                    </div>
-                </div>
-            </div>
+{{-- Pagination --}}
+@if($examens->hasPages())
+<div class="mt-6">
+    {{ $examens->links() }}
+</div>
+@endif
+
+@endif
+
+{{-- Modal d'édition EC --}}
+@if($showEditECModal)
+<div class="fixed inset-0 bg-gray-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <div class="mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                <em class="ni ni-settings mr-2 text-blue-500"></em>
+                Modifier la matière
+            </h3>
+            @if($editingEC)
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {{ $editingEC->abr ? $editingEC->abr . ' - ' : '' }}{{ $editingEC->nom }}
+                </p>
             @endif
         </div>
-        @endif
+
+        <div class="space-y-4">
+            {{-- Date --}}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <em class="ni ni-calendar-grid-58 mr-1"></em>
+                    Date *
+                </label>
+                <input type="date" 
+                       wire:model="editingECData.date_specifique"
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                @error('editingECData.date_specifique')
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
+            </div>
+
+            {{-- Heure --}}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <em class="ni ni-time-alarm mr-1"></em>
+                    Heure *
+                </label>
+                <input type="time" 
+                       wire:model="editingECData.heure_specifique"
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                @error('editingECData.heure_specifique')
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
+            </div>
+
+            {{-- Salle --}}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <em class="ni ni-building mr-1"></em>
+                    Salle
+                </label>
+                <select wire:model="editingECData.salle_id"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Aucune salle</option>
+                    @foreach($salles as $salle)
+                        <option value="{{ $salle->id }}">{{ $salle->nom }}</option>
+                    @endforeach
+                </select>
+                @error('editingECData.salle_id')
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
+            </div>
+
+            {{-- Code --}}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <em class="ni ni-tag mr-1"></em>
+                    Code
+                </label>
+                <input type="text" 
+                       wire:model="editingECData.code_base"
+                       maxlength="10"
+                       placeholder="Ex: TA, TB..."
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                @error('editingECData.code_base')
+                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+                @enderror
+            </div>
+        </div>
+
+        <div class="flex space-x-3 mt-6">
+            <button wire:click="closeEditECModal" 
+                    class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                <em class="ni ni-bold-left mr-1"></em>
+                Annuler
+            </button>
+            <button wire:click="saveEC" 
+                    class="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+                <em class="ni ni-check-bold mr-1"></em>
+                Enregistrer
+            </button>
+        </div>
     </div>
+</div>
+@endif
 
-    <!-- Modal de confirmation de suppression amélioré -->
-    @if($showDeleteModal)
-    <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-gray-900/50 backdrop-blur-sm">
-        <div class="w-full max-w-md overflow-hidden transition-all transform bg-white shadow-2xl rounded-2xl dark:bg-gray-800">
-            <div class="p-6">
-                <!-- Icône d'alerte -->
-                <div class="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full dark:bg-red-900/30">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                </div>
-
-                <h3 class="mb-3 text-xl font-bold text-center text-gray-900 dark:text-white">
-                    Confirmer la suppression
-                </h3>
-                <p class="mb-6 text-sm text-center text-gray-600 dark:text-gray-300">
-                    Êtes-vous sûr de vouloir supprimer cet examen ? Cette action est irréversible et supprimera toutes les données associées (copies, manchettes, résultats).
+{{-- Modal de suppression EC --}}
+@if($showDeleteECModal)
+<div class="fixed inset-0 bg-gray-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <div class="text-center">
+            <div class="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <em class="ni ni-fat-remove text-3xl text-red-600 dark:text-red-400"></em>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Supprimer la matière</h3>
+            @if($ecToDelete)
+                <p class="text-gray-600 dark:text-gray-400 mb-6">
+                    Êtes-vous sûr de vouloir supprimer la matière "<strong>{{ $ecToDelete->nom }}</strong>" de cet examen ?
+                    <br><span class="text-sm text-red-600">Cette action est irréversible.</span>
                 </p>
-
-                <div class="flex space-x-3">
-                    <button wire:click="cancelDelete"
-                            class="flex-1 px-4 py-3 text-sm font-medium text-gray-700 transition-all duration-200 bg-gray-100 border border-gray-300 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
-                        Annuler
-                    </button>
-                    <button wire:click="deleteExamen"
-                            class="flex-1 px-4 py-3 text-sm font-medium text-white transition-all duration-200 transform bg-red-600 border border-transparent rounded-xl hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:bg-red-700 dark:hover:bg-red-800 hover:scale-105">
-                        Supprimer définitivement
-                    </button>
-                </div>
+            @endif
+            <div class="flex space-x-3">
+                <button wire:click="closeDeleteECModal" 
+                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                    <em class="ni ni-bold-left mr-1"></em>
+                    Annuler
+                </button>
+                <button wire:click="deleteEC" 
+                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                    <em class="ni ni-fat-remove mr-1"></em>
+                    Supprimer
+                </button>
             </div>
         </div>
     </div>
-    @endif
+</div>
+@endif
 
-    <!-- Styles CSS additionnels pour les animations -->
-    <style>
-        /* Animation pour les cartes */
-        .group:hover .group-hover\:text-primary-600 {
-            transition: color 0.2s ease-in-out;
-        }
+{{-- Modal suppression examen complet --}}
+@if($showDeleteModal)
+<div class="fixed inset-0 bg-gray-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <div class="text-center">
+            <div class="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <em class="ni ni-fat-remove text-3xl text-red-600 dark:text-red-400"></em>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Supprimer l'examen</h3>
+            @if($examenToDelete)
+                <p class="text-gray-600 dark:text-gray-400 mb-6">
+                    Êtes-vous sûr de vouloir supprimer l'examen "<strong>Examen #{{ $examenToDelete->id }}</strong>" ?
+                    <br>
+                    <span class="text-sm text-red-600">Cette action supprimera définitivement :</span>
+                    <br>
+                    <span class="text-xs text-gray-500">
+                        - Toutes les matières de cet examen<br>
+                        - Les codes d'anonymat générés<br>
+                        - Les plannings associés
+                    </span>
+                    <br><br>
+                    <span class="text-sm font-semibold text-red-600">Cette action est irréversible.</span>
+                </p>
+            @endif
+            <div class="flex space-x-3">
+                <button wire:click="cancelDelete" 
+                        class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                    <em class="ni ni-bold-left mr-1"></em>
+                    Annuler
+                </button>
+                <button wire:click="deleteExamen" 
+                        class="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                    <em class="ni ni-fat-remove mr-1"></em>
+                    Supprimer définitivement
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 
-        /* Animation des barres de progression */
-        .progress-bar {
-            transition: width 0.5s ease-in-out;
-        }
+{{-- Loading overlay --}}
+<div wire:loading.flex class="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
+        <div class="flex items-center space-x-3">
+            <em class="ni ni-curved-next animate-spin text-2xl text-blue-600"></em>
+            <span class="text-gray-900 dark:text-white">Chargement...</span>
+        </div>
+    </div>
+</div>
 
-        /* Effet de survol pour les cartes EC */
-        .group:hover {
-            transform: translateY(-2px);
-        }
+{{-- Styles CSS personnalisés --}}
+@push('styles')
+<style>
+/* Animation pour les cartes d'examen */
+.exam-card {
+    transition: all 0.3s ease;
+}
 
-        /* Animation des boutons */
-        button, a {
-            transition: all 0.2s ease-in-out;
-        }
+.exam-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
 
-        /* Gradient pour les badges de statut */
-        .status-complete {
-            background: linear-gradient(135deg, #10b981, #059669);
-        }
+/* Animation pour les badges de statut */
+.status-badge {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
 
-        .status-progress {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-        }
+.status-badge.complete {
+    animation: none;
+}
 
-        .status-todo {
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-        }
+/* Amélioration des barres de progression */
+.progress-bar {
+    transition: width 0.5s ease-in-out;
+}
 
-        /* Animation pour les modales */
-        .modal-enter {
-            animation: modalEnter 0.3s ease-out;
-        }
+/* Style pour les éléments filtrés/mis en évidence */
+.highlighted-teacher {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 197, 253, 0.1) 100%);
+    border-left: 4px solid #3b82f6;
+}
 
-        @keyframes modalEnter {
-            from {
-                opacity: 0;
-                transform: scale(0.9) translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
+/* Animation d'apparition pour les modals */
+.modal-enter {
+    animation: modalFadeIn 0.3s ease-out;
+}
 
-        /* Responsive cards */
-        @media (max-width: 640px) {
-            .grid-cols-responsive {
-                grid-template-columns: 1fr;
-            }
-        }
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
 
-        @media (min-width: 641px) and (max-width: 1024px) {
-            .grid-cols-responsive {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
+/* Style pour les messages d'état vide */
+.empty-state {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
 
-        @media (min-width: 1025px) {
-            .grid-cols-responsive {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
+.dark .empty-state {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
 
-        /* Amélioration des ombres */
-        .shadow-card {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
+/* Amélioration des boutons d'action */
+.action-button {
+    transition: all 0.2s ease;
+}
 
-        .shadow-card:hover {
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
+.action-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
 
-        /* Indicateurs de progression circulaires */
-        .progress-circle {
-            transition: stroke-dashoffset 0.5s ease-in-out;
-        }
+/* Style pour les indicateurs de filtrage actif */
+.filter-active {
+    position: relative;
+}
 
-        /* Dark mode improvements */
-        .dark .gradient-bg {
-            background: linear-gradient(135deg, rgba(17, 24, 39, 0.8), rgba(31, 41, 55, 0.8));
-        }
+.filter-active::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 2px solid white;
+}
 
-        /* Animation de chargement pour les états */
-        .loading-shimmer {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
+/* Animation de rotation pour le loading */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
 
-        @keyframes shimmer {
-            0% {
-                background-position: -200% 0;
-            }
-            100% {
-                background-position: 200% 0;
-            }
-        }
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
 
-        /* Amélioration des tooltips */
-        .tooltip {
-            position: relative;
-        }
+/* Animations spécifiques pour les examens */
+.exam-item {
+    animation: slideInUp 0.5s ease-out;
+}
 
-        .tooltip::before {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s;
-            z-index: 1000;
-        }
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
-        .tooltip:hover::before {
-            opacity: 1;
-        }
+/* Style pour les tooltips personnalisés */
+.custom-tooltip {
+    position: absolute;
+    z-index: 9999;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: white;
+    background: rgba(0, 0, 0, 0.9);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
 
-        /* Styles pour les états de chargement */
-        .loading-state {
-            opacity: 0.6;
-            pointer-events: none;
-        }
+.custom-tooltip.show {
+    opacity: 1;
+}
 
-        /* Animation pour les notifications */
-        .notification-slide-in {
-            animation: slideInRight 0.3s ease-out;
-        }
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .exam-card {
+        margin-bottom: 1rem;
+    }
+    
+    .grid-responsive {
+        grid-template-columns: 1fr;
+    }
+}
 
-        @keyframes slideInRight {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
+/* Style pour les notifications toast */
+.toast-custom {
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
 
-        /* Styles pour les drag and drop (si nécessaire plus tard) */
-        .draggable {
-            cursor: move;
-        }
+/* Style pour les barres de progression animées */
+.progress-animated {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
 
-        .drag-over {
-            border: 2px dashed #3b82f6;
-            background-color: rgba(59, 130, 246, 0.1);
-        }
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+</style>
+@endpush
 
-        /* Responsive text scaling */
-        @media (max-width: 640px) {
-            .text-responsive-lg {
-                font-size: 1.125rem;
-            }
-            .text-responsive-base {
-                font-size: 0.875rem;
-            }
-            .text-responsive-sm {
-                font-size: 0.75rem;
-            }
-        }
-
-        /* Print styles pour l'export */
-        @media print {
-            .no-print {
-                display: none !important;
-            }
-
-            .print-break {
-                page-break-after: always;
-            }
-
-            .print-avoid-break {
-                page-break-inside: avoid;
-            }
-        }
-    </style>
-
-    <!-- JavaScript pour les interactions avancées -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Animation des barres de progression au chargement
-            function animateProgressBars() {
-                const progressBars = document.querySelectorAll('[style*="width:"]');
-                progressBars.forEach(bar => {
-                    const width = bar.style.width;
-                    bar.style.width = '0%';
-                    setTimeout(() => {
-                        bar.style.width = width;
-                    }, 100);
-                });
-            }
-
-            // Initialiser les animations
-            animateProgressBars();
-
-            // Réanimer lors des mises à jour Livewire
-            document.addEventListener('livewire:update', function() {
-                setTimeout(animateProgressBars, 100);
-            });
-
-            // Gestion des tooltips personnalisés
-            function initTooltips() {
-                const tooltipElements = document.querySelectorAll('[data-tooltip]');
-                tooltipElements.forEach(element => {
-                    element.addEventListener('mouseenter', function() {
-                        const tooltip = document.createElement('div');
-                        tooltip.className = 'absolute z-50 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg pointer-events-none';
-                        tooltip.textContent = this.getAttribute('data-tooltip');
-                        tooltip.id = 'custom-tooltip';
-
-                        document.body.appendChild(tooltip);
-
-                        const rect = this.getBoundingClientRect();
-                        tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
-                        tooltip.style.top = rect.top - tooltip.offsetHeight - 5 + 'px';
-                    });
-
-                    element.addEventListener('mouseleave', function() {
-                        const tooltip = document.getElementById('custom-tooltip');
-                        if (tooltip) tooltip.remove();
-                    });
-                });
-            }
-
-            // Gestion du responsive design avancé
-            function handleResponsive() {
-                const cards = document.querySelectorAll('.grid-cols-responsive');
-                const screenWidth = window.innerWidth;
-
-                cards.forEach(grid => {
-                    if (screenWidth < 641) {
-                        grid.style.gridTemplateColumns = '1fr';
-                    } else if (screenWidth < 1025) {
-                        grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
-                    } else {
-                        grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
-                    }
-                });
-            }
-
-            // Animation au scroll
-            function animateOnScroll() {
-                const observer = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            entry.target.style.opacity = '1';
-                            entry.target.style.transform = 'translateY(0)';
-                        }
-                    });
-                });
-
-                const cards = document.querySelectorAll('.group');
-                cards.forEach(card => {
-                    card.style.opacity = '0';
-                    card.style.transform = 'translateY(20px)';
-                    card.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
-                    observer.observe(card);
-                });
-            }
-
-            // Gestion des états de chargement
-            function handleLoadingStates() {
-                document.addEventListener('livewire:load-start', function() {
-                    const loadingElements = document.querySelectorAll('.loading-target');
-                    loadingElements.forEach(el => el.classList.add('loading-state'));
-                });
-
-                document.addEventListener('livewire:load-end', function() {
-                    const loadingElements = document.querySelectorAll('.loading-target');
-                    loadingElements.forEach(el => el.classList.remove('loading-state'));
-                });
-            }
-
-            // Initialisation
-            initTooltips();
-            handleResponsive();
-            animateOnScroll();
-            handleLoadingStates();
-
-            // Écouter les changements de taille d'écran
-            window.addEventListener('resize', handleResponsive);
-
-            // Réinitialiser lors des mises à jour Livewire
-            document.addEventListener('livewire:update', function() {
-                setTimeout(() => {
-                    initTooltips();
-                    animateOnScroll();
-                }, 100);
-            });
-
-            // Gestion des raccourcis clavier
-            document.addEventListener('keydown', function(e) {
-                // Ctrl + N pour nouveau (si applicable)
-                if (e.ctrlKey && e.key === 'n') {
-                    e.preventDefault();
-                    const newButton = document.querySelector('[href*="create"]');
-                    if (newButton) newButton.click();
+{{-- Scripts JavaScript pour améliorer l'UX --}}
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fermer les modals avec la touche Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            if (window.livewire?.find('{{ $this->id ?? '' }}')) {
+                const component = window.livewire.find('{{ $this->id ?? '' }}');
+                if (component.showEditECModal) {
+                    component.call('closeEditECModal');
                 }
+                if (component.showDeleteECModal) {
+                    component.call('closeDeleteECModal');
+                }
+                if (component.showDeleteModal) {
+                    component.call('cancelDelete');
+                }
+            }
+        }
+    });
 
-                // Échapper pour fermer les modales
-                if (e.key === 'Escape') {
-                    const modal = document.querySelector('.modal-enter');
-                    if (modal) {
-                        const cancelButton = modal.querySelector('[wire\\:click*="cancel"]');
-                        if (cancelButton) cancelButton.click();
-                    }
+    // Auto-focus sur les champs de recherche
+    const searchInput = document.querySelector('input[wire\\:model*="search"]');
+    if (searchInput) {
+        searchInput.addEventListener('focus', function() {
+            this.select();
+        });
+        
+        // Raccourci clavier Ctrl+F pour focus sur recherche
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                searchInput.focus();
+            }
+        });
+    }
+
+    // Amélioration des tooltips personnalisés
+    function createTooltip(element, text) {
+        const tooltip = document.createElement('div');
+        tooltip.className = 'custom-tooltip';
+        tooltip.textContent = text;
+        document.body.appendChild(tooltip);
+        
+        const rect = element.getBoundingClientRect();
+        tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
+        tooltip.style.top = rect.top - tooltip.offsetHeight - 8 + 'px';
+        
+        // Animation d'apparition
+        setTimeout(() => tooltip.classList.add('show'), 10);
+        
+        return tooltip;
+    }
+
+    // Gestion des tooltips pour les boutons avec title
+    const buttonsWithTooltips = document.querySelectorAll('[title]');
+    buttonsWithTooltips.forEach(button => {
+        let tooltip = null;
+        
+        button.addEventListener('mouseenter', function() {
+            const title = this.getAttribute('title');
+            if (title && !tooltip) {
+                tooltip = createTooltip(this, title);
+            }
+        });
+        
+        button.addEventListener('mouseleave', function() {
+            if (tooltip) {
+                tooltip.remove();
+                tooltip = null;
+            }
+        });
+    });
+
+    // Animation des cartes au scroll (Intersection Observer)
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('exam-item');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, observerOptions);
+
+    // Observer tous les éléments d'examen
+    const examItems = document.querySelectorAll('.bg-white.dark\\:bg-gray-800.rounded-lg');
+    examItems.forEach(item => observer.observe(item));
+
+    // Amélioration des barres de progression avec animation
+    const progressBars = document.querySelectorAll('.progress-bar');
+    progressBars.forEach(bar => {
+        const width = bar.style.width;
+        bar.style.width = '0%';
+        setTimeout(() => {
+            bar.style.width = width;
+        }, 300);
+    });
+
+    // Sauvegarde automatique des filtres dans localStorage
+    const filters = ['search', 'enseignant_filter', 'date_from', 'date_to'];
+    filters.forEach(filter => {
+        const input = document.querySelector(`[wire\\:model*="${filter}"]`);
+        if (input) {
+            // Charger la valeur sauvegardée
+            const savedValue = localStorage.getItem(`exam_filter_${filter}`);
+            if (savedValue && !input.value) {
+                input.value = savedValue;
+                input.dispatchEvent(new Event('input'));
+            }
+            
+            // Sauvegarder lors des changements
+            input.addEventListener('input', function() {
+                if (this.value) {
+                    localStorage.setItem(`exam_filter_${filter}`, this.value);
+                } else {
+                    localStorage.removeItem(`exam_filter_${filter}`);
                 }
             });
+        }
+    });
 
-            // Performance: Debounce pour les recherches
-            function debounce(func, wait) {
-                let timeout;
-                return function executedFunction(...args) {
-                    const later = () => {
-                        clearTimeout(timeout);
-                        func(...args);
-                    };
-                    clearTimeout(timeout);
-                    timeout = setTimeout(later, wait);
-                };
+    // Raccourcis clavier avancés
+    document.addEventListener('keydown', function(e) {
+        // Ctrl+R pour réinitialiser les filtres
+        if (e.ctrlKey && e.key === 'r' && window.livewire?.find('{{ $this->id ?? '' }}')) {
+            e.preventDefault();
+            window.livewire.find('{{ $this->id ?? '' }}').call('resetFilters');
+        }
+        
+        // Ctrl+N pour nouvel examen
+        if (e.ctrlKey && e.key === 'n') {
+            e.preventDefault();
+            const newExamButton = document.querySelector('a[href*="examens.create"]');
+            if (newExamButton) {
+                newExamButton.click();
             }
+        }
+        
+        // Échap pour fermer les modals
+        if (e.key === 'Escape') {
+            // Fermer aussi les dropdowns ouverts
+            const openDropdowns = document.querySelectorAll('[x-data] [x-show="true"]');
+            openDropdowns.forEach(dropdown => {
+                dropdown.dispatchEvent(new Event('click'));
+            });
+        }
+    });
 
-            // Appliquer le debounce aux champs de recherche
-            const searchInputs = document.querySelectorAll('input[wire\\:model\\.live*="search"]');
-            searchInputs.forEach(input => {
-                const originalDispatch = input.dispatchEvent;
-                let timeoutId;
+    // Notification de raccourcis clavier
+    function showKeyboardShortcuts() {
+        const shortcuts = [
+            'Ctrl+F: Focus recherche',
+            'Ctrl+R: Réinitialiser filtres',
+            'Ctrl+N: Nouvel examen',
+            'Échap: Fermer modals'
+        ];
+        
+        console.group('🎯 Raccourcis clavier disponibles:');
+        shortcuts.forEach(shortcut => console.log(`• ${shortcut}`));
+        console.groupEnd();
+    }
 
-                input.addEventListener('input', function() {
-                    clearTimeout(timeoutId);
-                    timeoutId = setTimeout(() => {
-                        this.dispatchEvent(new Event('input', { bubbles: true }));
-                    }, 300);
-                });
+    // Afficher les raccourcis en développement
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        setTimeout(showKeyboardShortcuts, 1000);
+    }
+
+    // Amélioration de l'expérience mobile
+    if ('ontouchstart' in window) {
+        // Désactiver le hover sur mobile pour éviter les effets collants
+        const hoverElements = document.querySelectorAll('.hover\\:bg-blue-200, .hover\\:bg-gray-200');
+        hoverElements.forEach(element => {
+            element.addEventListener('touchstart', function() {
+                this.classList.add('active-touch');
+            });
+            
+            element.addEventListener('touchend', function() {
+                setTimeout(() => this.classList.remove('active-touch'), 150);
             });
         });
-    </script>
+    }
+
+    // Performance: Lazy loading pour les images (si ajoutées plus tard)
+    if ('IntersectionObserver' in window) {
+        const imageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    if (img.dataset.src) {
+                        img.src = img.dataset.src;
+                        img.classList.remove('lazy');
+                        imageObserver.unobserve(img);
+                    }
+                }
+            });
+        });
+
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            imageObserver.observe(img);
+        });
+    }
+});
+
+// Fonction utilitaire pour les confirmations
+function confirmDangerousAction(message) {
+    return confirm(message || 'Êtes-vous sûr de vouloir effectuer cette action ?');
+}
+
+// Fonction pour afficher les notifications système
+function showSystemNotification(title, message, type = 'info') {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, {
+            body: message,
+            icon: type === 'success' ? '/icons/success.png' : '/icons/info.png',
+            tag: 'exam-system',
+            requireInteraction: false
+        });
+    }
+}
+
+// Demander la permission pour les notifications
+if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+}
+
+// Fonction pour exporter les données (si implémentée côté serveur)
+function exportData(format) {
+    if (window.livewire?.find('{{ $this->id ?? '' }}')) {
+        window.livewire.find('{{ $this->id ?? '' }}').call('exportExamens', format);
+    }
+}
+
+// Event listener pour les events Livewire
+document.addEventListener('livewire:load', function () {
+    // Réinitialiser les animations après les updates Livewire
+    Livewire.hook('message.processed', (message, component) => {
+        // Re-observer les nouveaux éléments
+        const newExamItems = document.querySelectorAll('.bg-white.dark\\:bg-gray-800.rounded-lg:not(.observed)');
+        newExamItems.forEach(item => {
+            item.classList.add('observed');
+            if (typeof observer !== 'undefined') {
+                observer.observe(item);
+            }
+        });
+    });
+});
+</script>
+@endpush
 </div>

@@ -7,18 +7,22 @@
             <thead class="bg-gray-50 dark:bg-gray-800">
                 <tr>
                     <!-- En-têtes avec tri interactif -->
-                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('code_anonymat_id')">
-                        <div class="flex items-center">
-                            Code Anonymat
-                            @if(isset($sortField) && $sortField === 'code_anonymat_id')
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200" 
+                        wire:click="sortBy('code_anonymat_id')"
+                        title="Trier par code d'anonymat">
+                        <div class="flex items-center justify-between">
+                            <span>Code Anonymat</span>
+                            <div class="flex items-center ml-2">
+                                @if(isset($sortField) && $sortField === 'code_anonymat_id')
                                     @if(isset($sortDirection) && $sortDirection === 'asc')
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        <em class="ni ni-bold-up text-blue-500"></em>
                                     @else
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                        <em class="ni ni-bold-down text-blue-500"></em>
                                     @endif
-                                </svg>
-                            @endif
+                                @else
+                                    <em class="ni ni-sort text-gray-400"></em>
+                                @endif
+                            </div>
                         </div>
                     </th>
                     <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('etudiant_id')">
@@ -176,34 +180,6 @@
         </table>
     </div>
 
-    <!-- Section des étudiants sans manchette -->
-    @if($ec_id && $ec_id !== 'all' && isset($etudiantsSansManchette) && count($etudiantsSansManchette) > 0)
-    <div class="p-4 border-t border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
-        <div class="flex items-center justify-between mb-3">
-            <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Étudiants sans manchette ({{ count($etudiantsSansManchette) }})
-            </h4>
-        </div>
-
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            @foreach($etudiantsSansManchette as $etudiant)
-            <div class="flex justify-between p-2 text-sm transition-colors bg-white border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">
-                <div>
-                    <div class="font-medium text-gray-800 dark:text-white">{{ $etudiant->nom }} {{ $etudiant->prenom }}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ $etudiant->matricule }}</div>
-                </div>
-                @can('manchettes.create')
-                <button
-                    wire:click="openManchetteModalForEtudiant({{ $etudiant->id }})"
-                    class="p-1 transition-colors rounded-md text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/30">
-                    <em class="mr-1 icon ni ni-plus-circle"></em>
-                </button>
-                @endcan
-            </div>
-            @endforeach
-        </div>
-    </div>
-    @endif
 
     <!-- Pagination améliorée -->
     @if(method_exists($manchettes, 'hasPages') && $manchettes->hasPages())

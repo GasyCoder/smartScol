@@ -594,73 +594,38 @@ class ResultatFinal extends Model
     public static function determinerDecisionPremiereSession($etudiantId, $sessionId)
     {
         try {
-            Log::info('🎯 Calcul décision première session', [
-                'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId
-            ]);
-
-            // Récupérer tous les résultats de l'étudiant pour cette session
-            $resultats = self::where('etudiant_id', $etudiantId)
-                ->where('session_exam_id', $sessionId)
-                ->where('statut', self::STATUT_EN_ATTENTE) // ou STATUT_PUBLIE
-                ->with(['ec.ue'])
-                ->get();
-
-            if ($resultats->isEmpty()) {
-                Log::warning('Aucun résultat trouvé pour décision première session', [
-                    'etudiant_id' => $etudiantId,
-                    'session_id' => $sessionId
-                ]);
-                return self::DECISION_RATTRAPAGE;
-            }
-
-            // ✅ UTILISER LE SERVICE DE CALCUL ACADÉMIQUE
             $calculService = new CalculAcademiqueService();
-            $resultatComplet = $calculService->calculerResultatsComplets($etudiantId, $sessionId, true);
-
-            $creditsValides = $resultatComplet['synthese']['credits_valides'];
-            $hasNoteEliminatoire = $resultatComplet['synthese']['a_note_eliminatoire'];
-
-            Log::info('🔍 Analyse décision première session', [
+            
+            // Utiliser votre service qui implémente la logique médecine
+            $resultats = $calculService->calculerResultatsComplets($etudiantId, $sessionId, true);
+            
+            $decision = $resultats['decision']['code'];
+            
+            \Log::info('✅ Décision calculée via CalculAcademiqueService (S1)', [
                 'etudiant_id' => $etudiantId,
-                'credits_valides' => $creditsValides,
-                'has_note_eliminatoire' => $hasNoteEliminatoire,
-                'moyenne_generale' => $resultatComplet['synthese']['moyenne_generale']
+                'session_id' => $sessionId,
+                'decision' => $decision,
+                'credits_valides' => $resultats['synthese']['credits_valides'],
+                'total_credits' => $resultats['synthese']['total_credits'],
+                'moyenne_generale' => $resultats['synthese']['moyenne_generale'],
+                'a_note_eliminatoire' => $resultats['synthese']['a_note_eliminatoire'],
+                'service_utilise' => 'CalculAcademiqueService'
             ]);
-
-            // ✅ LOGIQUE MÉDECINE CORRECTE
-            if ($creditsValides >= 60 && !$hasNoteEliminatoire) {
-                Log::info('✅ Décision: ADMIS (60 crédits sans note éliminatoire)', [
-                    'etudiant_id' => $etudiantId,
-                    'credits' => $creditsValides
-                ]);
-                return self::DECISION_ADMIS;
-            }
-
-            if ($hasNoteEliminatoire) {
-                Log::info('⚠️ Décision: RATTRAPAGE (note éliminatoire)', [
-                    'etudiant_id' => $etudiantId,
-                    'credits' => $creditsValides
-                ]);
-                return self::DECISION_RATTRAPAGE;
-            }
-
-            Log::info('📝 Décision: RATTRAPAGE (crédits insuffisants)', [
-                'etudiant_id' => $etudiantId,
-                'credits' => $creditsValides,
-                'requis' => 60
-            ]);
-            return self::DECISION_RATTRAPAGE;
-
+            
+            return $decision;
+            
         } catch (\Exception $e) {
-            Log::error('Erreur calcul décision première session', [
+            \Log::error('❌ Erreur calcul décision S1 via service', [
                 'etudiant_id' => $etudiantId,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage()
             ]);
-            return self::DECISION_RATTRAPAGE;
+            
+            // Fallback : retourner rattrapage en cas d'erreur
+            return 'rattrapage';
         }
     }
+
 
     /**
      * CORRECTION CRITIQUE : Détermine automatiquement la décision pour session rattrapage
@@ -668,62 +633,111 @@ class ResultatFinal extends Model
     public static function determinerDecisionRattrapage($etudiantId, $sessionId)
     {
         try {
-            Log::info('🎯 Calcul décision rattrapage', [
+            $calculService = new \App\Services\CalculAcademiqueService();
+            
+            // Utiliser votre service qui implémente la logique médecine
+            $resultats = $calculService->calculerResultatsComplets($etudiantId, $sessionId, true);
+            
+            $decision = $resultats['decision']['code'];
+            
+            \Log::info('✅ Décision calculée via CalculAcademiqueService (S2)', [
                 'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId
+                'session_id' => $sessionId,
+                'decision' => $decision,
+                'credits_valides' => $resultats['synthese']['credits_valides'],
+                'total_credits' => $resultats['synthese']['total_credits'],
+                'moyenne_generale' => $resultats['synthese']['moyenne_generale'],
+                'a_note_eliminatoire' => $resultats['synthese']['a_note_eliminatoire'],
+                'service_utilise' => 'CalculAcademiqueService'
             ]);
-
-            // ✅ UTILISER LE SERVICE DE CALCUL ACADÉMIQUE
-            $calculService = new CalculAcademiqueService();
-            $resultatComplet = $calculService->calculerResultatsComplets($etudiantId, $sessionId, true);
-
-            $creditsValides = $resultatComplet['synthese']['credits_valides'];
-            $hasNoteEliminatoire = $resultatComplet['synthese']['a_note_eliminatoire'];
-
-            Log::info('🔍 Analyse décision rattrapage', [
-                'etudiant_id' => $etudiantId,
-                'credits_valides' => $creditsValides,
-                'has_note_eliminatoire' => $hasNoteEliminatoire,
-                'moyenne_generale' => $resultatComplet['synthese']['moyenne_generale']
-            ]);
-
-            // ✅ LOGIQUE RATTRAPAGE
-            if ($hasNoteEliminatoire) {
-                Log::info('🚫 Décision: EXCLUS (note éliminatoire en rattrapage)', [
-                    'etudiant_id' => $etudiantId
-                ]);
-                return self::DECISION_EXCLUS;
-            }
-
-            if ($creditsValides >= 40) {
-                Log::info('✅ Décision: ADMIS (40+ crédits en rattrapage)', [
-                    'etudiant_id' => $etudiantId,
-                    'credits' => $creditsValides
-                ]);
-                return self::DECISION_ADMIS;
-            }
-
-            if ($creditsValides >= 20) {
-                Log::info('🔄 Décision: REDOUBLANT', [
-                    'etudiant_id' => $etudiantId,
-                    'credits' => $creditsValides
-                ]);
-                return self::DECISION_REDOUBLANT;
-            }
-
-            Log::info('🚫 Décision: EXCLUS (crédits insuffisants)', [
-                'etudiant_id' => $etudiantId,
-                'credits' => $creditsValides
-            ]);
-            return self::DECISION_EXCLUS;
-
+            
+            return $decision;
+            
         } catch (\Exception $e) {
-            Log::error('Erreur calcul décision rattrapage', [
+            \Log::error('❌ Erreur calcul décision S2 via service', [
                 'etudiant_id' => $etudiantId,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage()
             ]);
-            return self::DECISION_REDOUBLANT;
+            
+            // Fallback : retourner rattrapage en cas d'erreur
+            return 'rattrapage';
+        }
+    }
+
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Recalcule la décision en utilisant le service complet
+     */
+    public function recalculerDecisionAvecService()
+    {
+        try {
+            $session = $this->sessionExam;
+            if (!$session) {
+                \Log::warning('Session non trouvée pour recalcul décision', [
+                    'resultat_final_id' => $this->id,
+                    'session_exam_id' => $this->session_exam_id
+                ]);
+                return false;
+            }
+
+            // Utiliser le service complet
+            $calculService = new \App\Services\CalculAcademiqueService();
+            $resultats = $calculService->calculerResultatsComplets($this->etudiant_id, $this->session_exam_id, true);
+            
+            $nouvelleDecision = $resultats['decision']['code'];
+
+            // Mettre à jour TOUS les résultats de cet étudiant pour cet examen/session
+            if ($this->decision !== $nouvelleDecision) {
+                $ancienneDecision = $this->decision;
+                
+                $updated = self::where('etudiant_id', $this->etudiant_id)
+                    ->where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $this->session_exam_id)
+                    ->update(['decision' => $nouvelleDecision]);
+
+                \Log::info('✅ Décision recalculée avec service complet', [
+                    'etudiant_id' => $this->etudiant_id,
+                    'examen_id' => $this->examen_id,
+                    'session_id' => $this->session_exam_id,
+                    'ancienne_decision' => $ancienneDecision,
+                    'nouvelle_decision' => $nouvelleDecision,
+                    'resultats_mis_a_jour' => $updated,
+                    'credits_valides' => $resultats['synthese']['credits_valides'],
+                    'total_credits' => $resultats['synthese']['total_credits']
+                ]);
+
+                // Recharger le modèle actuel
+                $this->refresh();
+                return true;
+            }
+
+            return false; // Pas de changement
+
+        } catch (\Exception $e) {
+            \Log::error('💥 Erreur lors du recalcul avec service', [
+                'resultat_final_id' => $this->id,
+                'etudiant_id' => $this->etudiant_id,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Obtient le détail complet des résultats
+     */
+    public function getDetailCompletviaService()
+    {
+        try {
+            $calculService = new \App\Services\CalculAcademiqueService();
+            return $calculService->calculerResultatsComplets($this->etudiant_id, $this->session_exam_id, true);
+        } catch (\Exception $e) {
+            \Log::error('Erreur récupération détail via service', [
+                'resultat_final_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+            return null;
         }
     }
 

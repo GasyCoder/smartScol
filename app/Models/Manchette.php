@@ -18,7 +18,7 @@ class Manchette extends Model
         'etudiant_id',
         'saisie_par',
         'date_saisie',
-        'session_exam_id'
+        'session_exam_id',
     ];
 
     protected $casts = [

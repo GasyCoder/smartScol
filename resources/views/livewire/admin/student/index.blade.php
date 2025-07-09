@@ -52,80 +52,87 @@
 
     <!-- Contenu principal avec padding supérieur pour compenser l'en-tête fixe -->
     <div class="px-5 pt-6">
-        <!-- Section Niveau - Visible uniquement à l'étape niveau -->
+        {{-- Étape 1: Sélection du niveau --}}
         @if($step === 'niveau')
-        <div class="[&:not(:last-child)]:pb-7 lg:[&:not(:last-child)]:pb-14">
-            <div id="niveau-section" class="pb-5">
-                <h5 class="mb-2 text-lg font-medium -tracking-snug text-slate-700 dark:text-white leading-tighter">Choisir le niveau d'étude</h5>
-                <p class="mb-5 text-sm leading-6 text-slate-400">
-                    Veuillez sélectionner le niveau d'étude pour lequel vous souhaitez gérer les étudiants.
-                </p>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Choisir le niveau d'étude</h2>
+                <p class="text-gray-600 dark:text-gray-400">Commencez par sélectionner un niveau d'études</p>
             </div>
 
-            <div class="bg-white border border-gray-300 rounded-lg shadow-sm dark:bg-gray-950 dark:border-gray-900">
-                <div class="p-5">
-                    <div class="flex justify-center">
-                        <div class="w-full max-w-md">
-                            <div class="relative mb-5 last:mb-0">
-                                <label class="inline-block mb-2 text-sm font-medium text-slate-700 dark:text-white" for="niveau-select">
-                                    Niveau d'étude
-                                </label>
-                                <div class="relative">
-                                    <select id="niveau-select" wire:model.live="niveauId" class="js-select block w-full text-sm leading-4.5 pe-10 ps-4 py-1.5 h-10 text-slate-700 dark:text-white placeholder-slate-300 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 outline-none focus:border-primary-500 focus:dark:border-primary-600 focus:outline-offset-0 focus:outline-primary-200 focus:dark:outline-primary-950 disabled:bg-slate-50 disabled:dark:bg-slate-950 disabled:cursor-not-allowed rounded-md transition-all" data-search="true">
-                                        <option value="">Sélectionnez un niveau</option>
-                                        @foreach($niveaux as $niveau)
-                                            <option value="{{ $niveau->id }}">{{ $niveau->nom }} ({{ $niveau->abr }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
+                @forelse($niveaux as $niveau)
+                    <button wire:click="$set('niveauId', {{ $niveau->id }})" 
+                            class="group p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center group-hover:bg-blue-700 transition-colors">
+                                <span class="text-lg font-bold text-white">{{ substr($niveau->abr ?: $niveau->nom, 0, 2) }}</span>
+                            </div>
+                            <div class="text-left">
+                                <h3 class="font-semibold text-gray-900 dark:text-white">{{ $niveau->nom }}</h3>
+                                @if($niveau->abr)
+                                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ $niveau->abr }}</p>
+                                @endif
                             </div>
                         </div>
+                    </button>
+                @empty
+                    <div class="col-span-full text-center py-12">
+                        <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C20.168 18.477 18.582 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                        </svg>
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Aucun niveau disponible</h3>
+                        <p class="text-gray-600 dark:text-gray-400">Contactez l'administrateur pour configurer les niveaux.</p>
                     </div>
-                </div>
-            </div><!-- card -->
+                @endforelse
+            </div>
         </div>
         @endif
 
-        <!-- Section Parcours - Visible uniquement à l'étape parcours -->
-        @if($step === 'parcours' && $niveauInfo)
-        <div class="[&:not(:last-child)]:pb-7 lg:[&:not(:last-child)]:pb-14">
-            <div id="parcours-section" class="pb-5">
-                <h5 class="mb-2 text-lg font-medium -tracking-snug text-slate-700 dark:text-white leading-tighter">Choisir le parcours</h5>
-                <p class="mb-5 text-sm leading-6 text-slate-400">
-                    Veuillez sélectionner le parcours pour lequel vous souhaitez gérer les étudiants.
-                </p>
+        {{-- Étape 2: Sélection du parcours --}}
+        @if($step === 'parcours')
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+            <div class="flex items-center justify-between mb-8">
+                <div class="text-center flex-1">
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Choisir le Parcours</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Niveau: <span class="font-semibold">{{ $niveauInfo['nom'] }}</span></p>
+                </div>
+                
+                {{-- Bouton retour au niveau --}}
+                <button wire:click="$set('step', 'niveau')" 
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                        title="Retour à la sélection du niveau">
+                    <em class="ni ni-bold-left mr-2"></em>
+                    Changer de niveau
+                </button>
             </div>
 
-            <div class="bg-white border border-gray-300 rounded-lg shadow-sm dark:bg-gray-950 dark:border-gray-900">
-                <div class="p-5">
-                    <div class="flex justify-center">
-                        <div class="w-full max-w-md">
-                            @if(count($parcours) > 0)
-                                <div class="relative mb-5 last:mb-0">
-                                    <label class="inline-block mb-2 text-sm font-medium text-slate-700 dark:text-white" for="parcours-select">
-                                        Parcours disponibles
-                                    </label>
-                                    <div class="relative">
-                                        <select id="parcours-select" wire:model.live="parcoursId" class="js-select block w-full text-sm leading-4.5 pe-10 ps-4 py-1.5 h-10 text-slate-700 dark:text-white placeholder-slate-300 bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 outline-none focus:border-primary-500 focus:dark:border-primary-600 focus:outline-offset-0 focus:outline-primary-200 focus:dark:outline-primary-950 disabled:bg-slate-50 disabled:dark:bg-slate-950 disabled:cursor-not-allowed rounded-md transition-all" data-search="true">
-                                            <option value="">Sélectionnez un parcours</option>
-                                            @foreach($parcours as $parcour)
-                                                <option value="{{ $parcour->id }}">{{ $parcour->nom }} ({{ $parcour->abr }})</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                </div>
-                            @else
-                                <div class="p-4 text-center rounded-md text-slate-500 bg-slate-50 dark:bg-gray-900">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 mx-auto mb-2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p>Aucun parcours disponible pour ce niveau d'étude.</p>
-                                </div>
-                            @endif
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
+                @forelse($parcours as $parcour)
+                    <button wire:click="$set('parcoursId', {{ $parcour->id }})" 
+                            class="group p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-all duration-200">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center group-hover:bg-green-700 transition-colors">
+                                <span class="text-lg font-bold text-white">{{ substr($parcour->abr ?: $parcour->nom, 0, 2) }}</span>
+                            </div>
+                            <div class="text-left">
+                                <h3 class="font-semibold text-gray-900 dark:text-white">{{ $parcour->nom }}</h3>
+                                @if($parcour->abr)
+                                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ $parcour->abr }}</p>
+                                @endif
+                            </div>
                         </div>
+                    </button>
+                @empty
+                    <div class="col-span-full text-center py-12">
+                        <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Aucun parcours disponible</h3>
+                        <p class="text-gray-600 dark:text-gray-400">Aucun parcours configuré pour ce niveau.</p>
                     </div>
-                </div>
-            </div><!-- card -->
+                @endforelse
+            </div>
         </div>
         @endif
 

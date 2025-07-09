@@ -5,7 +5,7 @@
 
 /**
  * A helper file for Laravel, to provide autocomplete information to your IDE
- * Generated for Laravel 12.19.2.
+ * Generated for Laravel 12.19.3.
  *
  * This file should not be included in your code, only analyzed by your IDE!
  *
@@ -24337,6 +24337,18 @@ namespace Illuminate\Testing {
         public static function inertiaPage()
         {
             return \Illuminate\Testing\TestResponse::inertiaPage();
+        }
+
+        /**
+         * 
+         *
+         * @see \Inertia\Testing\TestResponseMacros::inertiaProps()
+         * @param string|null $propName
+         * @static 
+         */
+        public static function inertiaProps($propName = null)
+        {
+            return \Illuminate\Testing\TestResponse::inertiaProps($propName);
         }
 
             }

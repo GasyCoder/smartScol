@@ -25,6 +25,8 @@ class CalculAcademiqueService
     const SEUIL_VALIDATION_UE = 10.0;
     const NOTE_ELIMINATOIRE = 0;
 
+
+
     // ✅ MÉTHODE PRINCIPALE MANQUANTE : calculerResultatsComplets
     public function calculerResultatsComplets($etudiantId, $sessionId, $useResultatFinal = true)
     {
@@ -255,103 +257,126 @@ class CalculAcademiqueService
         ];
     }
 
-        // ✅ MÉTHODE : Détermine la décision selon logique médecine
+    
+    // ✅ MÉTHODE : Détermine la décision selon logique médecine
     private function determinerDecision_LogiqueMedecine($synthese, $session)
     {
         $creditsValides = $synthese['credits_valides'];
+        $totalCreditsDisponibles = $synthese['total_credits']; // ✅ UTILISEZ LES CRÉDITS RÉELS
         $hasNoteEliminatoire = $synthese['a_note_eliminatoire'];
         $moyenneGenerale = $synthese['moyenne_generale'];
 
         // 🔍 AJOUT DE LOGS POUR DEBUG
-        Log::info('🎯 Détermination décision médecine', [
+        Log::info('🎯 Détermination décision médecine DYNAMIQUE', [
             'session_type' => $session['type'],
             'credits_valides' => $creditsValides,
+            'total_credits_disponibles' => $totalCreditsDisponibles, // ✅ NOUVEAU
             'has_note_eliminatoire' => $hasNoteEliminatoire,
             'moyenne_generale' => $moyenneGenerale,
-            'total_credits' => $synthese['total_credits']
+            'pourcentage_credits' => $totalCreditsDisponibles > 0 ? 
+                round(($creditsValides / $totalCreditsDisponibles) * 100, 2) : 0
         ]);
 
         if ($session['type'] === 'Normale') {
-            // ✅ CORRECTION : Vérifier d'abord les crédits, puis les notes éliminatoires
+            // ✅ SESSION NORMALE : Logique dynamique
 
-            // 1. Si 60 crédits ET pas de note éliminatoire → ADMIS
-            if ($creditsValides >= self::CREDIT_TOTAL_REQUIS && !$hasNoteEliminatoire) {
-                Log::info('✅ Décision: ADMIS', [
-                    'motif' => 'Credits suffisants sans note eliminatoire',
-                    'credits' => $creditsValides
+            // 1. Si TOUS les crédits disponibles sont validés ET pas de note éliminatoire → ADMIS
+            if ($creditsValides >= $totalCreditsDisponibles && $totalCreditsDisponibles > 0 && !$hasNoteEliminatoire) {
+                Log::info('✅ Décision: ADMIS (tous crédits validés)', [
+                    'motif' => 'Tous les crédits disponibles validés sans note eliminatoire',
+                    'credits_valides' => $creditsValides,
+                    'credits_disponibles' => $totalCreditsDisponibles
                 ]);
 
                 return [
                     'code' => 'admis',
                     'libelle' => 'Admis(e)',
-                    'motif' => 'Validation de tous les crédits requis',
-                    'credits_requis' => self::CREDIT_TOTAL_REQUIS,
+                    'motif' => 'Validation de tous les crédits disponibles',
+                    'credits_requis' => $totalCreditsDisponibles,
                     'credits_obtenus' => $creditsValides
                 ];
             }
 
-            // 2. Si note éliminatoire → RATTRAPAGE (même avec 60 crédits)
+            // 2. Si note éliminatoire → RATTRAPAGE (même avec tous les crédits)
             if ($hasNoteEliminatoire) {
-                Log::info('⚠️ Décision: RATTRAPAGE', [
+                Log::info('⚠️ Décision: RATTRAPAGE (note éliminatoire)', [
                     'motif' => 'Note eliminatoire presente',
-                    'credits' => $creditsValides
+                    'credits_valides' => $creditsValides,
+                    'credits_disponibles' => $totalCreditsDisponibles
                 ]);
 
                 return [
                     'code' => 'rattrapage',
                     'libelle' => 'Autorisé(e) au rattrapage',
                     'motif' => 'Présence de note(s) éliminatoire(s)',
-                    'credits_requis' => self::CREDIT_TOTAL_REQUIS,
+                    'credits_requis' => $totalCreditsDisponibles,
                     'credits_obtenus' => $creditsValides
                 ];
             }
 
-            // 3. Sinon → RATTRAPAGE
-            Log::info('📝 Décision: RATTRAPAGE', [
+            // 3. Si crédits insuffisants → RATTRAPAGE
+            Log::info('📝 Décision: RATTRAPAGE (crédits insuffisants)', [
                 'motif' => 'Credits insuffisants',
-                'credits' => $creditsValides,
-                'requis' => self::CREDIT_TOTAL_REQUIS
+                'credits_valides' => $creditsValides,
+                'credits_disponibles' => $totalCreditsDisponibles,
+                'pourcentage' => $totalCreditsDisponibles > 0 ? 
+                    round(($creditsValides / $totalCreditsDisponibles) * 100, 2) : 0
             ]);
 
             return [
                 'code' => 'rattrapage',
                 'libelle' => 'Autorisé(e) au rattrapage',
                 'motif' => 'Crédits insuffisants',
-                'credits_requis' => self::CREDIT_TOTAL_REQUIS,
+                'credits_requis' => $totalCreditsDisponibles,
                 'credits_obtenus' => $creditsValides
             ];
 
         } else {
-            // SESSION 2 (rattrapage) - logique inchangée
+            // ✅ SESSION 2 (rattrapage) - Logique adaptative aussi
+            
             if ($hasNoteEliminatoire) {
                 return [
                     'code' => 'exclus',
                     'libelle' => 'Exclu(e)',
                     'motif' => 'Note éliminatoire en session de rattrapage',
-                    'credits_requis' => self::CREDIT_MINIMUM_SESSION2,
+                    'credits_requis' => $totalCreditsDisponibles,
                     'credits_obtenus' => $creditsValides
                 ];
             }
 
-            if ($creditsValides >= self::CREDIT_MINIMUM_SESSION2) {
+            // ✅ LOGIQUE ADAPTATIVE : Utiliser des seuils proportionnels
+            $seuilAdmission = $totalCreditsDisponibles; // 100% des crédits disponibles
+            $seuilRedoublement = round($totalCreditsDisponibles * 0.67); // 67% des crédits disponibles
+
+            if ($creditsValides >= $seuilAdmission) {
                 return [
                     'code' => 'admis',
                     'libelle' => 'Admis(e)',
-                    'motif' => 'Validation des crédits minimum en rattrapage',
-                    'credits_requis' => self::CREDIT_MINIMUM_SESSION2,
+                    'motif' => 'Validation de tous les crédits en rattrapage',
+                    'credits_requis' => $seuilAdmission,
+                    'credits_obtenus' => $creditsValides
+                ];
+            } elseif ($creditsValides >= $seuilRedoublement) {
+                return [
+                    'code' => 'redoublant',
+                    'libelle' => 'Autorisé(e) à redoubler',
+                    'motif' => 'Crédits partiels en rattrapage - redoublement autorisé',
+                    'credits_requis' => $seuilAdmission,
                     'credits_obtenus' => $creditsValides
                 ];
             } else {
                 return [
-                    'code' => 'redoublant',
-                    'libelle' => 'Autorisé(e) à redoubler',
+                    'code' => 'exclus',
+                    'libelle' => 'Exclu(e)',
                     'motif' => 'Crédits insuffisants en rattrapage',
-                    'credits_requis' => self::CREDIT_MINIMUM_SESSION2,
+                    'credits_requis' => $seuilRedoublement,
                     'credits_obtenus' => $creditsValides
                 ];
             }
         }
     }
+
+
 
     // ✅ NOUVELLE MÉTHODE : Applique la délibération selon la configuration
     public function appliquerDeliberationAvecConfig($niveauId, $parcoursId, $sessionId, $parametres = [])

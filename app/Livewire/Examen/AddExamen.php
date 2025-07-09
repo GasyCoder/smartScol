@@ -9,6 +9,7 @@ use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 
@@ -19,6 +20,7 @@ class AddExamen extends Component
     public $parcours_id;
     public $duree = 120;
     public $note_eliminatoire;
+    public $ecCodes = [];
 
     // Date et heure par défaut
     public $date_defaut;
@@ -59,6 +61,11 @@ class AddExamen extends Component
         'salle_defaut' => 'required|exists:salles,id',
         'duree' => 'required|integer|min:15',
         'note_eliminatoire' => 'nullable|numeric|min:0|max:20',
+        'ecCodes.*' => 'nullable|string|max:20',
+    ];
+
+    protected $messages = [
+        'ecCodes.*.max' => 'Le code ne peut pas dépasser 20 caractères.',
     ];
 
     /**
@@ -559,6 +566,7 @@ class AddExamen extends Component
         $this->ecDates = array_intersect_key($this->ecDates, array_flip($this->selectedEcs));
         $this->ecHours = array_intersect_key($this->ecHours, array_flip($this->selectedEcs));
         $this->ecSalles = array_intersect_key($this->ecSalles, array_flip($this->selectedEcs));
+        $this->ecCodes = array_intersect_key($this->ecCodes, array_flip($this->selectedEcs)); // NOUVEAU
 
         // Initialiser les nouveaux ECs sélectionnés
         $nouveauxEcs = [];
@@ -569,21 +577,70 @@ class AddExamen extends Component
         }
 
         if (!empty($nouveauxEcs)) {
-            // Si plusieurs ECs et pas de paramètres spécifiques, répartition intelligente
             if (count($this->selectedEcs) > 1 && !$this->useSpecificDates && !$this->useSpecificSalles) {
                 $this->repartirAutomatiquementTousLesEcs();
             } else {
-                // Initialisation classique pour les nouveaux ECs
                 foreach ($nouveauxEcs as $ecId) {
                     $this->ecDates[$ecId] = $this->date_defaut;
                     $this->ecHours[$ecId] = $this->heure_defaut;
                     $this->ecSalles[$ecId] = $this->salle_defaut;
+                    $this->ecCodes[$ecId] = ''; // NOUVEAU: Initialiser à vide pour saisie manuelle
                 }
             }
         }
 
         $this->verifierConflitsEnTempsReel();
     }
+
+     /**
+     * NOUVEAU: Validation des codes pour éviter les doublons
+     */
+    public function validateCodes()
+    {
+        $codes = array_filter($this->ecCodes, function($code_base) {
+            return !empty(trim($code_base));
+        });
+        
+        // Vérifier les doublons dans la saisie actuelle
+        $duplicates = array_diff_assoc($codes, array_unique($codes));
+        
+        if (!empty($duplicates)) {
+            return [
+                'valid' => false,
+                'message' => 'Codes en doublon détectés : ' . implode(', ', array_unique($duplicates))
+            ];
+        }
+
+        return ['valid' => true, 'message' => ''];
+    }
+    
+
+    /**
+     * NOUVEAU: Vérifier si un code est déjà utilisé dans d'autres examens
+     */
+    public function checkCodeExists($code_base, $ecId)
+    {
+        if (empty($code_base)) return false;
+        
+        // Vérifier dans tous les examens existants
+        return DB::table('examen_ec')
+            ->where('code_base', $code_base)
+            ->where('ec_id', '!=', $ecId)
+            ->exists();
+    }
+
+    /**
+     * NOUVEAU: Méthode pour vérifier les codes en temps réel
+     */
+    public function updatedEcCodes($value, $ecId)
+    {
+        if (!empty($value) && $this->checkCodeExists($value, $ecId)) {
+            // Réinitialiser le code s'il existe déjà
+            $this->ecCodes[$ecId] = '';
+            toastr()->warning("Le code '{$value}' est déjà utilisé. Veuillez choisir un autre code.");
+        }
+    }
+
 
     /**
      * =====================================
@@ -786,32 +843,25 @@ class AddExamen extends Component
         $this->validate();
 
         try {
+            // NOUVEAU: Validation des codes
+            $codeValidation = $this->validateCodes();
+            if (!$codeValidation['valid']) {
+                toastr()->error($codeValidation['message']);
+                return;
+            }
+
             // Vérification finale des conflits
             $this->verifierConflitsEnTempsReel();
 
             if (!empty($this->conflitsSalles)) {
-                // MESSAGES OPTIMISÉS : Éviter les répétitions
-                $conflitsGroupes = [];
-                $conflitsInternes = 0;
-                $conflitsExistants = 0;
+                $conflitsInternes = count(array_filter($this->conflitsSalles, fn($c) => $c['type'] === 'interne'));
+                $conflitsExistants = count($this->conflitsSalles) - $conflitsInternes;
 
-                foreach ($this->conflitsSalles as $conflit) {
-                    if ($conflit['type'] === 'interne') {
-                        $conflitsInternes++;
-                    } else {
-                        $conflitsExistants++;
-                    }
-                }
-
-                // Message simplifié selon le type de conflit
                 if ($conflitsInternes > 0 && $conflitsExistants === 0) {
-                    // Seulement des conflits internes
                     toastr()->error("❌ {$conflitsInternes} conflit(s) détecté(s) : Plusieurs matières ont la même heure dans la même salle. Utilisez 'Réorganiser automatiquement' ou modifiez les heures manuellement.");
                 } elseif ($conflitsExistants > 0 && $conflitsInternes === 0) {
-                    // Seulement des conflits avec examens existants
                     toastr()->error("❌ {$conflitsExistants} conflit(s) avec des examens existants. Changez les heures ou salles.");
                 } else {
-                    // Mix des deux types
                     toastr()->error("❌ {$conflitsInternes} conflit(s) interne(s) + {$conflitsExistants} conflit(s) avec examens existants. Réorganisez la planification.");
                 }
 
@@ -843,16 +893,18 @@ class AddExamen extends Component
                 'note_eliminatoire' => $note_eliminatoire,
             ]);
 
-            // Attacher les ECs
+            // Attacher les ECs avec codes
             foreach ($this->selectedEcs as $ecId) {
                 $date = $this->useSpecificDates ? $this->ecDates[$ecId] : $this->date_defaut;
                 $heure = $this->useSpecificDates ? $this->ecHours[$ecId] : $this->heure_defaut;
                 $salle = $this->useSpecificSalles ? $this->ecSalles[$ecId] : $this->salle_defaut;
+                $code_base = !empty($this->ecCodes[$ecId]) ? trim($this->ecCodes[$ecId]) : null; // NOUVEAU
 
                 $examen->ecs()->attach($ecId, [
                     'date_specifique' => $date,
                     'heure_specifique' => $heure,
                     'salle_id' => $salle,
+                    'code_base' => $code_base, // NOUVEAU
                 ]);
             }
 

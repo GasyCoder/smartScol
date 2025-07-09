@@ -34,12 +34,6 @@ class SalleIndex extends Component
     {
         return [
             'nom' => 'required|string|max:100',
-            'code_base' => [
-                'nullable',
-                'string',
-                'max:10',
-                Rule::unique('salles')->ignore($this->salle_id),
-            ],
             'capacite' => 'required|integer|min:1|max:500',
         ];
     }
@@ -47,8 +41,6 @@ class SalleIndex extends Component
     // Messages de validation personnalisés
     protected $messages = [
         'nom.required' => 'Le nom de la salle est obligatoire.',
-        'code_base.required' => 'Le code de la salle est obligatoire.',
-        'code_base.string' => 'Le code de la salle doit être une chaîne de caractères.',
         'capacite.required' => 'La capacité est obligatoire.',
         'capacite.integer' => 'La capacité doit être un nombre entier.',
         'capacite.min' => 'La capacité minimum est de 1 place.',
@@ -75,7 +67,6 @@ class SalleIndex extends Component
     {
         $this->resetValidation();
         $this->reset([
-            'code_base',
             'nom',
             'capacite',
             'salle_id'
@@ -104,7 +95,6 @@ class SalleIndex extends Component
             Salle::create($validatedData);
 
             $this->reset([
-                'code_base',
                 'nom',
                 'capacite'
             ]);
@@ -127,7 +117,6 @@ class SalleIndex extends Component
 
         $salle = Salle::find($salleId);
         if ($salle) {
-            $this->code_base = $salle->code_base;
             $this->nom = $salle->nom;
             $this->capacite = $salle->capacite;
         }
@@ -227,8 +216,7 @@ class SalleIndex extends Component
         $salles = Salle::query()
             ->when($this->search, function ($query) {
                 $query->where(function ($q) {
-                    $q->where('nom', 'like', '%' . $this->search . '%')
-                        ->orWhere('code_base', 'like', '%' . $this->search . '%');
+                    $q->where('nom', 'like', '%' . $this->search . '%');
                 });
             })
             ->orderBy($this->sortField, $this->sortDirection)

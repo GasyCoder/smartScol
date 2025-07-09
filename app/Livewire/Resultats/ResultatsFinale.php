@@ -419,7 +419,7 @@ class ResultatsFinale extends Component
             'appliquer_note_eliminatoire_s2' => true,
         ];
 
-        // ✅ CORRECTION : Initialiser aussi deliberationParams avec des valeurs par défaut
+        // ✅ NOUVEAU : Initialiser aussi deliberationParams avec pourcentages
         $this->deliberationParams = [
             'session_type' => 'session1',
             'session_id' => null,
@@ -429,6 +429,9 @@ class ResultatsFinale extends Component
             'note_eliminatoire_bloque_s1' => true,
             'note_eliminatoire_exclusion_s2' => true
         ];
+        
+        // ✅ NOUVEAU : Initialiser avec pourcentages
+        $this->initialiserParametresAvecPourcentages();
     }
 
     // ✅ MÉTHODES DE CHARGEMENT DES DONNÉES
@@ -509,12 +512,10 @@ class ResultatsFinale extends Component
                 }
 
                 $this->loadUEStructure();
-
-                // ✅ Réinitialiser avec les nouvelles valeurs
                 $this->initialiserParametresDeliberation();
 
-                // ✅ CORRECTION : Pas besoin d'unset sur une propriété computed
-                // La propriété computed se recalculera automatiquement au prochain accès
+                // ✅ NOUVEAU : Recalculer les pourcentages avec le nouveau niveau
+                $this->initialiserParametresAvecPourcentages();
 
             } catch (\Exception $e) {
                 Log::error('Erreur lors de la mise à jour du niveau: ' . $e->getMessage());
@@ -531,13 +532,14 @@ class ResultatsFinale extends Component
     {
         $this->checkSession2Availability();
         $this->loadResultats();
-
-        // ✅ Réinitialiser avec les nouvelles valeurs
         $this->initialiserParametresDeliberation();
-
-        // ✅ Vider le cache si nécessaire
+        
+        // ✅ NOUVEAU : Recalculer les pourcentages avec le nouveau parcours
+        $this->initialiserParametresAvecPourcentages();
+        
         $this->viderCacheDeliberation();
     }
+
 
     /**
      * ✅ MÉTHODE : Vider le cache des configurations de délibération
@@ -3186,4 +3188,313 @@ class ResultatsFinale extends Component
             toastr()->error('Erreur lors de la restauration des dernières valeurs');
         }
     }
+
+
+
+// ✅ NOUVELLE MÉTHODE : Watchers pour les pourcentages
+public function updatedDeliberationParamsPourcentageAdmissionS1()
+{
+    $this->deliberationParams['credits_admission_s1'] = 
+        $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s1']);
+    
+    Log::info('Pourcentage S1 mis à jour', [
+        'pourcentage' => $this->deliberationParams['pourcentage_admission_s1'],
+        'credits' => $this->deliberationParams['credits_admission_s1']
+    ]);
+}
+
+public function updatedDeliberationParamsPourcentageAdmissionS2()
+{
+    $this->deliberationParams['credits_admission_s2'] = 
+        $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s2']);
+}
+
+public function updatedDeliberationParamsPourcentageRedoublementS2()
+{
+    $this->deliberationParams['credits_redoublement_s2'] = 
+        $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_redoublement_s2']);
+}
+
+
+
+// ✅ MÉTHODE 1 : Calculer les crédits totaux disponibles pour un niveau/parcours
+private function calculerCreditsTotauxDisponibles()
+{
+    try {
+        $query = UE::where('niveau_id', $this->selectedNiveau);
+        
+        if ($this->selectedParcours) {
+            $query->where('parcours_id', $this->selectedParcours);
+        }
+        
+        $totalCredits = $query->where('is_active', true)
+            ->sum('credits');
+            
+        Log::info('✅ Crédits totaux calculés', [
+            'niveau_id' => $this->selectedNiveau,
+            'parcours_id' => $this->selectedParcours,
+            'total_credits' => $totalCredits
+        ]);
+        
+        return $totalCredits ?: 60; // Fallback to 60 if no UE found
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur calcul crédits totaux', [
+            'niveau_id' => $this->selectedNiveau,
+            'parcours_id' => $this->selectedParcours,
+            'error' => $e->getMessage()
+        ]);
+        
+        return 60; // Fallback sécurisé
+    }
+}
+
+// ✅ MÉTHODE 2 : Convertir pourcentage en crédits
+private function convertirPourcentageEnCredits($pourcentage)
+{
+    $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+    return round(($pourcentage / 100) * $creditsTotaux);
+}
+
+// ✅ MÉTHODE 3 : Convertir crédits en pourcentage
+private function convertirCreditsEnPourcentage($credits)
+{
+    $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+    
+    if ($creditsTotaux == 0) {
+        return 0;
+    }
+    
+    return round(($credits / $creditsTotaux) * 100, 1);
+}
+
+// ✅ MÉTHODE 4 : Mise à jour des paramètres délibération avec pourcentages
+public function mettreAJourParametresAvecPourcentages()
+{
+    try {
+        $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+        
+        // Mettre à jour les paramètres avec les crédits réels
+        if (isset($this->deliberationParams['pourcentage_admission_s1'])) {
+            $this->deliberationParams['credits_admission_s1'] = 
+                $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s1']);
+        }
+        
+        if (isset($this->deliberationParams['pourcentage_admission_s2'])) {
+            $this->deliberationParams['credits_admission_s2'] = 
+                $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s2']);
+        }
+        
+        if (isset($this->deliberationParams['pourcentage_redoublement_s2'])) {
+            $this->deliberationParams['credits_redoublement_s2'] = 
+                $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_redoublement_s2']);
+        }
+        
+        Log::info('🔄 Paramètres mis à jour avec pourcentages', [
+            'credits_totaux' => $creditsTotaux,
+            'parametres_finaux' => [
+                'credits_admission_s1' => $this->deliberationParams['credits_admission_s1'] ?? null,
+                'credits_admission_s2' => $this->deliberationParams['credits_admission_s2'] ?? null,
+                'credits_redoublement_s2' => $this->deliberationParams['credits_redoublement_s2'] ?? null
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        Log::error('❌ Erreur mise à jour paramètres pourcentages', [
+            'error' => $e->getMessage()
+        ]);
+    }
+}
+
+// ✅ MÉTHODE 5 : Initialiser les paramètres avec pourcentages par défaut
+private function initialiserParametresAvecPourcentages()
+{
+    $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+    
+    // Ajouter les champs pourcentages aux paramètres existants
+    $this->deliberationParams['credits_totaux_disponibles'] = $creditsTotaux;
+    
+    // Calculer les pourcentages par défaut basés sur les crédits actuels
+    $this->deliberationParams['pourcentage_admission_s1'] = 
+        $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_admission_s1'] ?? 60);
+        
+    $this->deliberationParams['pourcentage_admission_s2'] = 
+        $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_admission_s2'] ?? 40);
+        
+    $this->deliberationParams['pourcentage_redoublement_s2'] = 
+        $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_redoublement_s2'] ?? 20);
+        
+    Log::info('🎯 Paramètres initialisés avec pourcentages', [
+        'credits_totaux' => $creditsTotaux,
+        'pourcentages' => [
+            'admission_s1' => $this->deliberationParams['pourcentage_admission_s1'],
+            'admission_s2' => $this->deliberationParams['pourcentage_admission_s2'],
+            'redoublement_s2' => $this->deliberationParams['pourcentage_redoublement_s2']
+        ]
+    ]);
+}
+
+// ✅ MÉTHODE 6 : Simulation délibération mise à jour avec logique dynamique
+public function simulerDeliberationAvecPourcentages()
+{
+    try {
+        // Vérifications préalables existantes...
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            $this->addError('deliberation', 'Veuillez sélectionner un niveau et une année.');
+            return;
+        }
+
+        // Mettre à jour les paramètres avec les pourcentages
+        $this->mettreAJourParametresAvecPourcentages();
+        
+        // S'assurer que session_id est défini
+        if (!isset($this->deliberationParams['session_id']) || !$this->deliberationParams['session_id']) {
+            $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
+            $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+
+            if (!$session) {
+                $this->addError('deliberation', 'Session non trouvée.');
+                return;
+            }
+
+            $this->deliberationParams['session_id'] = $session->id;
+        }
+
+        // Récupérer les résultats actuels
+        $resultatsActuels = $this->deliberationParams['session_type'] === 'session1'
+            ? $this->resultatsSession1
+            : $this->resultatsSession2;
+
+        if (empty($resultatsActuels)) {
+            $this->addError('deliberation', 'Aucun résultat disponible pour la simulation');
+            return;
+        }
+
+        $resultatsDetailles = [];
+        $statistiques = [
+            'admis' => 0,
+            'rattrapage' => 0,
+            'redoublant' => 0,
+            'exclus' => 0,
+            'changements' => 0
+        ];
+
+        $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+
+        foreach ($resultatsActuels as $index => $resultat) {
+            $etudiant = $resultat['etudiant'] ?? null;
+
+            if (!$etudiant) {
+                continue;
+            }
+
+            // ✅ UTILISER LA LOGIQUE DYNAMIQUE avec crédits réels
+            $decisionSimulee = $this->calculerDecisionSelonParametresDynamiques($resultat, $creditsTotaux);
+            $decisionActuelle = $resultat['decision'] ?? 'rattrapage';
+
+            $changement = $decisionActuelle !== $decisionSimulee;
+            if ($changement) {
+                $statistiques['changements']++;
+            }
+
+            $statistiques[$decisionSimulee]++;
+
+            $resultatsDetailles[] = [
+                'etudiant_id' => $etudiant->id,
+                'etudiant' => $etudiant,
+                'nom' => $etudiant->nom,
+                'prenom' => $etudiant->prenom,
+                'matricule' => $etudiant->matricule,
+                'nom_complet' => $etudiant->nom . ' ' . $etudiant->prenom,
+                'rang' => $index + 1,
+                'moyenne_generale' => $resultat['moyenne_generale'] ?? 0,
+                'credits_valides' => $resultat['credits_valides'] ?? 0,
+                'total_credits' => $creditsTotaux,
+                'pourcentage_credits' => $creditsTotaux > 0 ? 
+                    round(($resultat['credits_valides'] ?? 0) / $creditsTotaux * 100, 1) : 0,
+                'has_note_eliminatoire' => $resultat['has_note_eliminatoire'] ?? false,
+                'decision_actuelle' => $decisionActuelle,
+                'decision_simulee' => $decisionSimulee,
+                'changement' => $changement
+            ];
+        }
+
+        // Structure finale pour la vue
+        $this->simulationDeliberation = [
+            'success' => true,
+            'total_etudiants' => count($resultatsDetailles),
+            'credits_totaux_disponibles' => $creditsTotaux,
+            'statistiques' => $statistiques,
+            'resultats_detailles' => $resultatsDetailles,
+            'parametres_utilises' => $this->deliberationParams
+        ];
+
+        // Message de succès avec informations dynamiques
+        $sessionName = $this->deliberationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
+        $totalCreditsMessage = "Crédits disponibles: {$creditsTotaux}";
+        
+        toastr()->info(
+            "🔍 Simulation {$sessionName} ({$totalCreditsMessage}) : {$statistiques['changements']} changements détectés. " .
+            "Nouveaux résultats : {$statistiques['admis']} admis, {$statistiques['rattrapage']} rattrapage, " .
+            "{$statistiques['redoublant']} redoublant, {$statistiques['exclus']} exclus"
+        );
+
+        Log::info('Simulation délibération réussie avec pourcentages', [
+            'session_id' => $this->deliberationParams['session_id'],
+            'niveau_id' => $this->selectedNiveau,
+            'parcours_id' => $this->selectedParcours,
+            'credits_totaux' => $creditsTotaux,
+            'statistiques' => $statistiques
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Erreur simulation délibération avec pourcentages: ' . $e->getMessage());
+        $this->addError('deliberation', 'Erreur lors de la simulation: ' . $e->getMessage());
+    }
+}
+
+// ✅ MÉTHODE 7 : Calcul décision avec logique dynamique
+private function calculerDecisionSelonParametresDynamiques($resultat, $creditsTotaux)
+{
+    $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
+    $creditsValides = $resultat['credits_valides'] ?? 0;
+    $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
+
+    if ($sessionType === 'session1') {
+        // SESSION 1 - Logique dynamique
+        $bloquerSiNote0 = $this->deliberationParams['note_eliminatoire_bloque_s1'] ?? true;
+
+        // Si note éliminatoire et option activée
+        if ($hasNoteEliminatoire && $bloquerSiNote0) {
+            return 'rattrapage';
+        }
+
+        // ✅ LOGIQUE DYNAMIQUE : 100% des crédits disponibles requis
+        return $creditsValides >= $creditsTotaux ? 'admis' : 'rattrapage';
+
+    } else {
+        // SESSION 2 - Logique dynamique
+        $pourcentageAdmission = $this->deliberationParams['pourcentage_admission_s2'] ?? 67;
+        $pourcentageRedoublement = $this->deliberationParams['pourcentage_redoublement_s2'] ?? 33;
+        $exclusionSiNote0 = $this->deliberationParams['note_eliminatoire_exclusion_s2'] ?? true;
+
+        $creditsAdmission = $this->convertirPourcentageEnCredits($pourcentageAdmission);
+        $creditsRedoublement = $this->convertirPourcentageEnCredits($pourcentageRedoublement);
+
+        // Si note éliminatoire et option activée
+        if ($hasNoteEliminatoire && $exclusionSiNote0) {
+            return 'exclus';
+        }
+
+        // ✅ LOGIQUE DYNAMIQUE basée sur les pourcentages
+        if ($creditsValides >= $creditsAdmission) {
+            return 'admis';
+        } elseif ($creditsValides >= $creditsRedoublement) {
+            return 'redoublant';
+        } else {
+            return 'exclus';
+        }
+    }
+}
+
 }
