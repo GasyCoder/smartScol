@@ -368,7 +368,7 @@ class Students extends Component
             // Ajouter le tri
             $etudiantsQuery->orderBy($this->sortField, $this->sortDirection);
 
-            $etudiants = $etudiantsQuery->paginate(5);
+            $etudiants = $etudiantsQuery->paginate(50);
         }
 
 

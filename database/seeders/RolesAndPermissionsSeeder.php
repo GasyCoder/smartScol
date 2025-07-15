@@ -36,6 +36,7 @@ class RolesAndPermissionsSeeder extends Seeder
             [
                 'name' => 'examens.view',
                 'label' => 'Voir les examens',
+
                 'description' => 'Permet de consulter la liste des examens'
             ],
             [

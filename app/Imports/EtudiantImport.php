@@ -36,8 +36,13 @@ class EtudiantImport implements ToCollection, WithHeadingRow, WithValidation, Wi
         });
 
         foreach ($filteredRows as $row) {
+            // CONVERSION MATRICULE : Convertir en string si c'est un nombre
+            $matricule = isset($row['matricule']) ? (string) $row['matricule'] : null;
+            $nom = isset($row['nom']) ? (string) $row['nom'] : null;
+            $prenom = isset($row['prenom']) ? (string) $row['prenom'] : '';
+
             // Vérification supplémentaire de sécurité
-            if (empty($row['matricule']) || empty($row['nom'])) {
+            if (empty($matricule) || empty($nom)) {
                 continue;
             }
 
@@ -51,21 +56,21 @@ class EtudiantImport implements ToCollection, WithHeadingRow, WithValidation, Wi
             // Traitement de la date
             $date_naissance = null;
             if (!empty($row['date_naissance'])) {
-                $date = trim($row['date_naissance']);
+                $date = trim((string) $row['date_naissance']);
                 if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $date, $matches)) {
                     $date_naissance = $matches[3] . '-' . $matches[2] . '-' . $matches[1];
                 }
             }
 
             // Nettoyage du sexe (suppression des espaces)
-            $sexe = !empty($row['sexe']) ? trim($row['sexe']) : 'M';
+            $sexe = !empty($row['sexe']) ? trim((string) $row['sexe']) : 'M';
 
             // Création/mise à jour de l'étudiant
             $etudiant = Etudiant::updateOrCreate(
-                ['matricule' => $row['matricule']],
+                ['matricule' => $matricule], // Maintenant c'est une string
                 [
-                    'nom' => $row['nom'],
-                    'prenom' => $row['prenom'] ?? '',
+                    'nom' => $nom,
+                    'prenom' => $prenom,
                     'date_naissance' => $date_naissance,
                     'sexe' => $sexe,
                     'niveau_id' => $this->niveau_id,
@@ -97,19 +102,21 @@ class EtudiantImport implements ToCollection, WithHeadingRow, WithValidation, Wi
         return 1; // La première ligne contient les en-têtes
     }
 
+
     public function rules(): array
     {
-        // Assouplir les règles de validation pour éviter les rejets complets
+        // Assouplir les règles de validation pour accepter les nombres d'Excel
         return [
-            '*.matricule' => 'nullable|string|max:20',
-            '*.nom' => 'nullable|string|max:50',
-            '*.prenom' => 'nullable|string|max:50',
+            '*.matricule' => 'nullable|max:20',      // Accepte nombres ET strings
+            '*.nom' => 'nullable|max:50',            // Accepte nombres ET strings
+            '*.prenom' => 'nullable|max:50',         // Accepte nombres ET strings  
             '*.date_naissance' => 'nullable',
             '*.sexe' => 'nullable',
             '*.is_active' => 'nullable',
         ];
     }
 
+    
     // Les méthodes suivantes restent identiques
     public function batchSize(): int
     {

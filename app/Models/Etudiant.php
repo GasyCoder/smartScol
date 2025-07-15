@@ -18,7 +18,6 @@ class Etudiant extends Model
         'nom',
         'prenom',
         'date_naissance',
-        'sexe',
         'niveau_id',
         'parcours_id',
         'is_active',

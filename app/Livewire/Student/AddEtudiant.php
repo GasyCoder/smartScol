@@ -17,7 +17,6 @@ class AddEtudiant extends Component
     public $nom;
     public $prenom;
     public $date_naissance;
-    public $sexe = 'M'; // Valeur par défaut
     public $is_active = true;
 
     // IDs passés via les paramètres
@@ -41,7 +40,6 @@ class AddEtudiant extends Component
             'nom' => 'required|string|max:50',
             'prenom' => 'nullable|string|max:50',
             'date_naissance' => 'nullable|date_format:d/m/Y|before:today',
-            'sexe' => 'required|in:M,F',
             'niveau_id' => 'required|exists:niveaux,id',
             'parcours_id' => 'required|exists:parcours,id',
             'is_active' => 'boolean',
@@ -55,7 +53,6 @@ class AddEtudiant extends Component
         'nom.required' => 'Le nom est obligatoire.',
         'date_naissance.date_format' => 'La date de naissance doit être au format JJ/MM/AAAA.',
         'date_naissance.before' => 'La date de naissance doit être antérieure à aujourd\'hui.',
-        'sexe.in' => 'Le sexe doit être soit Masculin (M) soit Féminin (F).',
     ];
 
     // Définir les attributs pour les messages
@@ -64,7 +61,6 @@ class AddEtudiant extends Component
         'nom' => 'nom',
         'prenom' => 'prénom',
         'date_naissance' => 'date de naissance',
-        'sexe' => 'sexe',
         'is_active' => 'statut',
     ];
 

@@ -264,7 +264,6 @@ namespace App\Models{
  * @property string $matricule Numéro d'identification unique
  * @property string $nom
  * @property string|null $prenom
- * @property string $sexe M ou F
  * @property \Illuminate\Support\Carbon|null $date_naissance Date de naissance
  * @property int $niveau_id Niveau d'études actuel
  * @property int|null $parcours_id Parcours (uniquement pour PACES/L1)
@@ -298,7 +297,6 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant whereParcoursId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant wherePrenom($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant whereSexe($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant withoutTrashed()
