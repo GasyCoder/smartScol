@@ -115,13 +115,13 @@ class UEECImport implements ToCollection, WithHeadingRow, WithValidation, WithBa
     public function rules(): array
     {
         return [
-            '*.ue_abr' => 'nullable|string|max:10',
-            '*.ue_nom' => 'nullable|string|max:100',
-            '*.ue_credits' => 'nullable|numeric|min:0', // Nouvelle règle pour les crédits
-            '*.ec_abr' => 'required|string|max:10',
-            '*.ec_nom' => 'required|string|max:100',
+            '*.ue_abr' => 'nullable|max:10',           // Supprimé 'string'
+            '*.ue_nom' => 'nullable|max:100',          // Supprimé 'string'
+            '*.ue_credits' => 'nullable|numeric|min:0',
+            '*.ec_abr' => 'nullable|max:10',           // CHANGÉ: 'required|string' → 'nullable'
+            '*.ec_nom' => 'nullable|max:100',          // CHANGÉ: 'required|string' → 'nullable'
             '*.coefficient' => 'nullable|numeric|min:0|max:999.9',
-            '*.enseignant' => 'nullable|string|max:100',
+            '*.enseignant' => 'nullable|max:100',      // Supprimé 'string'
         ];
     }
 

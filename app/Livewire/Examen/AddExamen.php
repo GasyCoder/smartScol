@@ -9,6 +9,7 @@ use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;
+use App\Models\ExamenEc;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -597,9 +598,21 @@ class AddExamen extends Component
      */
     public function validateCodes()
     {
-        $codes = array_filter($this->ecCodes, function($code_base) {
-            return !empty(trim($code_base));
+        $codes = array_filter($this->ecCodes, function($code) {
+            return !empty(trim($code));
         });
+        
+        // Vérifier le format (2-3 caractères alphabétiques ou alphanumériques)
+        foreach ($codes as $ecId => $code) {
+            if (!preg_match('/^[A-Z0-9]{2,3}$/i', $code)) {
+                $ec = EC::find($ecId);
+                $nomEC = $ec ? $ec->nom : "EC {$ecId}";
+                return [
+                    'valid' => false,
+                    'message' => "Le code '{$code}' pour {$nomEC} doit contenir 2-3 caractères (lettres/chiffres uniquement)"
+                ];
+            }
+        }
         
         // Vérifier les doublons dans la saisie actuelle
         $duplicates = array_diff_assoc($codes, array_unique($codes));
@@ -609,6 +622,17 @@ class AddExamen extends Component
                 'valid' => false,
                 'message' => 'Codes en doublon détectés : ' . implode(', ', array_unique($duplicates))
             ];
+        }
+
+        // Vérifier les codes déjà utilisés dans d'autres examens
+        if (!empty($codes)) {
+            $codesExistants = $this->getExistingCodes(array_values($codes));
+            if (!empty($codesExistants)) {
+                return [
+                    'valid' => false,
+                    'message' => 'Codes déjà utilisés : ' . implode(', ', $codesExistants)
+                ];
+            }
         }
 
         return ['valid' => true, 'message' => ''];
@@ -622,24 +646,19 @@ class AddExamen extends Component
     {
         if (empty($code_base)) return false;
         
-        // Vérifier dans tous les examens existants
-        return DB::table('examen_ec')
-            ->where('code_base', $code_base)
-            ->where('ec_id', '!=', $ecId)
-            ->exists();
+        // Utiliser cache statique pour éviter les requêtes répétées
+        static $cachedCodes = null;
+        
+        if ($cachedCodes === null) {
+            $allCodes = array_filter($this->ecCodes, function($code) {
+                return !empty(trim($code));
+            });
+            $cachedCodes = $this->getExistingCodes(array_values($allCodes));
+        }
+        
+        return in_array($code_base, $cachedCodes);
     }
 
-    /**
-     * NOUVEAU: Méthode pour vérifier les codes en temps réel
-     */
-    public function updatedEcCodes($value, $ecId)
-    {
-        if (!empty($value) && $this->checkCodeExists($value, $ecId)) {
-            // Réinitialiser le code s'il existe déjà
-            $this->ecCodes[$ecId] = '';
-            toastr()->warning("Le code '{$value}' est déjà utilisé. Veuillez choisir un autre code.");
-        }
-    }
 
 
     /**
@@ -936,4 +955,309 @@ class AddExamen extends Component
             'salles' => $salles,
         ]);
     }
+
+    /**
+     * NOUVEAU: Réinitialise le code d'un EC spécifique
+     */
+    public function reinitialiserCodeSpecifique($ecId)
+    {
+        if (!in_array($ecId, $this->selectedEcs)) {
+            toastr()->error('EC non sélectionné');
+            return;
+        }
+
+        // Récupérer le nom de l'EC pour le message
+        $ec = EC::find($ecId);
+        $nomEC = $ec ? $ec->nom : 'EC';
+        
+        if (!empty($this->ecCodes[$ecId])) {
+            $ancienCode = $this->ecCodes[$ecId];
+            $this->ecCodes[$ecId] = '';
+            toastr()->success("Code '{$ancienCode}' supprimé pour {$nomEC}");
+        } else {
+            toastr()->info("Aucun code à supprimer pour {$nomEC}");
+        }
+    }
+
+    /**
+     * NOUVEAU: Réinitialise tous les codes des ECs sélectionnés
+     */
+    public function reinitialiserTousLesCodes()
+    {
+        if (empty($this->selectedEcs)) {
+            toastr()->warning('Aucun EC sélectionné');
+            return;
+        }
+
+        $nbCodesSupprimes = 0;
+        $nomsECs = [];
+        
+        foreach ($this->selectedEcs as $ecId) {
+            if (!empty($this->ecCodes[$ecId])) {
+                $ec = EC::find($ecId);
+                $nomsECs[] = $ec ? $ec->abr : "EC{$ecId}";
+                $this->ecCodes[$ecId] = '';
+                $nbCodesSupprimes++;
+            }
+        }
+
+        if ($nbCodesSupprimes > 0) {
+            $message = "✅ {$nbCodesSupprimes} code(s) réinitialisé(s)";
+            if (count($nomsECs) <= 3) {
+                $message .= " (" . implode(', ', $nomsECs) . ")";
+            }
+            toastr()->success($message);
+        } else {
+            toastr()->info('Aucun code à réinitialiser');
+        }
+    }
+
+
+    /**
+     * NOUVEAU: Récupère les codes existants en une seule requête
+     */
+    private function getExistingCodes($codes)
+    {
+        return DB::table('examen_ec')
+            ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
+            ->whereIn('examen_ec.code_base', $codes)
+            ->where('examens.niveau_id', $this->niveau_id)
+            ->when($this->parcours_id, function($query) {
+                $query->where('examens.parcours_id', $this->parcours_id);
+            })
+            ->whereNull('examens.deleted_at')
+            ->pluck('examen_ec.code_base')
+            ->unique()
+            ->toArray();
+    }
+
+
+    /**
+     * NOUVEAU: Méthode pour vérifier les codes en temps réel avec formatage
+     */
+    public function updatedEcCodes($value, $ecId)
+    {
+        if (!empty($value)) {
+            // Convertir en majuscules automatiquement
+            $value = strtoupper(trim($value));
+            $this->ecCodes[$ecId] = $value;
+
+            // Vérifier le format
+            if (!preg_match('/^[A-Z0-9]{2,3}$/', $value)) {
+                toastr()->warning("Le code doit contenir 2-3 caractères (lettres/chiffres uniquement)");
+                return;
+            }
+
+            // Vérifier dans les codes actuels (doublons)
+            $autresCodes = array_filter($this->ecCodes, function($code, $id) use ($ecId) {
+                return $id != $ecId && !empty(trim($code));
+            }, ARRAY_FILTER_USE_BOTH);
+
+            if (in_array($value, $autresCodes)) {
+                $this->ecCodes[$ecId] = '';
+                toastr()->warning("Le code '{$value}' est déjà utilisé dans cette session.");
+                return;
+            }
+
+            // Vérifier dans la base de données
+            if ($this->checkCodeExists($value, $ecId)) {
+                $this->ecCodes[$ecId] = '';
+                toastr()->warning("Le code '{$value}' est déjà utilisé dans un autre examen.");
+                return;
+            }
+        }
+    }
+
+    /**
+     * NOUVEAU: Génère automatiquement des codes au format TA, TB, SA, etc.
+     */
+    public function genererCodesAutomatiquement()
+    {
+        if (empty($this->selectedEcs)) {
+            toastr()->warning('Aucun EC sélectionné pour la génération de codes.');
+            return;
+        }
+
+        $codesGeneres = 0;
+        $codesExistants = 0;
+
+        foreach ($this->selectedEcs as $ecId) {
+            // Vérifier si un code existe déjà pour cet EC
+            if (!empty($this->ecCodes[$ecId])) {
+                $codesExistants++;
+                continue;
+            }
+
+            // Générer un code automatique
+            $codeGenere = $this->genererCodePourEC($ecId);
+            
+            if ($codeGenere) {
+                $this->ecCodes[$ecId] = $codeGenere;
+                $codesGeneres++;
+            }
+        }
+
+        // Message de confirmation
+        if ($codesGeneres > 0) {
+            $message = "✅ {$codesGeneres} code(s) généré(s) automatiquement";
+            if ($codesExistants > 0) {
+                $message .= " ({$codesExistants} code(s) déjà existant(s) conservé(s))";
+            }
+            toastr()->success($message);
+        } else if ($codesExistants > 0) {
+            toastr()->info("Tous les codes existent déjà ({$codesExistants} EC(s))");
+        } else {
+            toastr()->error('Impossible de générer des codes automatiquement');
+        }
+    }
+
+    /**
+     * NOUVEAU: Génère un code au format TA, TB, SA pour un EC spécifique
+     */
+    private function genererCodePourEC($ecId)
+    {
+        // Récupérer l'EC avec son UE
+        $ec = EC::with('ue')->find($ecId);
+        if (!$ec) {
+            return null;
+        }
+
+        // Récupérer tous les codes déjà utilisés dans cette session
+        $codesUtilises = array_filter($this->ecCodes, function($code) {
+            return !empty(trim($code));
+        });
+
+        // Récupérer tous les codes existants dans la base pour ce niveau/parcours
+        $codesExistants = ExamenEc::whereHas('examen', function($query) {
+            $query->where('niveau_id', $this->niveau_id);
+            if ($this->parcours_id) {
+                $query->where('parcours_id', $this->parcours_id);
+            }
+        })->whereNotNull('code_base')
+        ->pluck('code_base')
+        ->toArray();
+
+        // Fusionner tous les codes utilisés
+        $tousCodesUtilises = array_merge($codesUtilises, $codesExistants);
+
+        // Pattern de génération au format demandé : TA, TB, TC, SA, SB, SC, etc.
+        return $this->genererCodeSelonPattern($tousCodesUtilises);
+    }
+
+    /**
+     * NOUVEAU: Génère un code selon le pattern TA, TB, SA, etc.
+     */
+    private function genererCodeSelonPattern($codesUtilises)
+    {
+        // Définir les lettres pour le premier caractère (par ordre de préférence)
+        $premiereLettre = ['T', 'S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+        
+        // Définir les lettres pour le deuxième caractère
+        $deuxiemeLettre = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+
+        // Stratégie 1: Codes à 2 caractères (TA, TB, TC, SA, SB, etc.)
+        foreach ($premiereLettre as $lettre1) {
+            foreach ($deuxiemeLettre as $lettre2) {
+                $code = $lettre1 . $lettre2;
+                if (!in_array($code, $codesUtilises)) {
+                    return $code;
+                }
+            }
+        }
+
+        // Stratégie 2: Codes à 3 caractères si tous les codes 2 lettres sont pris (TAA, TAB, etc.)
+        foreach ($premiereLettre as $lettre1) {
+            foreach ($deuxiemeLettre as $lettre2) {
+                foreach ($deuxiemeLettre as $lettre3) {
+                    $code = $lettre1 . $lettre2 . $lettre3;
+                    if (!in_array($code, $codesUtilises) && strlen($code) <= 20) {
+                        return $code;
+                    }
+                }
+            }
+        }
+
+        // Stratégie 3: Codes avec numéros (T1, T2, S1, S2, etc.)
+        foreach ($premiereLettre as $lettre) {
+            for ($i = 1; $i <= 99; $i++) {
+                $code = $lettre . $i;
+                if (!in_array($code, $codesUtilises)) {
+                    return $code;
+                }
+            }
+        }
+
+        // Si tout échoue, générer un code aléatoire
+        do {
+            $code = chr(rand(65, 90)) . chr(rand(65, 90)); // 2 lettres aléatoires
+        } while (in_array($code, $codesUtilises));
+
+        return $code;
+    }
+
+    /**
+     * NOUVEAU: Génère un code automatique pour un EC spécifique
+     */
+    public function genererCodePourECSpecifique($ecId)
+    {
+        if (!in_array($ecId, $this->selectedEcs)) {
+            toastr()->error('EC non sélectionné');
+            return;
+        }
+
+        $codeGenere = $this->genererCodePourEC($ecId);
+        
+        if ($codeGenere) {
+            $this->ecCodes[$ecId] = $codeGenere;
+            
+            // Récupérer le nom de l'EC pour le message
+            $ec = EC::find($ecId);
+            $nomEC = $ec ? $ec->nom : 'EC';
+            
+            toastr()->success("Code généré pour {$nomEC}: {$codeGenere}");
+        } else {
+            toastr()->error('Impossible de générer un code pour cet EC');
+        }
+    }
+
+    /**
+     * NOUVEAU: Prévisualise les codes qui seraient générés selon le nouveau format
+     */
+    public function previewCodesAutomatiques()
+    {
+        if (empty($this->selectedEcs)) {
+            return [];
+        }
+
+        $preview = [];
+        $codesUtilises = array_filter($this->ecCodes);
+        
+        foreach ($this->selectedEcs as $ecId) {
+            $ec = EC::with('ue')->find($ecId);
+            if ($ec) {
+                $codeActuel = $this->ecCodes[$ecId] ?? '';
+                $codePropose = $this->genererCodeSelonPattern($codesUtilises);
+                
+                // Ajouter le code proposé à la liste pour éviter les doublons dans la prévisualisation
+                $codesUtilises[] = $codePropose;
+                
+                $preview[] = [
+                    'ec_id' => $ecId,
+                    'ec_nom' => $ec->nom,
+                    'code_actuel' => $codeActuel,
+                    'code_propose' => $codePropose,
+                    'changement' => ($codeActuel !== $codePropose)
+                ];
+            }
+        }
+
+        return $preview;
+    }
+
+
+
+
+
+
+
 }

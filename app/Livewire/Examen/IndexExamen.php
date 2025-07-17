@@ -2,20 +2,24 @@
 
 namespace App\Livewire\Examen;
 
+use App\Models\EC;
+use App\Models\UE;
+use App\Models\Copie;
 use App\Models\Salle;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\EC;
-use App\Models\UE;
-use App\Models\Copie;
-use App\Models\Manchette;
 use Livewire\Component;
+use App\Models\Manchette;
 use Livewire\WithPagination;
+use App\Exports\ExamensExport;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Cache;
+use App\Exports\ExamensEnseignantExport;
 
 class IndexExamen extends Component
 {
@@ -611,38 +615,6 @@ class IndexExamen extends Component
         }
     }
 
-    // Méthodes d'export et d'impression
-    public function exportExamens($format = 'xlsx')
-    {
-        try {
-            $examens = $this->getFilteredExamens();
-            
-            if ($examens->isEmpty()) {
-                toastr()->warning('Aucun examen à exporter avec les filtres actuels.');
-                return;
-            }
-
-            // Logique d'export selon le format
-            switch ($format) {
-                case 'xlsx':
-                    return $this->exportToExcel($examens);
-                case 'pdf':
-                    return $this->exportToPdf($examens);
-                case 'csv':
-                    return $this->exportToCsv($examens);
-                default:
-                    toastr()->error('Format d\'export non supporté.');
-            }
-
-        } catch (\Exception $e) {
-            Log::error("❌ ERREUR EXPORT EXAMENS", [
-                'format' => $format,
-                'error' => $e->getMessage()
-            ]);
-
-            toastr()->error('Erreur lors de l\'export.');
-        }
-    }
 
     private function getFilteredExamens()
     {
@@ -1009,5 +981,545 @@ class IndexExamen extends Component
             'salles' => $salles,
             'stats' => $stats,
         ]);
+    }
+
+
+    /**
+     * Export des examens selon le format et le type
+     */
+    public function exportExamens($format = 'excel', $type = 'all')
+    {
+        try {
+            if (!$this->niveauId || !$this->parcoursId) {
+                toastr()->error('Niveau et parcours requis pour l\'export.');
+                return;
+            }
+
+            // Récupérer les données selon le type
+            $examens = $this->getExamensForExport($type);
+            
+            if ($examens->isEmpty()) {
+                toastr()->warning('Aucun examen à exporter avec les critères sélectionnés.');
+                return;
+            }
+
+            // Générer le nom de fichier
+            $filename = $this->generateExportFilename($format, $type);
+
+            // Log de l'export
+            Log::info("📊 EXPORT EXAMENS", [
+                'format' => $format,
+                'type' => $type,
+                'niveau_id' => $this->niveauId,
+                'parcours_id' => $this->parcoursId,
+                'nb_examens' => $examens->count(),
+                'enseignant_filter' => $this->enseignant_filter,
+                'user_id' => Auth::id()
+            ]);
+
+            // Exporter selon le format
+            switch ($format) {
+                case 'excel':
+                    return $this->exportToExcel($examens, $type, $filename);
+                case 'pdf':
+                    return $this->exportToPdf($examens, $type, $filename);
+                default:
+                    toastr()->error('Format d\'export non supporté.');
+                    return;
+            }
+
+        } catch (\Exception $e) {
+            Log::error("❌ ERREUR EXPORT EXAMENS", [
+                'format' => $format,
+                'type' => $type,
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id()
+            ]);
+
+            toastr()->error('Erreur lors de l\'export : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Récupère les examens selon le type d'export
+     */
+    private function getExamensForExport($type)
+    {
+        $baseQuery = Examen::with([
+            'ecs.ue',
+            'niveau',
+            'parcours',
+            'copies',
+            'manchettes',
+            'codesAnonymat'
+        ])
+        ->where('niveau_id', $this->niveauId)
+        ->where('parcours_id', $this->parcoursId);
+
+        // Appliquer les filtres selon le type
+        switch ($type) {
+            case 'all':
+                // Appliquer tous les filtres actifs
+                if (!empty($this->search)) {
+                    $searchTerm = '%' . trim($this->search) . '%';
+                    $baseQuery->whereHas('ecs', function($q) use ($searchTerm) {
+                        $q->where('ecs.nom', 'like', $searchTerm)
+                        ->orWhere('ecs.abr', 'like', $searchTerm)
+                        ->orWhere('ecs.enseignant', 'like', $searchTerm);
+                    });
+                }
+
+                if (!empty($this->enseignant_filter)) {
+                    $baseQuery->whereHas('ecs', function($q) {
+                        $q->where('ecs.enseignant', $this->enseignant_filter);
+                    });
+                }
+
+                if (!empty($this->date_from)) {
+                    $baseQuery->whereHas('ecs', function($q) {
+                        $q->whereDate('examen_ec.date_specifique', '>=', $this->date_from);
+                    });
+                }
+
+                if (!empty($this->date_to)) {
+                    $baseQuery->whereHas('ecs', function($q) {
+                        $q->whereDate('examen_ec.date_specifique', '<=', $this->date_to);
+                    });
+                }
+                break;
+
+            case 'enseignant':
+                // Filtrer uniquement par enseignant
+                if (!empty($this->enseignant_filter)) {
+                    $baseQuery->whereHas('ecs', function($q) {
+                        $q->where('ecs.enseignant', $this->enseignant_filter);
+                    });
+                } else {
+                    // Si pas d'enseignant sélectionné, retourner collection vide
+                    return collect();
+                }
+                break;
+        }
+
+        return $baseQuery->orderBy('created_at', 'asc')->get();
+    }
+
+    /**
+     * Export Excel
+     */
+    private function exportToExcel($examens, $type, $filename)
+    {
+        try {
+            // Utiliser les classes d'export existantes
+            if ($type === 'enseignant' && !empty($this->enseignant_filter)) {
+                return Excel::download(
+                    new ExamensEnseignantExport($examens, $this->enseignant_filter, $this->niveauInfo, $this->parcoursInfo),
+                    $filename
+                );
+            } else {
+                return Excel::download(
+                    new ExamensExport($examens, $this->niveauInfo, $this->parcoursInfo, $this->getActiveFilters()),
+                    $filename
+                );
+            }
+            
+        } catch (\Exception $e) {
+            Log::error("❌ ERREUR EXPORT EXCEL", [
+                'error' => $e->getMessage(),
+                'type' => $type,
+                'user_id' => Auth::id()
+            ]);
+            
+            toastr()->error('Erreur lors de l\'export Excel : ' . $e->getMessage());
+            return;
+        }
+    }
+
+    /**
+     * Export PDF
+     */
+    private function exportToPdf($examens, $type, $filename)
+    {
+        try {
+            // Si c'est un export par enseignant, préparer les données comme dans ExamensEnseignantExport
+            if ($type === 'enseignant') {
+                $data = [];
+                $totalHeures = 0;
+                $totalCredits = 0;
+                
+                // Filtrer et préparer les données pour cet enseignant
+                foreach ($examens as $examen) {
+                    foreach ($examen->ecs as $ec) {
+                        // Ne garder que les ECs de cet enseignant
+                        if ($ec->enseignant !== $this->enseignant_filter) {
+                            continue;
+                        }
+
+                        $salle = $ec->pivot->salle_id ? 
+                            \App\Models\Salle::find($ec->pivot->salle_id) : null;
+                        
+                        // Calculer les statistiques
+                        $copiesCount = $examen->copies()->whereHas('codeAnonymat', function($q) use ($ec, $examen) {
+                            $q->where('ec_id', $ec->id)->where('examen_id', $examen->id);
+                        })->count();
+                        
+                        $manchettesCount = $examen->manchettes()->whereHas('codeAnonymat', function($q) use ($ec, $examen) {
+                            $q->where('ec_id', $ec->id)->where('examen_id', $examen->id);
+                        })->count();
+
+                        $totalCodes = $examen->codesAnonymat()->where('ec_id', $ec->id)->count();
+
+                        // Récupérer les crédits de l'UE
+                        $ueCredits = $ec->ue->credits ?? 0;
+                        $totalCredits += $ueCredits;
+
+                        // Déterminer le statut
+                        if ($totalCodes == 0) {
+                            $statut = 'Aucun code';
+                        } elseif ($copiesCount >= $totalCodes && $manchettesCount >= $totalCodes) {
+                            $statut = 'Complet';
+                        } elseif ($copiesCount > 0 || $manchettesCount > 0) {
+                            $statut = 'En cours';
+                        } else {
+                            $statut = 'Non commencé';
+                        }
+
+                        $data[] = [
+                            'examen_id' => $examen->id,
+                            'ue_abr' => $ec->ue->abr ?? '',
+                            'ue_nom' => $ec->ue->nom ?? '',
+                            'ue_credits' => $ueCredits,
+                            'ec_abr' => $ec->abr ?? '',
+                            'ec_nom' => $ec->nom,
+                            'date' => $ec->pivot->date_specifique ? 
+                                \Carbon\Carbon::parse($ec->pivot->date_specifique)->format('d/m/Y') : '',
+                            'heure' => $ec->pivot->heure_specifique ? 
+                                \Carbon\Carbon::parse($ec->pivot->heure_specifique)->format('H:i') : '',
+                            'heure_fin' => $ec->pivot->heure_specifique ? 
+                                \Carbon\Carbon::parse($ec->pivot->heure_specifique)->addMinutes($examen->duree)->format('H:i') : '',
+                            'duree' => $examen->duree,
+                            'salle' => $salle ? $salle->nom : '',
+                            'code_base' => $ec->pivot->code_base ?? '',
+                            'copies_saisies' => $copiesCount,
+                            'manchettes_saisies' => $manchettesCount,
+                            'total_codes' => $totalCodes,
+                            'statut' => $statut,
+                            'note_eliminatoire' => $examen->note_eliminatoire
+                        ];
+
+                        $totalHeures += $examen->duree;
+                    }
+                }
+
+                // Trier les données par date puis par heure
+                usort($data, function($a, $b) {
+                    if ($a['date'] === $b['date']) {
+                        return strcmp($a['heure'], $b['heure']);
+                    }
+                    return strcmp($a['date'], $b['date']);
+                });
+
+                // Préparer les données pour la vue PDF enseignant
+                $pdfData = [
+                    'data' => collect($data),
+                    'enseignant' => $this->enseignant_filter,
+                    'niveau' => $this->niveauInfo,
+                    'parcours' => $this->parcoursInfo,
+                    'generated_at' => now()->format('d/m/Y H:i'),
+                    'generated_by' => Auth::user()->name ?? 'Système',
+                    'total_examens' => count($data),
+                    'total_heures' => $totalHeures,
+                    'total_credits' => $totalCredits,
+                    'moyenne_duree' => count($data) > 0 ? round($totalHeures / count($data)) : 0,
+                    'dates_examens' => collect($data)->pluck('date')->filter()->unique()->sort()->values()
+                ];
+
+            } else {
+                // Export général - calculer les statistiques normalement
+                $totalEcs = $examens->sum(function($examen) {
+                    return $examen->ecs->count();
+                });
+
+                $totalMinutes = $examens->sum('duree') * $totalEcs;
+
+                $enseignantsUniques = $examens->flatMap(function($examen) {
+                    return $examen->ecs->pluck('enseignant');
+                })->filter()->unique()->count();
+
+                $pdfData = [
+                    'examens' => $examens,
+                    'niveau' => $this->niveauInfo,
+                    'parcours' => $this->parcoursInfo,
+                    'type' => $type,
+                    'enseignant' => null,
+                    'filters' => $this->getActiveFilters(),
+                    'generated_at' => now()->format('d/m/Y H:i'),
+                    'generated_by' => Auth::user()->name ?? 'Système',
+                    'total_examens' => $examens->count(),
+                    'total_ecs' => $totalEcs,
+                    'total_minutes' => $totalMinutes,
+                    'enseignants_uniques_count' => $enseignantsUniques
+                ];
+            }
+
+            // Choisir la vue selon le type
+            $view = $type === 'enseignant' ? 'exports.examens-enseignant-pdf' : 'exports.examens-pdf';
+
+            // Générer le PDF avec configuration SIMPLE
+            $pdf = Pdf::loadView($view, $pdfData)
+                ->setPaper('a4', 'landscape');
+
+            // Utiliser response()->streamDownload
+            return response()->streamDownload(function() use ($pdf) {
+                echo $pdf->output();
+            }, $filename);
+            
+        } catch (\Exception $e) {
+            Log::error("❌ ERREUR EXPORT PDF", [
+                'error' => $e->getMessage(),
+                'type' => $type,
+                'user_id' => Auth::id()
+            ]);
+            
+            toastr()->error('Erreur lors de l\'export PDF : ' . $e->getMessage());
+            return;
+        }
+    }
+
+    /**
+     * Génère le nom de fichier pour l'export
+     */
+    private function generateExportFilename($format, $type)
+    {
+        $extension = $format === 'excel' ? 'xlsx' : 'pdf';
+        $niveau_abr = $this->niveauInfo['abr'] ?? 'N';
+        $parcours_abr = $this->parcoursInfo['abr'] ?? 'P';
+        
+        $base = "examens_{$niveau_abr}_{$parcours_abr}";
+        
+        if ($type === 'enseignant' && !empty($this->enseignant_filter)) {
+            $enseignant_clean = preg_replace('/[^a-zA-Z0-9]/', '_', $this->enseignant_filter);
+            $base .= "_{$enseignant_clean}";
+        }
+        
+        if ($this->hasFilters && $type === 'all') {
+            $base .= "_filtre";
+        }
+        
+        $timestamp = now()->format('Y-m-d_H-i');
+        
+        return "{$base}_{$timestamp}.{$extension}";
+    }
+
+    /**
+     * Récupère les filtres actifs
+     */
+    private function getActiveFilters()
+    {
+        $filters = [];
+        
+        if (!empty($this->search)) {
+            $filters['Recherche'] = $this->search;
+        }
+        
+        if (!empty($this->enseignant_filter)) {
+            $filters['Enseignant'] = $this->enseignant_filter;
+        }
+        
+        if (!empty($this->date_from)) {
+            $filters['Date debut'] = \Carbon\Carbon::parse($this->date_from)->format('d/m/Y');
+        }
+        
+        if (!empty($this->date_to)) {
+            $filters['Date fin'] = \Carbon\Carbon::parse($this->date_to)->format('d/m/Y');
+        }
+        
+        return $filters;
+    }
+
+    /**
+     * Export rapide au format CSV (bonus)
+     */
+    public function exportToCsv($type = 'all')
+    {
+        try {
+            $examens = $this->getExamensForExport($type);
+            
+            if ($examens->isEmpty()) {
+                toastr()->warning('Aucun examen à exporter.');
+                return;
+            }
+
+            $filename = $this->generateExportFilename('csv', $type);
+            
+            $headers = [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => "attachment; filename=\"$filename\"",
+            ];
+
+            $callback = function() use ($examens) {
+                $file = fopen('php://output', 'w');
+                
+                // En-têtes CSV
+                fputcsv($file, [
+                    'Examen ID',
+                    'UE Abréviation',
+                    'UE Nom',
+                    'EC Abréviation', 
+                    'EC Nom',
+                    'Enseignant',
+                    'Date',
+                    'Heure',
+                    'Salle',
+                    'Code',
+                    'Durée (min)',
+                    'Copies',
+                    'Manchettes'
+                ], ';');
+
+                // Données
+                foreach ($examens as $examen) {
+                    foreach ($examen->ecs as $ec) {
+                        $salle = $ec->pivot->salle_id ? 
+                            \App\Models\Salle::find($ec->pivot->salle_id)?->nom : '';
+                        
+                        $copiesCount = $examen->copies()->whereHas('codeAnonymat', function($q) use ($ec, $examen) {
+                            $q->where('ec_id', $ec->id)->where('examen_id', $examen->id);
+                        })->count();
+                        
+                        $manchettesCount = $examen->manchettes()->whereHas('codeAnonymat', function($q) use ($ec, $examen) {
+                            $q->where('ec_id', $ec->id)->where('examen_id', $examen->id);
+                        })->count();
+
+                        fputcsv($file, [
+                            $examen->id,
+                            $ec->ue->abr ?? '',
+                            $ec->ue->nom ?? '',
+                            $ec->abr ?? '',
+                            $ec->nom,
+                            $ec->enseignant ?? '',
+                            $ec->pivot->date_specifique ? 
+                                \Carbon\Carbon::parse($ec->pivot->date_specifique)->format('d/m/Y') : '',
+                            $ec->pivot->heure_specifique ? 
+                                \Carbon\Carbon::parse($ec->pivot->heure_specifique)->format('H:i') : '',
+                            $salle,
+                            $ec->pivot->code_base ?? '',
+                            $examen->duree,
+                            $copiesCount,
+                            $manchettesCount
+                        ], ';');
+                    }
+                }
+                
+                fclose($file);
+            };
+
+            return response()->stream($callback, 200, $headers);
+
+        } catch (\Exception $e) {
+            Log::error("❌ ERREUR EXPORT CSV", [
+                'error' => $e->getMessage(),
+                'user_id' => Auth::id()
+            ]);
+            
+            toastr()->error('Erreur lors de l\'export CSV.');
+        }
+    }
+
+    /**
+     * Nettoie les données des examens
+     */
+    private function cleanExamensData($examens)
+    {
+        foreach($examens as $examen) {
+            foreach($examen->ecs as $ec) {
+                // Nettoyer les chaînes de caractères
+                $ec->nom = $this->cleanString($ec->nom ?? '');
+                $ec->abr = $this->cleanString($ec->abr ?? '');
+                $ec->enseignant = $this->cleanString($ec->enseignant ?? '');
+                
+                // Nettoyer les données de l'UE
+                if($ec->ue) {
+                    $ec->ue->nom = $this->cleanString($ec->ue->nom ?? '');
+                    $ec->ue->abr = $this->cleanString($ec->ue->abr ?? '');
+                }
+                
+                // Nettoyer les données pivot
+                if($ec->pivot) {
+                    $ec->pivot->code_base = $this->cleanString($ec->pivot->code_base ?? '');
+                }
+            }
+        }
+        
+        return $examens;
+    }
+    
+    /**
+     * Nettoie une chaîne de caractères - VERSION CORRIGÉE UTF-8
+     */
+    private function cleanString($string)
+    {
+        if (empty($string)) {
+            return '';
+        }
+        
+        // Convertir en string si ce n'est pas déjà le cas
+        $string = (string) $string;
+        
+        // Forcer la conversion UTF-8 sécurisée
+        $string = mb_convert_encoding($string, 'UTF-8', 'UTF-8');
+        
+        // Supprimer les caractères de contrôle et invisibles
+        $string = preg_replace('/[\x00-\x1F\x7F-\x9F]/', '', $string);
+        
+        // Remplacer les caractères problématiques
+        $replacements = [
+            '"' => '',
+            "'" => '',
+            '`' => '',
+            '€' => 'EUR',
+            '©' => '(c)',
+            '®' => '(r)',
+            // Remplacer les accents
+            'à' => 'a', 'á' => 'a', 'â' => 'a', 'ä' => 'a', 'ã' => 'a', 'å' => 'a',
+            'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+            'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'ö' => 'o', 'õ' => 'o',
+            'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
+            'ç' => 'c', 'ñ' => 'n',
+            'À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ä' => 'A', 'Ã' => 'A', 'Å' => 'A',
+            'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E',
+            'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I',
+            'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Ö' => 'O', 'Õ' => 'O',
+            'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U',
+            'Ç' => 'C', 'Ñ' => 'N'
+        ];
+        
+        $string = str_replace(array_keys($replacements), array_values($replacements), $string);
+        
+        return trim($string);
+    }
+
+    /**
+     * Nettoie un tableau de données
+     */
+    private function cleanArrayData($array)
+    {
+        if (!is_array($array)) {
+            return $array;
+        }
+        
+        $cleaned = [];
+        foreach($array as $key => $value) {
+            if (is_string($value)) {
+                $cleaned[$key] = $this->cleanString($value);
+            } else if (is_array($value)) {
+                $cleaned[$key] = $this->cleanArrayData($value);
+            } else {
+                $cleaned[$key] = $value;
+            }
+        }
+        
+        return $cleaned;
     }
 }

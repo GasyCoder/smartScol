@@ -133,25 +133,154 @@
             <p class="text-sm text-gray-600 dark:text-gray-400">{{ $parcoursInfo['nom'] }}</p>
         </div>
         
-        <div class="flex space-x-3">
-            @if($hasFilters)
-                <button wire:click="resetFilters" 
-                        class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors">
-                    <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    Réinitialiser
-                </button>
-            @endif
+<!-- Boutons d'export à ajouter dans la section des filtres (après les boutons existants) -->
+<div class="flex space-x-3">
+    @if($hasFilters)
+        <button wire:click="resetFilters" 
+                class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors">
+            <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Réinitialiser
+        </button>
+    @endif
+
+    <!-- NOUVEAU: Dropdown pour les exports -->
+    <div class="relative" x-data="{ openExport: false }">
+        <button @click="openExport = !openExport" 
+                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                :class="{ 'ring-2 ring-green-500': openExport }">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Exporter
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+
+        <!-- Menu dropdown -->
+        <div x-show="openExport" 
+             x-transition:enter="transition ease-out duration-100"
+             x-transition:enter-start="transform opacity-0 scale-95"
+             x-transition:enter-end="transform opacity-1 scale-100"
+             x-transition:leave="transition ease-in duration-75"
+             x-transition:leave-start="transform opacity-1 scale-100"
+             x-transition:leave-end="transform opacity-0 scale-95"
+             @click.away="openExport = false"
+             class="absolute right-0 z-50 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
             
-            <a href="{{ route('examens.create', ['niveau' => $niveauInfo['id'], 'parcour' => $parcoursInfo['id']]) }}" 
-               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-                <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Nouvel examen
-            </a>
+            <div class="p-4">
+                <h3 class="text-sm font-medium text-gray-900 dark:text-white mb-3">Choisir le format d'export</h3>
+                
+                <!-- Info sur le filtrage -->
+                @if($hasFilters)
+                    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div class="flex items-start">
+                            <svg class="w-4 h-4 mt-0.5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div class="text-xs text-blue-700 dark:text-blue-300">
+                                <strong>Filtres actifs :</strong>
+                                @if($search)
+                                    <br>• Recherche: "{{ $search }}"
+                                @endif
+                                @if($enseignant_filter)
+                                    <br>• Enseignant: "{{ $enseignant_filter }}"
+                                @endif
+                                @if($date_from || $date_to)
+                                    <br>• Période: {{ $date_from ?: '...' }} → {{ $date_to ?: '...' }}
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
+                <!-- Boutons d'export Excel -->
+                <div class="space-y-2 mb-4">
+                    <h4 class="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wide">Excel (.xlsx)</h4>
+                    
+                    <button wire:click="exportExamens('excel', 'all')" 
+                            @click="openExport = false"
+                            class="w-full flex items-center px-3 py-2 text-sm text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30">
+                        <svg class="w-4 h-4 mr-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2H9a2 2 0 00-2 2v10z"/>
+                        </svg>
+                        <div class="text-left">
+                            <div class="font-medium">
+                                @if($hasFilters)
+                                    Examens filtrés
+                                @else
+                                    Tous les examens
+                                @endif
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Planning détaillé avec toutes les informations</div>
+                        </div>
+                    </button>
+
+                    @if($enseignant_filter)
+                        <button wire:click="exportExamens('excel', 'enseignant')" 
+                                @click="openExport = false"
+                                class="w-full flex items-center px-3 py-2 text-sm text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30">
+                            <svg class="w-4 h-4 mr-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                            </svg>
+                            <div class="text-left">
+                                <div class="font-medium">{{ $enseignant_filter }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Planning pour cet enseignant uniquement</div>
+                            </div>
+                        </button>
+                    @endif
+                </div>
+
+                <!-- Boutons d'export PDF -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wide">PDF</h4>
+                    
+                    <button wire:click="exportExamens('pdf', 'all')" 
+                            @click="openExport = false"
+                            class="w-full flex items-center px-3 py-2 text-sm text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30">
+                        <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
+                        <div class="text-left">
+                            <div class="font-medium">
+                                @if($hasFilters)
+                                    Examens filtrés
+                                @else
+                                    Tous les examens
+                                @endif
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Planning imprimable avec calendrier</div>
+                        </div>
+                    </button>
+
+                    @if($enseignant_filter)
+                        <button wire:click="exportExamens('pdf', 'enseignant')" 
+                                @click="openExport = false"
+                                class="w-full flex items-center px-3 py-2 text-sm text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30">
+                            <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                            </svg>
+                            <div class="text-left">
+                                <div class="font-medium">{{ $enseignant_filter }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Planning personnel imprimable</div>
+                            </div>
+                        </button>
+                    @endif
+                </div>
+            </div>
         </div>
+    </div>
+    
+    <a href="{{ route('examens.create', ['niveau' => $niveauInfo['id'], 'parcour' => $parcoursInfo['id']]) }}" 
+       class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+        <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nouvel examen
+    </a>
+</div>
     </div>
     
     {{-- Statistiques --}}
@@ -419,18 +548,6 @@
 
                                             {{-- Barres de progression --}}
                                             <div class="space-y-3 mb-4">
-                                                {{-- Copies --}}
-                                                <div>
-                                                    <div class="flex justify-between text-xs mb-1">
-                                                        <span class="text-gray-600 dark:text-gray-400">Copies</span>
-                                                        <span class="font-medium">{{ $copiesStats['saisies'] }}/{{ $copiesStats['total'] }}</span>
-                                                    </div>
-                                                    <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                                                        <div class="h-2 rounded-full {{ $copiesPercent >= 100 ? 'bg-green-500' : ($copiesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}" 
-                                                             style="width: {{ $copiesPercent }}%"></div>
-                                                    </div>
-                                                </div>
-
                                                 {{-- Manchettes --}}
                                                 <div>
                                                     <div class="flex justify-between text-xs mb-1">
@@ -440,6 +557,17 @@
                                                     <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                                                         <div class="h-2 rounded-full {{ $manchettesPercent >= 100 ? 'bg-green-500' : ($manchettesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}" 
                                                              style="width: {{ $manchettesPercent }}%"></div>
+                                                    </div>
+                                                </div>
+                                                {{-- Copies --}}
+                                                <div>
+                                                    <div class="flex justify-between text-xs mb-1">
+                                                        <span class="text-gray-600 dark:text-gray-400">Copies</span>
+                                                        <span class="font-medium">{{ $copiesStats['saisies'] }}/{{ $copiesStats['total'] }}</span>
+                                                    </div>
+                                                    <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                                                        <div class="h-2 rounded-full {{ $copiesPercent >= 100 ? 'bg-green-500' : ($copiesPercent >= 50 ? 'bg-yellow-500' : 'bg-red-500') }}" 
+                                                             style="width: {{ $copiesPercent }}%"></div>
                                                     </div>
                                                 </div>
                                             </div>

@@ -330,22 +330,68 @@
                                                                         </select>
                                                                     </div>
                                                                 @endif
-                                                            <!-- NOUVEAU: Champ pour saisie manuelle du code -->
+                                                                <!-- NOUVEAU: Champ pour saisie manuelle du code -->
                                                                 <div>
                                                                     <label class="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
                                                                         <em class="mr-1 ni ni-tag"></em>
                                                                         Code personnalisé
                                                                     </label>
-                                                                    <input
-                                                                        type="text"
-                                                                        wire:model.blur="ecCodes.{{ $ec->id }}"
-                                                                        placeholder="Ex: A1, B2, SALLE1..."
-                                                                        maxlength="20"
-                                                                        class="block w-full px-2.5 py-1.5 text-xs transition-colors bg-white border border-gray-300 rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:border-primary-500 focus:ring-1 focus:ring-primary-200 dark:focus:border-primary-600"
-                                                                    >
-                                                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                                                        Code unique pour identifier cette matière
-                                                                    </p>
+                                                                    
+                                                                    <div class="flex gap-2">
+                                                                        <!-- Champ de saisie -->
+                                                                        <div class="flex-1">
+                                                                            <input
+                                                                                type="text"
+                                                                                wire:model.blur="ecCodes.{{ $ec->id }}"
+                                                                                placeholder="Ex: TA, TB, SA..."
+                                                                                maxlength="3"
+                                                                                style="text-transform: uppercase;"
+                                                                                class="block w-full px-2.5 py-1.5 text-xs transition-colors bg-white border border-gray-300 rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:border-primary-500 focus:ring-1 focus:ring-primary-200 dark:focus:border-primary-600"
+                                                                            >
+                                                                        </div>
+                                                                        
+                                                                        <!-- Bouton Auto fonctionnel -->
+                                                                        <button
+                                                                            type="button"
+                                                                            wire:click="genererCodePourECSpecifique({{ $ec->id }})"
+                                                                            class="px-3 py-1.5 text-xs font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+                                                                            title="Générer un code automatique (TA, TB, SA...)"
+                                                                        >
+                                                                           <em class="ni ni-spark mr-1"></em>
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            wire:click="reinitialiserCodeSpecifique({{ $ec->id }})"
+                                                                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-all shadow-sm">
+                                                                            <em class="ni ni-update mr-2"></em>
+                                                                        </button>
+                                                                    </div>
+                                                                    
+                                                                    <!-- Statut du code -->
+                                                                    <div class="mt-1">
+                                                                        @if(!empty($ecCodes[$ec->id] ?? ''))
+                                                                            @if($this->checkCodeExists($ecCodes[$ec->id], $ec->id))
+                                                                                <p class="text-xs text-red-600 dark:text-red-400 flex items-center">
+                                                                                    <i class="mr-1 ni ni-alert-circle-fill"></i>
+                                                                                    Code déjà utilisé ailleurs
+                                                                                </p>
+                                                                            @elseif(!preg_match('/^[A-Z0-9]{2,3}$/i', $ecCodes[$ec->id]))
+                                                                                <p class="text-xs text-orange-600 dark:text-orange-400 flex items-center">
+                                                                                    <i class="mr-1 ni ni-alert-circle-fill"></i>
+                                                                                    Format: 2-3 caractères (ex: TA, TB, SA)
+                                                                                </p>
+                                                                            @else
+                                                                                <p class="text-xs text-green-600 dark:text-green-400 flex items-center">
+                                                                                    <i class="mr-1 ni ni-check-circle-fill"></i>
+                                                                                    Code valide
+                                                                                </p>
+                                                                            @endif
+                                                                        @else
+                                                                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                                                                Format: TA, TB, SA (2-3 caractères)
+                                                                            </p>
+                                                                        @endif
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
