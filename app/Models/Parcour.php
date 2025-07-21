@@ -9,6 +9,8 @@ class Parcour extends Model
 {
     use HasFactory;
 
+    protected $table = 'parcours'; // Spécifier explicitement
+
     protected $fillable = [
         'abr',
         'nom',
@@ -21,7 +23,7 @@ class Parcour extends Model
     ];
 
     /**
-     * Relations
+     * Relations - TOUTES CORRIGÉES avec foreign key explicite
      */
     public function niveau()
     {
@@ -30,16 +32,29 @@ class Parcour extends Model
 
     public function ues()
     {
-        return $this->hasMany(UE::class);
+        return $this->hasMany(UE::class, 'parcours_id'); // EXPLICITE
     }
 
     public function etudiants()
     {
-        return $this->hasMany(Etudiant::class);
+        return $this->hasMany(Etudiant::class, 'parcours_id'); // EXPLICITE - C'EST ÇA LE PROBLÈME !
     }
 
     public function examens()
     {
-        return $this->hasMany(Examen::class);
+        return $this->hasMany(Examen::class, 'parcours_id'); // EXPLICITE
+    }
+
+    /**
+     * Scopes utiles
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeByNiveau($query, $niveauId)
+    {
+        return $query->where('niveau_id', $niveauId);
     }
 }

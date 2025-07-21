@@ -1,4 +1,4 @@
-<div class="col-span-12 md:col-span-6 2xl:col-span-3">
+<div class="col-span-12 md:col-span-6 2xl:col-span-4">
     <div class="h-full bg-white border border-gray-300 rounded-md dark:bg-gray-950 dark:border-gray-900">
         <div class="p-5 sm:p-6">
             <h6 class="mb-3 text-base font-bold font-heading -tracking-snug leading-tighter text-slate-700 dark:text-white">Nombre</h6>

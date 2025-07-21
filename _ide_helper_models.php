@@ -493,6 +493,8 @@ namespace App\Models{
  * @property-read \App\Models\Niveau $niveau
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\UE> $ues
  * @property-read int|null $ues_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour active()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour byNiveau($niveauId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour query()
