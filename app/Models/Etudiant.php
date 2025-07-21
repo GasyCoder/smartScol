@@ -60,6 +60,7 @@ class Etudiant extends Model
         return $this->belongsTo(Parcour::class);
     }
 
+    
     /**
      * CORRIGÉ : Relation avec ResultatFinal (pas Resultat)
      */
