@@ -1,4 +1,4 @@
-@extends('layouts.guest', ['title'=> 'Login'])
+@extends('layouts.guest', ['title'=> 'Connexion'])
 @section('content')
 <div class="relative flex min-h-screen">
     <div class="relative flex flex-col flex-shrink-0 w-full min-h-full bg-white dark:bg-gray-950">
