@@ -69,17 +69,23 @@
                                         </label>
                                         <div class="mt-1 relative">
                                             <input type="text"
+                                                id="code_fake"
+                                                class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-20"
+                                                placeholder="">
+                                        </div>
+                                        <div class="mt-1 relative">
+                                            <input type="text"
                                                 wire:model="code_anonymat"
                                                 id="code_anonymat"
                                                 class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-20"
                                                 placeholder="Ex: {{ $selectedSalleCode }}1"
                                                 autofocus>
                                             <!-- Badge du code généré -->
-                                            <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                                            {{-- <div class="absolute inset-y-0 right-0 flex items-center pr-3">
                                                 <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded dark:bg-gray-600 dark:text-gray-300">
                                                     Auto
                                                 </span>
-                                            </div>
+                                            </div> --}}
                                         </div>
                                         @error('code_anonymat') <p class="mt-1 text-sm text-red-600 dark:text-red-500">{{ $message }}</p> @enderror
                                     </div>
