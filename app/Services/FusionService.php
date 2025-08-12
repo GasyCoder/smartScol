@@ -12,13 +12,14 @@ use App\Models\Etudiant;
 use App\Models\Manchette;
 use App\Models\SessionExam;
 use App\Models\CodeAnonymat;
-use App\Models\ResultatFusion;
 use App\Models\ResultatFinal;
-use App\Models\ResultatFinalHistorique;
+use App\Models\PresenceExamen;
+use App\Models\ResultatFusion;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Models\ResultatFinalHistorique;
 use App\Services\CalculAcademiqueService;
 
 class FusionService
@@ -234,33 +235,14 @@ class FusionService
             ->with(['ec', 'codeAnonymat'])
             ->get();
 
-        \Log::info('Copies trouvées pour la session', [
-            'examen_id' => $examenId,
-            'session_id' => $sessionActive->id,
-            'session_type' => $sessionActive->type,
-            'nb_copies' => $copies->count(),
-            'ec_ids_copies' => $copies->pluck('ec_id')->unique()->values()->toArray()
-        ]);
-
         // CORRECTION : Obtenir les ECs depuis les copies existantes ET depuis l'examen
         $ecsDepuisCopies = $copies->pluck('ec_id')->unique();
-
-        // ECs liées à l'examen via la table pivot
         $ecsDepuisExamen = EC::whereHas('examens', function ($query) use ($examenId) {
             $query->where('examens.id', $examenId);
         })->pluck('id');
 
-        // Fusionner les deux listes
         $ecIds = $ecsDepuisCopies->merge($ecsDepuisExamen)->unique();
         $ecs = EC::whereIn('id', $ecIds)->get();
-
-        \Log::info('ECs détectées pour analyse', [
-            'examen_id' => $examenId,
-            'session_id' => $sessionActive->id,
-            'ecs_depuis_copies' => $ecsDepuisCopies->toArray(),
-            'ecs_depuis_examen' => $ecsDepuisExamen->toArray(),
-            'ecs_finales' => $ecs->pluck('id')->toArray()
-        ]);
 
         if ($ecs->isEmpty()) {
             \Log::warning('Aucune EC trouvée pour l\'analyse', [
@@ -295,7 +277,6 @@ class FusionService
                 ->with(['etudiant', 'codeAnonymat'])
                 ->get();
 
-            // Filtrer et valider les manchettes avec codes
             $manchettesAvecCodes = $manchettes->filter(function ($manchette) {
                 return $manchette->codeAnonymat && is_string($manchette->codeAnonymat->code_complet) && !empty($manchette->codeAnonymat->code_complet);
             });
@@ -314,9 +295,10 @@ class FusionService
 
             $etudiantsAvecManchette = $manchettesCorrespondantes->pluck('etudiant_id')->unique();
 
-            // CORRECTION : Calcul des étudiants attendus selon la session
-            $etudiantsAttendus = $this->calculerEtudiantsAttendus($examenId, $sessionActive, $totalEtudiants);
-            $etudiantsSansManchette = $etudiantsAttendus - $etudiantsAvecManchette->count();
+            // ✅ CORRECTION PRINCIPALE : Utiliser les données de présence
+            $donneesPresence = $this->getPresenceDataForEC($examenId, $sessionActive, $ec->id);
+            $etudiantsAttendus = $donneesPresence['etudiants_presents'];
+            $etudiantsSansManchette = max(0, $etudiantsAttendus - $etudiantsAvecManchette->count());
 
             $complet = ($etudiantsAttendus > 0) &&
                 ($copiesEc->count() === $etudiantsAttendus) &&
@@ -343,13 +325,18 @@ class FusionService
                 'ec_id' => $ec->id,
                 'ec_nom' => $ec->nom,
                 'ec_abr' => $ec->abr ?? $ec->code ?? 'N/A',
+                // ✅ NOUVEAU : Données basées sur la présence
                 'total_etudiants' => $etudiantsAttendus,
+                'etudiants_presents' => $etudiantsAttendus, // Nombre d'étudiants présents (base de calcul)
+                'etudiants_attendus_theorique' => $donneesPresence['total_inscrits'], // Total théorique pour info
+                'source_presence' => $donneesPresence['source'],
+                // Données existantes
                 'etudiants_avec_note' => $copiesAvecNote->count(),
                 'manchettes_count' => $manchettesCorrespondantes->count(),
                 'copies_count' => $copiesEc->count(),
                 'codes_count' => $codesEnCopies->count(),
                 'complet' => $complet,
-                'etudiants_sans_manchette' => max(0, $etudiantsSansManchette),
+                'etudiants_sans_manchette' => $etudiantsSansManchette,
                 'codes_sans_manchettes' => [
                     'count' => $codesSansManchettes->count(),
                     'codes' => $codesSansManchettes->take(5)->toArray(),
@@ -362,13 +349,14 @@ class FusionService
                 'session_type' => $sessionActive->type,
             ];
 
-            \Log::info('EC analysée', [
+            \Log::info('EC analysée avec données de présence', [
                 'ec_id' => $ec->id,
                 'ec_nom' => $ec->nom,
                 'session_type' => $sessionActive->type,
                 'copies_count' => $copiesEc->count(),
                 'manchettes_count' => $manchettesCorrespondantes->count(),
-                'etudiants_attendus' => $etudiantsAttendus,
+                'etudiants_presents' => $etudiantsAttendus,
+                'source_presence' => $donneesPresence['source'],
                 'complet' => $complet
             ]);
         }
@@ -377,6 +365,101 @@ class FusionService
     }
 
 
+    /**
+     * Récupérer les données de présence pour une EC spécifique
+     */
+    private function getPresenceDataForEC($examenId, $sessionActive, $ecId)
+    {
+        // 1. Chercher une présence spécifique à cette EC
+        $presenceSpecifique = PresenceExamen::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->where('ec_id', $ecId)
+            ->first();
+
+        if ($presenceSpecifique) {
+            return [
+                'etudiants_presents' => $presenceSpecifique->etudiants_presents,
+                'total_inscrits' => $presenceSpecifique->total_attendu ?: $presenceSpecifique->total_etudiants,
+                'source' => 'presence_ec_specifique'
+            ];
+        }
+
+        // 2. Si pas de présence spécifique, utiliser la présence globale
+        $presenceGlobale = PresenceExamen::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->whereNull('ec_id') // Présence globale
+            ->first();
+
+        if ($presenceGlobale) {
+            return [
+                'etudiants_presents' => $presenceGlobale->etudiants_presents,
+                'total_inscrits' => $presenceGlobale->total_attendu ?: $presenceGlobale->total_etudiants,
+                'source' => 'presence_globale'
+            ];
+        }
+
+        // 3. Fallback : compter les manchettes existantes pour cette EC
+        $manchettesCount = Manchette::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->whereHas('codeAnonymat', function($q) use ($ecId) {
+                $q->where('ec_id', $ecId);
+            })
+            ->distinct('etudiant_id')
+            ->count();
+
+        // Estimer le total théorique
+        $examen = Examen::find($examenId);
+        $totalTheorique = 0;
+        if ($examen) {
+            $totalTheorique = Etudiant::where('niveau_id', $examen->niveau_id)
+                ->where('parcours_id', $examen->parcours_id)
+                ->where('is_active', true)
+                ->count();
+        }
+
+        return [
+            'etudiants_presents' => $manchettesCount,
+            'total_inscrits' => $totalTheorique,
+            'source' => 'calcule_manchettes'
+        ];
+    }
+
+    /**
+     * Récupérer le nombre d'étudiants attendus depuis les données de présence
+     */
+    private function getEtudiantsAttendusByPresence($examenId, $sessionActive, $ecId)
+    {
+        // Chercher d'abord une présence spécifique à cette EC
+        $presenceSpecifique = PresenceExamen::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->where('ec_id', $ecId)
+            ->first();
+
+        if ($presenceSpecifique) {
+            return $presenceSpecifique->etudiants_presents;
+        }
+
+        // Si pas de présence spécifique, utiliser la présence globale
+        $presenceGlobale = PresenceExamen::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->whereNull('ec_id') // Présence globale
+            ->first();
+
+        if ($presenceGlobale) {
+            return $presenceGlobale->etudiants_presents;
+        }
+
+        // Fallback : compter les manchettes existantes
+        return Manchette::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->whereHas('codeAnonymat', function($q) use ($ecId) {
+                $q->where('ec_id', $ecId);
+            })
+            ->distinct('etudiant_id')
+            ->count();
+    }
+
+    
     private function calculerEtudiantsAttendus($examenId, $sessionActive, $totalEtudiants)
     {
         if ($sessionActive->type === 'Rattrapage') {
