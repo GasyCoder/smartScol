@@ -19,12 +19,47 @@
         </div>
     @endif
 
+        <!-- ✅ NOUVEAU : Section des données de présence - À PLACER ICI -->
+    @php
+        // ✅ UTILISER LES NOUVELLES MÉTHODES AVEC PRÉSENCE
+        $statistiquesPresence = $this->getStatistiquesAvecPresence();
+        
+        if ($sessionActive && $sessionActive->type === 'Rattrapage') {
+            $statistiquesCompletes = $this->getStatistiquesCompletesRattrapage();
+        } else {
+            $statistiquesCompletes = $this->getStatistiquesSessionNormale();
+        }
+    @endphp
+
+    @if($statistiquesPresence)
+        <!-- Affichage des vraies statistiques de présence -->
+        <div class="p-4 mb-6 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+            <h4 class="mb-3 text-base font-medium text-blue-900 dark:text-blue-200">
+                📊 Données de présence - {{ $sessionActive->type }}
+            </h4>
+            <div class="grid grid-cols-3 gap-3 text-sm md:grid-cols-3">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600">{{ $statistiquesPresence['etudiants_presents'] }}</div>
+                    <div class="text-green-700">Présents</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-red-600">{{ $statistiquesPresence['etudiants_absents'] }}</div>
+                    <div class="text-red-700">Absents</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-purple-600">{{ $statistiquesPresence['taux_presence'] }}%</div>
+                    <div class="text-purple-700">Taux présence</div>
+                </div>
+            </div>
+        </div>
+    @endif
+    <!-- ✅ FIN NOUVEAU CODE -->
+
     <!-- Statistiques principales -->
     @if($resultatsStats && isset($resultatsStats['totalMatieres']) && $resultatsStats['totalMatieres'] > 0)
 
         @if($sessionActive->type === 'Rattrapage')
             <!-- INTERFACE RATTRAPAGE : Données depuis le composant -->
-
             @php
                 // Récupérer toutes les données depuis les méthodes du composant
                 $statistiquesCompletes = $statistiquesCompletes ?? [];
@@ -162,7 +197,7 @@
                         <div class="text-2xl font-bold text-orange-600 dark:text-orange-300">
                             {{ $resultatsStats['totalMatieres'] }}
                         </div>
-                        <div class="text-orange-700 dark:text-orange-400">Matières</div>
+                        <div class="text-orange-700 dark:text-orange-400">EC</div>
                     </div>
                     <div class="text-center">
                         <div class="text-2xl font-bold text-orange-600 dark:text-orange-300">
@@ -207,30 +242,6 @@
                 $hasPublishedResults = isset($statistiquesCompletes) && !empty($statistiquesCompletes);
             @endphp
 
-            @if($hasPublishedResults)
-                <!-- Vue d'ensemble pour session normale avec résultats publiés -->
-                <div class="p-4 mb-6 border border-gray-200 rounded-lg bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 dark:border-gray-700">
-                    <h4 class="mb-3 text-base font-medium text-gray-900 dark:text-gray-100">
-                        📊 Répartition des résultats - Session Normale
-                    </h4>
-                    <div class="flex items-center justify-center space-x-8 text-sm">
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-blue-600">{{ $statistiquesCompletes['total_inscrits'] ?? 0 }}</div>
-                            <div class="text-blue-700">Total inscrits</div>
-                        </div>
-                        <div class="text-gray-400">→</div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-green-600">{{ $statistiquesCompletes['admis_premiere_session'] ?? 0 }}</div>
-                            <div class="text-green-700">Admis</div>
-                        </div>
-                        <div class="text-gray-400">+</div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-orange-600">{{ $statistiquesCompletes['eligibles_rattrapage'] ?? 0 }}</div>
-                            <div class="text-orange-700">Rattrapage</div>
-                        </div>
-                    </div>
-                </div>
-            @endif
 
             <!-- Statistiques détaillées session normale -->
             <div class="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2 lg:grid-cols-4">
@@ -292,9 +303,9 @@
                     </div>
                 @endif
 
-                <!-- Matières traitées -->
+                <!-- EC traitées -->
                 <div class="p-4 border border-indigo-200 rounded-lg bg-indigo-50 dark:bg-indigo-900/10 dark:border-indigo-800">
-                    <div class="text-sm font-medium text-indigo-800 dark:text-indigo-300">Matières</div>
+                    <div class="text-sm font-medium text-indigo-800 dark:text-indigo-300">EC</div>
                     <div class="mt-1 text-3xl font-semibold text-indigo-600 dark:text-indigo-200">
                         {{ $resultatsStats['totalMatieres'] }}
                     </div>
@@ -334,568 +345,453 @@
         </div>
     @endif
 
-    <!-- Rapport de cohérence -->
-    @if(!empty($rapportCoherence))
-        <div class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 class="text-base font-medium text-gray-800 dark:text-gray-200">
-                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                        Rapport de cohérence des données de rattrapage
-                    @else
-                        Rapport de cohérence des données
-                    @endif
-                </h3>
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                        Vérification de la correspondance entre les manchettes d'anonymat et les copies corrigées pour les étudiants en rattrapage.
-                    @else
-                        Vérification de la correspondance entre les manchettes d'anonymat et les copies corrigées pour chaque matière.
-                    @endif
-                </p>
-            </div>
-            <div class="p-4 sm:p-6">
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead class="bg-gray-50 dark:bg-gray-700">
-                            <tr>
-                                <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                                    Matière
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                        Manchettes rattrapage
-                                    @else
-                                        Manchettes
-                                    @endif
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                        Copies rattrapage
-                                    @else
-                                        Copies
-                                    @endif
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                                    Notes
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                                    État
-                                </th>
-                                <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                                    Problèmes détectés
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                            @foreach($rapportCoherence as $rapport)
-                                <tr class="{{ $rapport['complet'] ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ($sessionActive && $sessionActive->type === 'Rattrapage' ? 'bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 dark:hover:bg-orange-900/20' : 'bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20') }}">
-                                    <!-- Nom de la matière -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900 dark:text-white">
-                                            {{ $rapport['ec_nom'] ?? 'Matière inconnue' }}
-                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                <span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
-                                                    R
-                                                </span>
-                                            @endif
-                                        </div>
-                                        @if(isset($rapport['ec_abr']) && $rapport['ec_abr'] !== 'N/A')
-                                            <div class="text-xs text-gray-500 dark:text-gray-400">
-                                                {{ $rapport['ec_abr'] }}
-                                            </div>
+<!-- Rapport de cohérence - VERSION CORRIGÉE AVEC PRÉSENCE -->
+@if(!empty($rapportCoherence))
+    <div class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-base font-medium text-gray-800 dark:text-gray-200">
+                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                    Rapport de cohérence des données de rattrapage
+                @else
+                    Rapport de cohérence des données
+                @endif
+            </h3>
+            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                    Vérification de la correspondance entre les manchettes d'anonymat et les copies corrigées pour les étudiants en rattrapage.
+                @else
+                    Vérification de la correspondance entre les manchettes d'anonymat et les copies corrigées pour chaque matière.
+                @endif
+                <span class="font-medium text-blue-600 dark:text-blue-400">Basé sur les étudiants réellement présents.</span>
+            </p>
+        </div>
+        <div class="p-4 sm:p-6">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
+                                EC
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
+                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                    Manchettes rattrapage
+                                @else
+                                    Manchettes
+                                @endif
+                                <div class="text-xs font-normal text-gray-400">vs présents</div>
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
+                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                    Copies rattrapage
+                                @else
+                                    Copies
+                                @endif
+                                <div class="text-xs font-normal text-gray-400">vs codes</div>
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
+                                Notes attribuées
+                                <div class="text-xs font-normal text-gray-400">vs copies</div>
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
+                                État
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
+                                Problèmes détectés
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                        @foreach($rapportCoherence as $rapport)
+                            <tr class="{{ $rapport['complet'] ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ($sessionActive && $sessionActive->type === 'Rattrapage' ? 'bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 dark:hover:bg-orange-900/20' : 'bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20') }}">
+                                <!-- Nom de la matière -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ $rapport['ec_nom'] ?? 'Matière inconnue' }}
+                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                            <span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                                                R
+                                            </span>
                                         @endif
-                                    </td>
-
-                                    <!-- Manchettes -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900 dark:text-white">
-                                            <span class="font-medium">{{ $rapport['manchettes_count'] ?? 0 }}</span>
-                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                @php
-                                                    $etudiantsEligibles = $this->getEtudiantsEligiblesRattrapage();
-                                                    $totalEligibles = $etudiantsEligibles->count();
-                                                @endphp
-                                                <span class="text-gray-500">/ {{ $totalEligibles }}</span>
+                                    </div>
+                                    @if(isset($rapport['ec_abr']) && $rapport['ec_abr'] !== 'N/A')
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                                            {{ $rapport['ec_abr'] }}
+                                        </div>
+                                    @endif
+                                    <!-- ✅ NOUVEAU : Indicateur de source des données de présence -->
+                                    @if(isset($rapport['source_presence']))
+                                        <div class="text-xs text-blue-600 dark:text-blue-400">
+                                            @if($rapport['source_presence'] === 'presence_ec_specifique')
+                                                📋 Présence EC
+                                            @elseif($rapport['source_presence'] === 'presence_globale')
+                                                📊 Présence globale
                                             @else
-                                                <span class="text-gray-500">/ {{ $rapport['total_etudiants'] ?? 0 }}</span>
+                                                🔢 Calculé
                                             @endif
                                         </div>
-                                        @if(isset($rapport['manchettes_count']))
-                                            @php
-                                                if($sessionActive && $sessionActive->type === 'Rattrapage') {
-                                                    $etudiantsEligibles = $this->getEtudiantsEligiblesRattrapage();
-                                                    $totalRef = $etudiantsEligibles->count();
-                                                } else {
-                                                    $totalRef = $rapport['total_etudiants'] ?? 0;
-                                                }
-                                                $pourcentageManchettes = $totalRef > 0 ? round(($rapport['manchettes_count'] / $totalRef) * 100, 1) : 0;
-                                            @endphp
-                                            <div class="text-xs text-gray-500 dark:text-gray-400">
-                                                {{ $pourcentageManchettes }}%
-                                            </div>
-                                        @endif
-                                    </td>
+                                    @endif
+                                </td>
 
-                                    <!-- Copies -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900 dark:text-white">
-                                            <span class="font-medium">{{ $rapport['copies_count'] ?? 0 }}</span>
-                                            @if(isset($rapport['codes_count']))
-                                                <span class="text-gray-500">/ {{ $rapport['codes_count'] }}</span>
+                                <!-- ✅ COLONNE MANCHETTES CORRIGÉE -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900 dark:text-white">
+                                        <span class="font-medium">{{ $rapport['manchettes_count'] ?? 0 }}</span>
+                                        <!-- ✅ CORRECTION : Utiliser les étudiants présents, pas le total théorique -->
+                                        <span class="text-gray-500">/ {{ $rapport['etudiants_presents'] ?? $rapport['total_etudiants'] ?? 0 }}</span>
+                                        
+                                        <!-- ✅ NOUVEAU : Afficher aussi le total théorique pour comparaison -->
+                                        @if(isset($rapport['etudiants_attendus_theorique']) && $rapport['etudiants_attendus_theorique'] != $rapport['etudiants_presents'])
+                                            <span class="text-xs text-gray-400">({{ $rapport['etudiants_attendus_theorique'] }} inscrits)</span>
+                                        @endif
+                                    </div>
+                                    @if(isset($rapport['manchettes_count']) && isset($rapport['etudiants_presents']))
+                                        @php
+                                            // ✅ CORRECTION : Calculer le pourcentage par rapport aux présents
+                                            $etudiantsPresents = $rapport['etudiants_presents'] ?? $rapport['total_etudiants'] ?? 0;
+                                            $pourcentageManchettes = $etudiantsPresents > 0 ? round(($rapport['manchettes_count'] / $etudiantsPresents) * 100, 1) : 0;
+                                        @endphp
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                                            {{ $pourcentageManchettes }}% des présents
+                                        </div>
+                                    @endif
+                                </td>
+
+                                <!-- Copies (inchangé) -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900 dark:text-white">
+                                        <span class="font-medium">{{ $rapport['copies_count'] ?? 0 }}</span>
+                                        @if(isset($rapport['codes_count']))
+                                            <span class="text-gray-500">/ {{ $rapport['codes_count'] }}</span>
+                                        @endif
+                                    </div>
+                                    @if(isset($rapport['copies_count']) && isset($rapport['codes_count']))
+                                        @php
+                                            $pourcentageCopies = $rapport['codes_count'] > 0 ? round(($rapport['copies_count'] / $rapport['codes_count']) * 100, 1) : 0;
+                                        @endphp
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                                            {{ $pourcentageCopies }}% des codes
+                                        </div>
+                                    @endif
+                                </td>
+
+                                <!-- Notes attribuées (inchangé) -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900 dark:text-white">
+                                        <span class="font-medium">{{ $rapport['etudiants_avec_note'] ?? 0 }}</span>
+                                        <span class="text-gray-500">/ {{ $rapport['copies_count'] ?? 0 }}</span>
+                                    </div>
+                                    @if(isset($rapport['etudiants_avec_note']) && isset($rapport['copies_count']))
+                                        @php
+                                            $pourcentageNotes = $rapport['copies_count'] > 0 ? round(($rapport['etudiants_avec_note'] / $rapport['copies_count']) * 100, 1) : 0;
+                                        @endphp
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                                            {{ $pourcentageNotes }}% des copies
+                                        </div>
+                                    @endif
+                                </td>
+
+                                <!-- État de cohérence (inchangé) -->
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    @if($rapport['complet'] ?? false)
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-200">
+                                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                            </svg>
+                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                Complet (R)
+                                            @else
+                                                Complet
                                             @endif
-                                        </div>
-                                        @if(isset($rapport['copies_count']) && isset($rapport['codes_count']))
-                                            @php
-                                                $pourcentageCopies = $rapport['codes_count'] > 0 ? round(($rapport['copies_count'] / $rapport['codes_count']) * 100, 1) : 0;
-                                            @endphp
-                                            <div class="text-xs text-gray-500 dark:text-gray-400">
-                                                {{ $pourcentageCopies }}%
-                                            </div>
-                                        @endif
-                                    </td>
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-200
+                                            @else
+                                                bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-200
+                                            @endif">
+                                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                Incomplet (R)
+                                            @else
+                                                Incomplet
+                                            @endif
+                                        </span>
+                                    @endif
+                                </td>
 
-                                    <!-- Notes attribuées -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900 dark:text-white">
-                                            <span class="font-medium">{{ $rapport['etudiants_avec_note'] ?? 0 }}</span>
-                                            <span class="text-gray-500">/ {{ $rapport['copies_count'] ?? 0 }}</span>
-                                        </div>
-                                        @if(isset($rapport['etudiants_avec_note']) && isset($rapport['copies_count']))
-                                            @php
-                                                $pourcentageNotes = $rapport['copies_count'] > 0 ? round(($rapport['etudiants_avec_note'] / $rapport['copies_count']) * 100, 1) : 0;
-                                            @endphp
-                                            <div class="text-xs text-gray-500 dark:text-gray-400">
-                                                {{ $pourcentageNotes }}%
-                                            </div>
-                                        @endif
-                                    </td>
-
-                                    <!-- État de cohérence -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
+                                <!-- Problèmes détectés - SECTION AMÉLIORÉE -->
+                                <td class="px-6 py-4">
+                                    <div class="max-w-xs text-sm text-gray-500 dark:text-gray-400">
                                         @if($rapport['complet'] ?? false)
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-200">
-                                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <div class="flex items-center text-green-600 dark:text-green-400">
+                                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                                                 </svg>
-                                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                    Complet (R)
-                                                @else
-                                                    Complet
-                                                @endif
-                                            </span>
+                                                <span class="text-xs">Aucun problème détecté</span>
+                                            </div>
                                         @else
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                    bg-orange-100 text-orange-800 dark:bg-orange-800/30 dark:text-orange-200
-                                                @else
-                                                    bg-red-100 text-red-800 dark:bg-red-800/30 dark:text-red-200
-                                                @endif">
-                                                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                                                </svg>
-                                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                    Incomplet (R)
-                                                @else
-                                                    Incomplet
-                                                @endif
-                                            </span>
-                                        @endif
-                                    </td>
-
-                                    <!-- Problèmes détectés -->
-                                    <td class="px-6 py-4">
-                                        <div class="max-w-xs text-sm text-gray-500 dark:text-gray-400">
-                                            @if($rapport['complet'] ?? false)
-                                                <div class="flex items-center text-green-600 dark:text-green-400">
-                                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                                    </svg>
-                                                    <span class="text-xs">Aucun problème détecté</span>
+                                            <!-- ✅ NOUVEAU : Problème de présence vs manchettes -->
+                                            @if(isset($rapport['etudiants_sans_manchette']) && $rapport['etudiants_sans_manchette'] > 0)
+                                                <div class="mb-2 text-orange-600 dark:text-orange-400">
+                                                    <div class="text-xs font-medium">
+                                                        {{ $rapport['etudiants_sans_manchette'] }} présent(s) sans manchette
+                                                    </div>
+                                                    <div class="text-xs opacity-75">
+                                                        Sur {{ $rapport['etudiants_presents'] ?? 0 }} étudiant(s) présent(s)
+                                                    </div>
                                                 </div>
-                                            @else
-                                                <!-- Codes sans manchettes -->
-                                                @if(isset($rapport['codes_sans_manchettes']['count']) && $rapport['codes_sans_manchettes']['count'] > 0)
-                                                    <div class="mb-2
-                                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                            text-orange-600 dark:text-orange-400
-                                                        @else
-                                                            text-red-600 dark:text-red-400
-                                                        @endif">
-                                                        <div class="mb-1 text-xs font-medium">
-                                                            {{ $rapport['codes_sans_manchettes']['count'] }} code(s) sans manchette :
-                                                        </div>
-                                                        <div class="px-2 py-1 font-mono text-xs rounded
-                                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                                bg-orange-50 dark:bg-orange-900/20
-                                                            @else
-                                                                bg-red-50 dark:bg-red-900/20
-                                                            @endif">
-                                                            {{ implode(', ', array_slice($rapport['codes_sans_manchettes']['codes'] ?? [], 0, 3)) }}
-                                                            @if(count($rapport['codes_sans_manchettes']['codes'] ?? []) > 3)
-                                                                <span class="
-                                                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                                        text-orange-400
-                                                                    @else
-                                                                        text-red-400
-                                                                    @endif">... et {{ count($rapport['codes_sans_manchettes']['codes']) - 3 }} autres</span>
-                                                            @endif
-                                                        </div>
-                                                    </div>
-                                                @endif
-
-                                                <!-- Codes sans copies -->
-                                                @if(isset($rapport['codes_sans_copies']['count']) && $rapport['codes_sans_copies']['count'] > 0)
-                                                    <div class="mb-2
-                                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                            text-orange-600 dark:text-orange-400
-                                                        @else
-                                                            text-red-600 dark:text-red-400
-                                                        @endif">
-                                                        <div class="mb-1 text-xs font-medium">
-                                                            {{ $rapport['codes_sans_copies']['count'] }} code(s) sans copie :
-                                                        </div>
-                                                        <div class="px-2 py-1 font-mono text-xs rounded
-                                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                                bg-orange-50 dark:bg-orange-900/20
-                                                            @else
-                                                                bg-red-50 dark:bg-red-900/20
-                                                            @endif">
-                                                            {{ implode(', ', array_slice($rapport['codes_sans_copies']['codes'] ?? [], 0, 3)) }}
-                                                            @if(count($rapport['codes_sans_copies']['codes'] ?? []) > 3)
-                                                                <span class="
-                                                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                                        text-orange-400
-                                                                    @else
-                                                                        text-red-400
-                                                                    @endif">... et {{ count($rapport['codes_sans_copies']['codes']) - 3 }} autres</span>
-                                                            @endif
-                                                        </div>
-                                                    </div>
-                                                @endif
-
-                                                <!-- Étudiants sans manchette -->
-                                                @if(isset($rapport['etudiants_sans_manchette']) && $rapport['etudiants_sans_manchette'] > 0)
-                                                    <div class="mb-2 text-orange-600 dark:text-orange-400">
-                                                        <div class="text-xs">
-                                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                                {{ $rapport['etudiants_sans_manchette'] }} étudiant(s) éligible(s) sans manchette pour cette matière
-                                                            @else
-                                                                {{ $rapport['etudiants_sans_manchette'] }} étudiant(s) sans manchette pour cette matière
-                                                            @endif
-                                                        </div>
-                                                    </div>
-                                                @endif
-
-                                                <!-- Message générique si aucun problème spécifique n'est identifié -->
-                                                @if(
-                                                    (!isset($rapport['codes_sans_manchettes']['count']) || $rapport['codes_sans_manchettes']['count'] === 0) &&
-                                                    (!isset($rapport['codes_sans_copies']['count']) || $rapport['codes_sans_copies']['count'] === 0) &&
-                                                    (!isset($rapport['etudiants_sans_manchette']) || $rapport['etudiants_sans_manchette'] === 0)
-                                                )
-                                                    <div class="text-yellow-600 dark:text-yellow-400">
-                                                        <div class="text-xs">
-                                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                                Discordance rattrapage : manchettes ({{ $rapport['manchettes_count'] ?? 0 }}) et copies ({{ $rapport['copies_count'] ?? 0 }})
-                                                            @else
-                                                                Discordance entre les données : manchettes ({{ $rapport['manchettes_count'] ?? 0 }}) et copies ({{ $rapport['copies_count'] ?? 0 }})
-                                                            @endif
-                                                        </div>
-                                                    </div>
-                                                @endif
                                             @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
 
-                <!-- Résumé du rapport -->
-                @if(count($rapportCoherence) > 0)
-                    @php
-                        $totalMatieres = count($rapportCoherence);
-                        $matieresCompletes = collect($rapportCoherence)->where('complet', true)->count();
-                        $matieresIncompletes = $totalMatieres - $matieresCompletes;
-                        $pourcentageCompletude = $totalMatieres > 0 ? round(($matieresCompletes / $totalMatieres) * 100, 1) : 0;
-                    @endphp
-                    <div class="p-4 mt-6 rounded-lg
+                                            <!-- Codes sans manchettes -->
+                                            @if(isset($rapport['codes_sans_manchettes']['count']) && $rapport['codes_sans_manchettes']['count'] > 0)
+                                                <div class="mb-2
+                                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                        text-orange-600 dark:text-orange-400
+                                                    @else
+                                                        text-red-600 dark:text-red-400
+                                                    @endif">
+                                                    <div class="mb-1 text-xs font-medium">
+                                                        {{ $rapport['codes_sans_manchettes']['count'] }} code(s) sans manchette :
+                                                    </div>
+                                                    <div class="px-2 py-1 font-mono text-xs rounded
+                                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                            bg-orange-50 dark:bg-orange-900/20
+                                                        @else
+                                                            bg-red-50 dark:bg-red-900/20
+                                                        @endif">
+                                                        {{ implode(', ', array_slice($rapport['codes_sans_manchettes']['codes'] ?? [], 0, 3)) }}
+                                                        @if(count($rapport['codes_sans_manchettes']['codes'] ?? []) > 3)
+                                                            <span class="
+                                                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                                    text-orange-400
+                                                                @else
+                                                                    text-red-400
+                                                                @endif">... et {{ count($rapport['codes_sans_manchettes']['codes']) - 3 }} autres</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endif
+
+                                            <!-- Codes sans copies -->
+                                            @if(isset($rapport['codes_sans_copies']['count']) && $rapport['codes_sans_copies']['count'] > 0)
+                                                <div class="mb-2
+                                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                        text-orange-600 dark:text-orange-400
+                                                    @else
+                                                        text-red-600 dark:text-red-400
+                                                    @endif">
+                                                    <div class="mb-1 text-xs font-medium">
+                                                        {{ $rapport['codes_sans_copies']['count'] }} code(s) sans copie :
+                                                    </div>
+                                                    <div class="px-2 py-1 font-mono text-xs rounded
+                                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                            bg-orange-50 dark:bg-orange-900/20
+                                                        @else
+                                                            bg-red-50 dark:bg-red-900/20
+                                                        @endif">
+                                                        {{ implode(', ', array_slice($rapport['codes_sans_copies']['codes'] ?? [], 0, 3)) }}
+                                                        @if(count($rapport['codes_sans_copies']['codes'] ?? []) > 3)
+                                                            <span class="
+                                                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                                    text-orange-400
+                                                                @else
+                                                                    text-red-400
+                                                                @endif">... et {{ count($rapport['codes_sans_copies']['codes']) - 3 }} autres</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endif
+
+                                            <!-- Message générique amélioré -->
+                                            @if(
+                                                (!isset($rapport['codes_sans_manchettes']['count']) || $rapport['codes_sans_manchettes']['count'] === 0) &&
+                                                (!isset($rapport['codes_sans_copies']['count']) || $rapport['codes_sans_copies']['count'] === 0) &&
+                                                (!isset($rapport['etudiants_sans_manchette']) || $rapport['etudiants_sans_manchette'] === 0)
+                                            )
+                                                <div class="text-yellow-600 dark:text-yellow-400">
+                                                    <div class="text-xs">
+                                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                            Discordance rattrapage :
+                                                        @else
+                                                            Discordance entre données :
+                                                        @endif
+                                                        <br>
+                                                        Manchettes: {{ $rapport['manchettes_count'] ?? 0 }}/{{ $rapport['etudiants_presents'] ?? 0 }} présents
+                                                        <br>
+                                                        Copies: {{ $rapport['copies_count'] ?? 0 }}
+                                                    </div>
+                                                </div>
+                                            @endif
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ✅ RÉSUMÉ AMÉLIORÉ avec données de présence -->
+            @if(count($rapportCoherence) > 0)
+                @php
+                    $totalMatieres = count($rapportCoherence);
+                    $matieresCompletes = collect($rapportCoherence)->where('complet', true)->count();
+                    $matieresIncompletes = $totalMatieres - $matieresCompletes;
+                    $pourcentageCompletude = $totalMatieres > 0 ? round(($matieresCompletes / $totalMatieres) * 100, 1) : 0;
+                    
+                    // ✅ NOUVEAU : Statistiques de présence globales
+                    $totalPresents = collect($rapportCoherence)->sum('etudiants_presents');
+                    $totalInscritsTheorique = collect($rapportCoherence)->sum('etudiants_attendus_theorique');
+                    $sourcesPrincipales = collect($rapportCoherence)->pluck('source_presence')->unique();
+                @endphp
+                <div class="p-4 mt-6 rounded-lg
+                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                        bg-orange-50 dark:bg-orange-700/30
+                    @else
+                        bg-gray-50 dark:bg-gray-700
+                    @endif">
+                    <h4 class="mb-2 text-sm font-medium
                         @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                            bg-orange-50 dark:bg-orange-700/30
+                            text-orange-800 dark:text-orange-200
                         @else
-                            bg-gray-50 dark:bg-gray-700
+                            text-gray-800 dark:text-gray-200
                         @endif">
-                        <h4 class="mb-2 text-sm font-medium
-                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                text-orange-800 dark:text-orange-200
-                            @else
-                                text-gray-800 dark:text-gray-200
-                            @endif">
-                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                Résumé de la vérification - Session de rattrapage
-                            @else
-                                Résumé de la vérification
+                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                            Résumé de la vérification - Session de rattrapage
+                        @else
+                            Résumé de la vérification
+                        @endif
+                    </h4>
+
+                    <!-- ✅ NOUVEAU : Ligne d'infos sur les données de présence -->
+                    <div class="p-3 mb-4 border border-blue-200 rounded-md bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700">
+                        <div class="text-xs text-blue-800 dark:text-blue-200">
+                            <strong>📊 Données de présence :</strong> 
+                            {{ $totalPresents }} étudiant(s) présent(s) sur {{ $totalInscritsTheorique }} inscrit(s)
+                            @if($totalInscritsTheorique > 0)
+                                ({{ round(($totalPresents / $totalInscritsTheorique) * 100, 1) }}% de présence)
                             @endif
-                        </h4>
-                        <div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-4">
-                            <div>
-                                <div class="
+                            <br>
+                            <strong>Sources :</strong> {{ $sourcesPrincipales->join(', ') }}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-4">
+                        <div>
+                            <div class="
+                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                    text-orange-600 dark:text-orange-400
+                                @else
+                                    text-gray-600 dark:text-gray-400
+                                @endif">
+                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                    Total EC rattrapage
+                                @else
+                                    Total EC
+                                @endif
+                            </div>
+                            <div class="font-semibold">{{ $totalMatieres }}</div>
+                        </div>
+                        <div>
+                            <div class="text-green-600 dark:text-green-400">Complètes</div>
+                            <div class="font-semibold text-green-600 dark:text-green-400">{{ $matieresCompletes }}</div>
+                        </div>
+                        <div>
+                            <div class="text-red-600 dark:text-red-400">Incomplètes</div>
+                            <div class="font-semibold text-red-600 dark:text-red-400">{{ $matieresIncompletes }}</div>
+                        </div>
+                        <div>
+                            <div class="text-blue-600 dark:text-blue-400">Taux de complétude</div>
+                            <div class="font-semibold text-blue-600 dark:text-blue-400">{{ $pourcentageCompletude }}%</div>
+                        </div>
+                    </div>
+
+                    <!-- Messages d'avertissement/succès inchangés -->
+                    @if($pourcentageCompletude < 100)
+                        <div class="p-3 mt-3 border
+                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800
+                            @else
+                                border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800
+                            @endif rounded-md">
+                            <div class="flex items-start">
+                                <svg class="w-5 h-5
                                     @if($sessionActive && $sessionActive->type === 'Rattrapage')
                                         text-orange-600 dark:text-orange-400
                                     @else
-                                        text-gray-600 dark:text-gray-400
+                                        text-yellow-600 dark:text-yellow-400
+                                    @endif mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                                <div class="text-sm
+                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                        text-orange-800 dark:text-orange-200
+                                    @else
+                                        text-yellow-800 dark:text-yellow-200
                                     @endif">
+                                    <strong>Attention :</strong>
                                     @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                        Total matières rattrapage
+                                        Certaines EC de rattrapage présentent des incohérences dans les données.
+                                        Vérifiez les codes d'anonymat et assurez-vous que toutes les copies de rattrapage ont été importées correctement.
                                     @else
-                                        Total matières
+                                        Certaines EC présentent des incohérences dans les données.
+                                        Vérifiez les codes d'anonymat et assurez-vous que toutes les copies ont été importées correctement.
                                     @endif
+                                    <br><em>Les calculs sont basés sur les {{ $totalPresents }} étudiant(s) réellement présent(s).</em>
                                 </div>
-                                <div class="font-semibold">{{ $totalMatieres }}</div>
-                            </div>
-                            <div>
-                                <div class="text-green-600 dark:text-green-400">Complètes</div>
-                                <div class="font-semibold text-green-600 dark:text-green-400">{{ $matieresCompletes }}</div>
-                            </div>
-                            <div>
-                                <div class="text-red-600 dark:text-red-400">Incomplètes</div>
-                                <div class="font-semibold text-red-600 dark:text-red-400">{{ $matieresIncompletes }}</div>
-                            </div>
-                            <div>
-                                <div class="text-blue-600 dark:text-blue-400">Taux de complétude</div>
-                                <div class="font-semibold text-blue-600 dark:text-blue-400">{{ $pourcentageCompletude }}%</div>
                             </div>
                         </div>
-
-                        @if($pourcentageCompletude < 100)
-                            <div class="p-3 mt-3 border
-                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                    border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800
-                                @else
-                                    border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800
-                                @endif rounded-md">
-                                <div class="flex items-start">
-                                    <svg class="w-5 h-5
-                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                            text-orange-600 dark:text-orange-400
-                                        @else
-                                            text-yellow-600 dark:text-yellow-400
-                                        @endif mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                                    </svg>
-                                    <div class="text-sm
-                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                            text-orange-800 dark:text-orange-200
-                                        @else
-                                            text-yellow-800 dark:text-yellow-200
-                                        @endif">
-                                        <strong>Attention :</strong>
-                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                            Certaines matières de rattrapage présentent des incohérences dans les données.
-                                            Vérifiez les codes d'anonymat et assurez-vous que toutes les copies de rattrapage ont été importées correctement.
-                                        @else
-                                            Certaines matières présentent des incohérences dans les données.
-                                            Vérifiez les codes d'anonymat et assurez-vous que toutes les copies ont été importées correctement.
-                                        @endif
-                                    </div>
-                                </div>
-                            </div>
-                        @else
-                            <div class="p-3 mt-3 border border-green-200 rounded-md bg-green-50 dark:bg-green-900/20 dark:border-green-800">
-                                <div class="flex items-start">
-                                    <svg class="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                    </svg>
-                                    <div class="text-sm text-green-800 dark:text-green-200">
-                                        <strong>Parfait !</strong>
-                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                            Toutes les matières de rattrapage sont complètes et prêtes pour la fusion.
-                                            Vous pouvez procéder à la fusion des données de rattrapage en toute sécurité.
-                                        @else
-                                            Toutes les matières sont complètes et prêtes pour la fusion.
-                                            Vous pouvez procéder à la fusion des données en toute sécurité.
-                                        @endif
-                                    </div>
-                                </div>
-                            </div>
-                        @endif
-
-                        <!-- Bouton "Voir les résultats à vérifier" -->
-                        @if($statut === 'fusion' && $etapeFusion >= 1 && $examen_id)
-                            <div class="mt-4">
-                                <a
-                                    href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
-                                    class="inline-flex items-center px-4 py-2 text-sm font-medium text-white
-                                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                            bg-orange-600 hover:bg-orange-700 focus:ring-orange-500
-                                        @else
-                                            bg-blue-600 hover:bg-blue-700 focus:ring-blue-500
-                                        @endif border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2"
-                                >
-                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                    </svg>
-                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                        Voir les résultats de rattrapage à vérifier
-                                    @else
-                                        Voir les résultats à vérifier
-                                    @endif
-                                </a>
-                            </div>
-                        @endif
-                    </div>
-                @endif
-            </div>
-        </div>
-    @else
-        <div class="p-6 text-center
-            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                bg-orange-100 dark:bg-orange-700/30
-            @else
-                bg-gray-100 dark:bg-gray-700
-            @endif rounded-lg">
-            <svg class="w-12 h-12 mx-auto mb-4
-                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                    text-orange-400 dark:text-orange-500
-                @else
-                    text-gray-400 dark:text-gray-500
-                @endif" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <h3 class="mb-2 text-lg font-medium
-                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                    text-orange-800 dark:text-orange-200
-                @else
-                    text-gray-800 dark:text-gray-200
-                @endif">
-                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                    Aucun rapport de cohérence de rattrapage disponible
-                @else
-                    Aucun rapport de cohérence disponible
-                @endif
-            </h3>
-            <p class="mb-4 text-sm
-                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                    text-orange-600 dark:text-orange-300
-                @else
-                    text-gray-600 dark:text-gray-300
-                @endif">
-                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                    Pour générer un rapport de cohérence de rattrapage, vous devez d'abord effectuer une vérification des données de rattrapage.
-                @else
-                    Pour générer un rapport de cohérence, vous devez d'abord effectuer une vérification des données.
-                @endif
-            </p>
-            <button
-                wire:click="confirmVerification"
-                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md
-                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                        bg-orange-600 hover:bg-orange-700 focus:ring-orange-500
                     @else
-                        bg-primary-600 hover:bg-primary-700 focus:ring-primary-500
-                    @endif focus:outline-none focus:ring-2 focus:ring-offset-2"
-            >
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                </svg>
-                @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                    Vérifier la cohérence rattrapage
-                @else
-                    Vérifier la cohérence
-                @endif
-            </button>
-        </div>
-    @endif
-
-    @if($sessionActive && $sessionActive->type === 'Rattrapage' && $examen)
-        <!-- Section spéciale de diagnostic pour les rattrapages -->
-        <div class="p-4 mt-6 border border-orange-200 rounded-lg bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700">
-            <div class="flex items-center justify-between mb-4">
-                <h4 class="text-base font-medium text-orange-900 dark:text-orange-200">
-                    Diagnostic des données de rattrapage
-                </h4>
-                <button
-                    wire:click="diagnosticEligiblesRattrapage"
-                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-orange-800 bg-orange-200 border border-orange-300 rounded hover:bg-orange-300 focus:outline-none dark:bg-orange-800 dark:text-orange-100 dark:border-orange-700 dark:hover:bg-orange-700">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    Lancer diagnostic
-                </button>
-            </div>
-
-            @php
-                $etudiantsEligibles = $this->getEtudiantsEligiblesRattrapage();
-                $compteursDonnees = $this->getCompteursDonneesSession();
-            @endphp
-
-            <div class="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-                <div class="p-3 bg-white border border-orange-200 rounded dark:bg-orange-900/10 dark:border-orange-700">
-                    <div class="font-medium text-orange-700 dark:text-orange-300">Étudiants éligibles</div>
-                    <div class="text-2xl font-bold text-orange-800 dark:text-orange-200">{{ $etudiantsEligibles->count() }}</div>
-                    <div class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-                        Source: {{ $etudiantsEligibles->isNotEmpty() ? $etudiantsEligibles->first()['source'] ?? 'N/A' : 'Aucune' }}
-                    </div>
-                </div>
-
-                <div class="p-3 bg-white border border-orange-200 rounded dark:bg-orange-900/10 dark:border-orange-700">
-                    <div class="font-medium text-orange-700 dark:text-orange-300">Manchettes</div>
-                    <div class="text-2xl font-bold text-orange-800 dark:text-orange-200">{{ $compteursDonnees['manchettes'] }}</div>
-                    <div class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-                        Session rattrapage
-                    </div>
-                </div>
-
-                <div class="p-3 bg-white border border-orange-200 rounded dark:bg-orange-900/10 dark:border-orange-700">
-                    <div class="font-medium text-orange-700 dark:text-orange-300">Copies</div>
-                    <div class="text-2xl font-bold text-orange-800 dark:text-orange-200">{{ $compteursDonnees['copies'] }}</div>
-                    <div class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-                        Avec notes saisies
-                    </div>
-                </div>
-
-                <div class="p-3 bg-white border border-orange-200 rounded dark:bg-orange-900/10 dark:border-orange-700">
-                    <div class="font-medium text-orange-700 dark:text-orange-300">Cohérence</div>
-                    <div class="text-2xl font-bold text-orange-800 dark:text-orange-200">
-                        @if($etudiantsEligibles->count() > 0 && $compteursDonnees['manchettes'] > 0)
-                            ✓
-                        @elseif($etudiantsEligibles->count() == 0 && $compteursDonnees['manchettes'] == 0)
-                            ○
-                        @else
-                            ✗
-                        @endif
-                    </div>
-                    <div class="mt-1 text-xs text-orange-600 dark:text-orange-400">
-                        @if($etudiantsEligibles->count() > 0 && $compteursDonnees['manchettes'] > 0)
-                            OK
-                        @elseif($etudiantsEligibles->count() == 0 && $compteursDonnees['manchettes'] == 0)
-                            Vide
-                        @else
-                            Problème
-                        @endif
-                    </div>
-                </div>
-            </div>
-
-            @if($etudiantsEligibles->count() == 0 && $compteursDonnees['manchettes'] > 0)
-                <div class="p-3 mt-4 text-orange-900 bg-orange-200 border border-orange-400 rounded dark:bg-orange-800/50 dark:border-orange-600 dark:text-orange-100">
-                    <div class="flex items-start">
-                        <svg class="w-5 h-5 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <div>
-                            <div class="font-medium">Incohérence détectée</div>
-                            <div class="mt-1 text-sm">
-                                {{ $compteursDonnees['manchettes'] }} manchette(s) trouvée(s) mais aucun étudiant éligible détecté.
-                                <br>Possible cause : problème dans la méthode getEtudiantsEligiblesRattrapage().
-                            </div>
-                            <div class="mt-2 text-xs opacity-75">
-                                Consultez les logs après avoir lancé le diagnostic pour plus de détails.
+                        <div class="p-3 mt-3 border border-green-200 rounded-md bg-green-50 dark:bg-green-900/20 dark:border-green-800">
+                            <div class="flex items-start">
+                                <svg class="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                                <div class="text-sm text-green-800 dark:text-green-200">
+                                    <strong>Parfait !</strong>
+                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                        Toutes les EC de rattrapage sont complètes et prêtes pour la fusion.
+                                        Vous pouvez procéder à la fusion des données de rattrapage en toute sécurité.
+                                    @else
+                                        Toutes les EC sont complètes et prêtes pour la fusion.
+                                        Vous pouvez procéder à la fusion des données en toute sécurité.
+                                    @endif
+                                    <br><em>Basé sur les {{ $totalPresents }} étudiant(s) réellement présent(s).</em>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    @endif
+
+                    <!-- Bouton "Voir les résultats à vérifier" (inchangé) -->
+                    @if($statut === 'fusion' && $etapeFusion >= 1 && $examen_id)
+                        <div class="mt-4">
+                            <a
+                                href="{{ route('resultats.verification', ['examenId' => $examen_id]) }}"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white
+                                    @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                        bg-orange-600 hover:bg-orange-700 focus:ring-orange-500
+                                    @else
+                                        bg-blue-600 hover:bg-blue-700 focus:ring-blue-500
+                                    @endif border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2"
+                            >
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                    Voir les résultats de rattrapage à vérifier
+                                @else
+                                    Voir les résultats à vérifier
+                                @endif
+                            </a>
+                        </div>
+                    @endif
                 </div>
             @endif
         </div>
-    @endif
+    </div>
+@endif
 </div>
