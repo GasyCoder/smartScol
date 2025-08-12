@@ -80,7 +80,7 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
                 $subHeaderRow[] = $ecData['display_name'];
             }
             // En-tête moyenne UE
-            $subHeaderRow[] = 'Moyenne';
+            $subHeaderRow[] = 'Moy.Gén';
         }
 
         // Colonnes finales
