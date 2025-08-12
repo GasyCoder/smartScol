@@ -14,6 +14,7 @@ use App\Models\SessionExam;
 use App\Models\CodeAnonymat;
 use Livewire\WithPagination;
 use App\Models\ResultatFinal;
+use App\Models\PresenceExamen;
 use App\Models\ResultatFusion;
 use App\Services\FusionService;
 use Illuminate\Support\Facades\DB;
@@ -1721,6 +1722,53 @@ class FusionIndex extends Component
 
 
     /**
+     * Calcul des statistiques basées sur la présence
+     */
+    public function getStatistiquesAvecPresence()
+    {
+        if (!$this->examen_id || !$this->sessionActive) {
+            return null;
+        }
+
+        $sessionId = $this->sessionActive->id;
+
+        // Récupérer les données de présence
+        $presenceGlobale = PresenceExamen::where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $sessionId)
+            ->whereNull('ec_id') // Présence globale
+            ->first();
+
+        if (!$presenceGlobale) {
+            // Fallback : calculer depuis les manchettes
+            $etudiantsPresents = Manchette::where('examen_id', $this->examen_id)
+                ->where('session_exam_id', $sessionId)
+                ->distinct('etudiant_id')
+                ->count();
+            
+            $totalInscrits = $this->getTotalEtudiantsInscrits();
+            
+            return [
+                'total_inscrits' => $totalInscrits,
+                'etudiants_presents' => $etudiantsPresents,
+                'etudiants_absents' => $totalInscrits - $etudiantsPresents,
+                'taux_presence' => $totalInscrits > 0 ? round(($etudiantsPresents / $totalInscrits) * 100, 2) : 0,
+                'source' => 'manchettes'
+            ];
+        }
+
+        return [
+            'total_inscrits' => $presenceGlobale->total_attendu ?: $presenceGlobale->total_etudiants,
+            'etudiants_presents' => $presenceGlobale->etudiants_presents,
+            'etudiants_absents' => $presenceGlobale->etudiants_absents,
+            'taux_presence' => $presenceGlobale->taux_presence,
+            'source' => 'presence_enregistree'
+        ];
+    }
+
+
+
+
+    /**
      * NOUVELLE MÉTHODE : Obtient les statistiques complètes pour le rattrapage
      * avec la logique Total → Admis + Éligibles → Participants
      */
@@ -1783,11 +1831,23 @@ class FusionIndex extends Component
                 ->distinct('etudiant_id')
                 ->count('etudiant_id');
 
-            // 5. PARTICIPANTS RATTRAPAGE (ayant des manchettes dans la session rattrapage)
-            $participantsRattrapage = Manchette::where('examen_id', $this->examen_id)
-                ->where('session_exam_id', $this->sessionActive->id)
-                ->distinct('etudiant_id')
-                ->count('etudiant_id');
+            // ✅ 5. PARTICIPANTS RATTRAPAGE : Utiliser les données de présence si disponibles
+            $statsPresence = $this->getStatistiquesAvecPresence();
+            
+            if ($statsPresence && $statsPresence['source'] === 'presence_enregistree') {
+                // Utiliser les données de présence officielles
+                $participantsRattrapage = $statsPresence['etudiants_presents'];
+                Log::info('Participants rattrapage depuis données de présence', [
+                    'participants' => $participantsRattrapage,
+                    'source' => $statsPresence['source']
+                ]);
+            } else {
+                // Fallback : compter les manchettes
+                $participantsRattrapage = Manchette::where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $this->sessionActive->id)
+                    ->distinct('etudiant_id')
+                    ->count('etudiant_id');
+            }
 
             // 6. Vérification de cohérence logique
             $sommeVerification = $admisPremiereSession + $eligiblesRattrapage;
@@ -1803,11 +1863,12 @@ class FusionIndex extends Component
                 ]);
             }
 
-            Log::info('Statistiques complètes rattrapage calculées', [
+            Log::info('Statistiques complètes rattrapage calculées avec présence', [
                 'total_inscrits' => $totalInscrits,
                 'admis_premiere_session' => $admisPremiereSession,
                 'eligibles_rattrapage' => $eligiblesRattrapage,
                 'participants_rattrapage' => $participantsRattrapage,
+                'source_participants' => $statsPresence['source'] ?? 'manchettes',
                 'coherence' => $sommeVerification === $totalInscrits ? 'OK' : 'ERREUR'
             ]);
 
@@ -1815,7 +1876,9 @@ class FusionIndex extends Component
                 'total_inscrits' => $totalInscrits,
                 'admis_premiere_session' => $admisPremiereSession,
                 'eligibles_rattrapage' => $eligiblesRattrapage,
-                'participants_rattrapage' => $participantsRattrapage
+                'participants_rattrapage' => $participantsRattrapage,
+                'taux_presence' => $statsPresence['taux_presence'] ?? null,
+                'source_donnees' => $statsPresence['source'] ?? 'manchettes'
             ];
 
         } catch (\Exception $e) {
@@ -1833,6 +1896,8 @@ class FusionIndex extends Component
             ];
         }
     }
+
+
 
     /**
      * MÉTHODE UTILITAIRE : Obtient le total d'étudiants inscrits
