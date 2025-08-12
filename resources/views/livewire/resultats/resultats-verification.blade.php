@@ -16,13 +16,11 @@
                                 <em class="mr-2 icon ni ni-reload"></em>
                                 Réinitialiser
                             </button>
-                            <a
-                                href="{{ route('resultats.fusion', ['examenId' => $examenId]) }}"
-                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700"
-                            >
-                                <em class="mr-2 icon ni ni-shuffle"></em>
-                                Retour à la Fusion
-                            </a>
+                            <button wire:click="toggleInfosPresence" 
+                                    class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                                <em class="mr-2 icon ni ni-{{ $afficherInfosPresence ? 'eye-off' : 'eye' }}"></em>
+                                Présence
+                            </button>
                         </div>
                     </div>
 
@@ -40,6 +38,26 @@
                             </div>
                         </div>
                     </div>
+
+                    @if($statistiquesPresence && $afficherInfosPresence)
+                    <div class="p-3 mb-4 text-sm border border-green-100 rounded-md bg-green-50 dark:bg-green-900/20 dark:border-green-800">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start">
+                                <em class="icon ni ni-users text-green-400 mt-0.5 flex-shrink-0"></em>
+                                <div class="ml-3">
+                                    <p class="text-green-700 dark:text-green-300">
+                                        <span class="font-medium">Présence :</span> 
+                                        {{ $statistiquesPresence['etudiants_presents'] }}/{{ $statistiquesPresence['total_inscrits'] }} présents 
+                                        ({{ $statistiquesPresence['taux_presence'] }}%)
+                                    </p>
+                                </div>
+                            </div>
+                            <button wire:click="toggleInfosPresence" class="text-green-600 hover:text-green-800">
+                                <em class="icon ni ni-eye-off"></em>
+                            </button>
+                        </div>
+                    </div>
+                    @endif
 
                     <!-- Filtres -->
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -63,11 +81,11 @@
                                 @endforeach
                             </select>
                         </div>
-                        <!-- Matière (EC) -->
+                        <!-- EC (EC) -->
                         <div>
-                            <label for="ec_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Matière</label>
+                            <label for="ec_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">EC</label>
                             <select id="ec_id" wire:model.live="ec_id" class="block w-full py-2 pl-3 pr-10 mt-1 text-base border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" {{ count($ecs) ? '' : 'disabled' }}>
-                                <option value="">Sélectionner une matière</option>
+                                <option value="">Sélectionner une EC</option>
                                 @foreach($ecs as $ec)
                                     <option value="{{ $ec->id }}">{{ isset($ec->abr) ? $ec->abr . ' - ' : '' }}{{ $ec->nom }}</option>
                                 @endforeach
@@ -123,6 +141,7 @@
                         <!-- Contrôles à droite -->
                         <div class="flex items-center space-x-4">
                             <!-- Switch moyennes UE -->
+                            <!-- Switch moyennes UE amélioré -->
                             <div class="flex items-center px-3 py-2 space-x-3 bg-white border rounded-lg dark:bg-gray-800 dark:border-gray-600">
                                 <label for="switch-moyennes-ue" class="text-sm font-medium text-gray-700 cursor-pointer dark:text-gray-300">
                                     Moyennes UE
@@ -133,9 +152,10 @@
                                         id="switch-moyennes-ue"
                                         wire:model.live="afficherMoyennesUE"
                                         class="sr-only"
+                                        {{ $afficherMoyennesUE ? 'checked' : '' }}
                                     >
                                     <div class="block w-11 h-6 rounded-full cursor-pointer transition-colors duration-200 {{ $afficherMoyennesUE ? 'bg-blue-600' : 'bg-gray-400' }}"
-                                        onclick="document.getElementById('switch-moyennes-ue').click()">
+                                        wire:click="toggleMoyennesUE">
                                     </div>
                                     <div class="dot absolute left-0.5 top-0.5 bg-white w-5 h-5 rounded-full transition-transform duration-200 {{ $afficherMoyennesUE ? 'transform translate-x-5' : '' }}">
                                     </div>
