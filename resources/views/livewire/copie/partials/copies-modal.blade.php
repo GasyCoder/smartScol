@@ -65,7 +65,7 @@
                                 </div>
                                 <div class="flex items-center">
                                     <em class="mr-2 text-gray-500 icon ni ni-book"></em>
-                                    <span class="text-gray-600 dark:text-gray-300">Matière: <strong>{{ $currentEcName }}</strong></span>
+                                    <span class="text-gray-600 dark:text-gray-300">EC: <strong>{{ $currentEcName }}</strong></span>
                                 </div>
                                 <div class="flex items-center">
                                     <em class="mr-2 text-gray-500 icon ni ni-calendar"></em>
@@ -87,9 +87,51 @@
                         <!-- Formulaire RENFORCÉ -->
                         <form wire:submit.prevent="saveCopie">
                             <div class="space-y-6">
-                                <!-- Code anonymat avec validation renforcée -->
                                 <div class="space-y-4">
-                                    <div>
+                                    {{-- temporaire code à cause insidence scolarité --}}
+                                <div>
+                                    <label for="check_matricule" class="flex items-center mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <em class="mr-2 text-primary-600 icon ni ni-code dark:text-primary-400"></em>
+                                            Trouver matricule
+                                            <span class="ml-1 text-red-500">*</span>
+                                        </label>
+                                        <div class="relative">
+                                            <input type="text"
+                                                wire:model.live="check_matricule"
+                                                id="check_matricule"
+                                                class="block w-full px-4 py-3 font-mono text-lg border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+                                                placeholder="Ex: 357400"
+                                                required>
+                                        </div>
+                                    {{-- Affichage pour voir code annonymat et EC ICI selon recherche --}}
+                                    @if($etudiant_trouve && $manchette_trouvee)
+                                        <div class="mt-4 flex items-center space-x-2 p-3 border rounded-lg {{ $copie_existante ? 'border-orange-300 bg-orange-50 dark:bg-orange-900/20' : 'border-green-300 bg-green-50 dark:bg-green-900/20' }}">
+                                            @if($copie_existante)
+                                                <em class="text-orange-500 icon ni ni-alert-triangle"></em>
+                                                <div>
+                                                    <p class="font-medium text-gray-900 dark:text-white">{{ $etudiant_trouve->nom }} {{ $etudiant_trouve->prenom }}</p>
+                                                    <p class="text-sm text-orange-600">Matricule déjà existante!</p>
+                                                </div>
+                                            @else
+                                                <em class="text-green-500 icon ni ni-check-circle"></em>
+                                                <p class="font-medium text-gray-900 dark:text-white">{{ $etudiant_trouve->nom }} {{ $etudiant_trouve->prenom }}</p>
+                                            @endif
+                                        </div>
+                                    @endif
+
+                                    </div>
+                                    <input type="hidden"
+                                        wire:model.live="code_anonymat"
+                                        id="code_anonymat"
+                                        class="block w-full px-4 py-3 font-mono text-lg border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400
+                                        {{ $code_anonymat && strlen($code_anonymat) >= 2 ? 'border-green-300 bg-green-50 dark:bg-green-900/20' : '' }}"
+                                        placeholder="Ex: {{ $selectedCodeBase }}1"
+                                        autofocus
+                                        required
+                                        maxlength="10">
+                                    {{-- <div>
+                                       <!-- Code anonymat avec validation renforcée NE TOUCHE PAS CETTE CODE Code d'anonymat -->
+                                       <div class="mt-4">
                                         <label for="code_anonymat" class="flex items-center mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                                             <em class="mr-2 text-primary-600 icon ni ni-code dark:text-primary-400"></em>
                                             Code d'anonymat
@@ -161,7 +203,7 @@
                                             {{ $message }}
                                         </div>
                                         @enderror
-                                    </div>
+                                    </div> --}}
 
                                     <!-- Double vérification du code (si activée) -->
                                     @if($enableDoubleVerification ?? false)
