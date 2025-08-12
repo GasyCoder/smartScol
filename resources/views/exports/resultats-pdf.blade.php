@@ -6,24 +6,26 @@
     <title>Résultats {{ $session->type }} - {{ $niveau->nom }}</title>
     <style>
         @page {
-            margin: 10mm 8mm 15mm 8mm;
+            margin: 8mm 5mm 12mm 5mm;
             size: A4 landscape;
         }
 
         body {
             font-family: 'DejaVu Sans', sans-serif;
-            font-size: 9px;
+            font-size: 8px;
             margin: 0;
             padding: 0;
             color: #000;
             line-height: 1.2;
+            background: #fff;
         }
 
+        /* ===== HEADER ===== */
         .header {
             text-align: center;
-            margin-bottom: 12px;
-            border-bottom: 1px solid #000;
-            padding-bottom: 8px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 6px;
             page-break-inside: avoid;
         }
 
@@ -32,6 +34,7 @@
             font-size: 16px;
             margin: 0 0 3px 0;
             font-weight: bold;
+            text-transform: uppercase;
         }
 
         .header h2 {
@@ -41,29 +44,34 @@
             font-weight: normal;
         }
 
+        /* ===== INFO SECTION ===== */
         .info-section {
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            padding: 5px;
+            margin-bottom: 8px;
+            page-break-inside: avoid;
+        }
+
+        .info-grid {
             display: table;
             width: 100%;
-            margin-bottom: 10px;
-            background: #f5f5f5;
-            padding: 6px;
-            border: 1px solid #ccc;
-            page-break-inside: avoid;
+            table-layout: fixed;
         }
 
         .info-row {
             display: table-row;
         }
 
-        .info-left, .info-right {
+        .info-col {
             display: table-cell;
             width: 50%;
             vertical-align: top;
-            padding: 2px 10px;
+            padding: 2px 8px;
         }
 
         .info-item {
-            margin-bottom: 3px;
+            margin-bottom: 2px;
             font-size: 8px;
         }
 
@@ -72,34 +80,40 @@
             color: #000;
         }
 
+        /* ===== STATISTICS ===== */
         .statistics {
-            display: table;
-            width: 100%;
-            margin-bottom: 10px;
             background: #f0f0f0;
-            padding: 6px;
             border: 1px solid #ccc;
+            padding: 5px;
+            margin-bottom: 8px;
             text-align: center;
             page-break-inside: avoid;
         }
 
-        .statistics-row {
+        .stats-container {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .stats-row {
             display: table-row;
         }
 
-        .stat-item {
+        .stat-cell {
             display: table-cell;
             text-align: center;
-            padding: 3px;
+            padding: 2px;
             border-right: 1px solid #ddd;
+            vertical-align: middle;
         }
 
-        .stat-item:last-child {
+        .stat-cell:last-child {
             border-right: none;
         }
 
         .stat-number {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
             color: #000;
             display: block;
@@ -112,31 +126,36 @@
             display: block;
         }
 
+        /* ===== TABLE - OPTIMISÉE POUR TOUTES LES DONNÉES ===== */
         .results-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 15px;
-            font-size: 7px;
-            page-break-inside: auto;
+            font-size: 6px;
+            table-layout: auto;
         }
 
         .results-table th {
             background-color: #e0e0e0;
             color: #000;
-            padding: 3px 2px;
+            padding: 2px 1px;
             text-align: center;
             font-weight: bold;
             border: 1px solid #000;
-            font-size: 6px;
+            font-size: 5px;
             line-height: 1.1;
+            vertical-align: middle;
+            word-wrap: break-word;
         }
 
         .results-table td {
-            padding: 2px 1px;
+            padding: 1px 0.5px;
             border: 1px solid #000;
             text-align: center;
-            font-size: 7px;
+            font-size: 6px;
             line-height: 1.1;
+            vertical-align: middle;
+            word-wrap: break-word;
         }
 
         .results-table tr {
@@ -147,111 +166,107 @@
             background-color: #f9f9f9;
         }
 
-        .student-info {
+        /* ===== COLONNES DYNAMIQUES ===== */
+        .col-numero { 
+            width: 3%; 
+            min-width: 15px;
+        }
+
+        .col-matricule { 
+            width: 6%; 
+            min-width: 40px;
+            font-family: monospace;
+            font-size: 5px;
+        }
+
+        .col-nom { 
+            width: 8%; 
+            min-width: 50px;
             text-align: left !important;
             font-weight: bold;
-            color: #000;
-            padding: 2px 3px !important;
+            padding-left: 2px !important;
         }
 
-        .matricule {
-            font-family: monospace;
-            color: #333;
-            font-size: 6px;
+        .col-prenom { 
+            width: 7%; 
+            min-width: 45px;
+            text-align: left !important;
+            font-weight: bold;
+            padding-left: 2px !important;
         }
 
+        .col-ec { 
+            width: 2%; 
+            min-width: 20px;
+        }
+
+        .col-ue { 
+            width: 3%; 
+            min-width: 25px;
+            background-color: #f5f5f5 !important;
+            border-left: 2px solid #000 !important;
+            font-weight: bold;
+        }
+
+        .col-moyenne { 
+            width: 3.5%; 
+            min-width: 30px;
+            font-weight: bold;
+        }
+
+        .col-credits { 
+            width: 4%; 
+            min-width: 30px;
+        }
+
+        .col-decision { 
+            width: 5%; 
+            min-width: 35px;
+        }
+
+        /* ===== NOTES ===== */
         .note {
             font-weight: bold;
-            font-size: 7px;
+            font-size: 6px;
         }
 
-        .ue-moyenne {
-            background-color: #f5f5f5 !important;
-            font-weight: bold;
-            border-left: 2px solid #000 !important;
+        .ue-header {
+            font-size: 4px;
+            line-height: 1;
+            text-align: center;
         }
 
+        .elimination {
+            font-size: 4px;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* ===== DECISIONS ===== */
         .decision {
             font-weight: bold;
-            padding: 1px 3px;
-            font-size: 6px;
-            border-radius: 2px;
-        }
-
-        .decision-admis {
+            padding: 1px 2px;
+            font-size: 5px;
+            border-radius: 1px;
             background-color: #e0e0e0;
             color: #000;
         }
 
-        .decision-rattrapage {
-            background-color: #e0e0e0;
-            color: #000;
-        }
-
-        .decision-redoublant {
-            background-color: #e0e0e0;
-            color: #000;
-        }
-
-        .decision-exclus {
-            background-color: #d0d0d0;
-            color: #000;
-        }
-
-        .summary-section {
-            margin-top: 15px;
-            background: #f8f8f8;
-            padding: 8px;
-            border: 1px solid #ccc;
-            page-break-inside: avoid;
-        }
-
-        .summary-title {
-            font-weight: bold;
-            color: #000;
-            margin-bottom: 6px;
-            font-size: 10px;
-            text-align: center;
-            border-bottom: 1px solid #000;
-            padding-bottom: 2px;
-        }
-
-        .summary-grid {
-            display: table;
-            width: 100%;
-        }
-
-        .summary-row {
-            display: table-row;
-        }
-
-        .summary-column {
-            display: table-cell;
-            width: 33.33%;
-            vertical-align: top;
-            padding: 0 8px;
-            border-right: 1px solid #ddd;
-        }
-
-        .summary-column:last-child {
-            border-right: none;
-        }
-
-        .summary-item {
-            margin-bottom: 3px;
-            font-size: 7px;
-            line-height: 1.2;
-        }
-
+        /* ===== PAGINATION ===== */
         .page-break {
             page-break-before: always;
         }
 
+        .no-break {
+            page-break-inside: avoid;
+        }
+
+        /* ===== FOOTER ===== */
         .footer {
             position: fixed;
             bottom: 5mm;
-            left: 8mm;
-            right: 8mm;
+            left: 5mm;
+            right: 5mm;
             text-align: center;
             font-size: 6px;
             color: #333;
@@ -259,140 +274,171 @@
             padding-top: 3px;
         }
 
-        /* Éviter les coupures */
-        .no-break {
-            page-break-inside: avoid;
-        }
-
-        /* Style pour l'ordre */
-        .ordre {
-            font-weight: bold;
-            color: #000;
-        }
-
-        /* Optimisation pour les petites tables */
-        .compact-table {
-            font-size: 6px;
-        }
-
-        .compact-table th,
-        .compact-table td {
-            padding: 1px;
-        }
-
-        /* Headers UE avec informations complètes */
-        .ue-header {
+        /* ===== MODE COMPACT POUR BEAUCOUP DE COLONNES ===== */
+        .ultra-compact {
             font-size: 5px;
-            line-height: 1;
-            text-align: center;
+        }
+
+        .ultra-compact th,
+        .ultra-compact td {
+            padding: 0.5px;
+            font-size: 4px;
+        }
+
+        .ultra-compact .note {
+            font-size: 5px;
+        }
+
+        /* ===== OPTIMISATION POUR NOMBREUSES UE/EC ===== */
+        @media print {
+            .results-table {
+                width: 100%;
+                font-size: 5px;
+            }
+            
+            .col-ec {
+                width: auto;
+                min-width: 18px;
+            }
+            
+            .col-ue {
+                width: auto;
+                min-width: 22px;
+            }
         }
     </style>
 </head>
 <body>
+    {{-- HEADER --}}
     <div class="header no-break">
         <h1>RÉSULTATS {{ strtoupper($session->type) }}</h1>
         <h2>{{ $niveau->nom }}{{ $parcours ? ' - ' . $parcours->nom : '' }}</h2>
     </div>
 
+    {{-- INFORMATIONS GÉNÉRALES --}}
     <div class="info-section no-break">
-        <div class="info-row">
-            <div class="info-left">
-                <div class="info-item">
-                    <span class="info-label">Année Universitaire:</span> {{ $anneeUniversitaire->libelle }}
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Session:</span> {{ $session->type }}
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Niveau:</span> {{ $niveau->nom }}
-                </div>
-                @if($parcours)
+        <div class="info-grid">
+            <div class="info-row">
+                <div class="info-col">
                     <div class="info-item">
-                        <span class="info-label">Parcours:</span> {{ $parcours->nom }}
+                        <span class="info-label">Année Universitaire:</span> {{ $anneeUniversitaire->libelle }}
                     </div>
+                    <div class="info-item">
+                        <span class="info-label">Session:</span> {{ $session->type }}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Niveau:</span> {{ $niveau->nom }}
+                    </div>
+                    @if($parcours)
+                        <div class="info-item">
+                            <span class="info-label">Parcours:</span> {{ $parcours->nom }}
+                        </div>
+                    @endif
+                </div>
+                <div class="info-col">
+                    <div class="info-item">
+                        <span class="info-label">Date de génération:</span> {{ $dateGeneration->format('d/m/Y H:i:s') }}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Nombre d'étudiants:</span> {{ count($resultats) }}
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Taux de réussite:</span> {{ $statistics['taux_reussite'] ?? 0 }}%
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- STATISTIQUES --}}
+    <div class="statistics no-break">
+        <div class="stats-container">
+            <div class="stats-row">
+                <div class="stat-cell">
+                    <span class="stat-number">{{ $statistics['total_etudiants'] ?? 0 }}</span>
+                    <span class="stat-label">Total Étudiants</span>
+                </div>
+                <div class="stat-cell">
+                    <span class="stat-number">{{ $statistics['admis'] ?? 0 }}</span>
+                    <span class="stat-label">Admis</span>
+                </div>
+                <div class="stat-cell">
+                    <span class="stat-number">{{ $statistics['rattrapage'] ?? 0 }}</span>
+                    <span class="stat-label">Rattrapage</span>
+                </div>
+                <div class="stat-cell">
+                    <span class="stat-number">{{ $statistics['redoublant'] ?? 0 }}</span>
+                    <span class="stat-label">Redoublant</span>
+                </div>
+                @if(($statistics['exclus'] ?? 0) > 0)
+                <div class="stat-cell">
+                    <span class="stat-number">{{ $statistics['exclus'] ?? 0 }}</span>
+                    <span class="stat-label">Exclus</span>
+                </div>
                 @endif
             </div>
-            <div class="info-right">
-                <div class="info-item">
-                    <span class="info-label">Date de génération:</span> {{ $dateGeneration->format('d/m/Y H:i:s') }}
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Nombre d'étudiants:</span> {{ count($resultats) }}
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Taux de réussite:</span> {{ $statistics['taux_reussite'] ?? 0 }}%
-                </div>
-            </div>
         </div>
     </div>
 
-    <div class="statistics no-break">
-        <div class="statistics-row">
-            <div class="stat-item">
-                <span class="stat-number">{{ $statistics['total_etudiants'] ?? 0 }}</span>
-                <span class="stat-label">Total Étudiants</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">{{ $statistics['admis'] ?? 0 }}</span>
-                <span class="stat-label">Admis</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">{{ $statistics['rattrapage'] ?? 0 }}</span>
-                <span class="stat-label">Rattrapage</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">{{ $statistics['redoublant'] ?? 0 }}</span>
-                <span class="stat-label">Redoublant</span>
-            </div>
-            @if(($statistics['exclus'] ?? 0) > 0)
-            <div class="stat-item">
-                <span class="stat-number">{{ $statistics['exclus'] ?? 0 }}</span>
-                <span class="stat-label">Exclus</span>
-            </div>
-            @endif
-        </div>
-    </div>
+    {{-- TABLEAU COMPLET DES RÉSULTATS --}}
+    @php
+        $totalCols = 4; // N°, Matricule, Nom, Prénom
+        foreach($uesStructure as $ue) {
+            $totalCols += count($ue['ecs']) + 1; // ECs + Moyenne UE
+        }
+        $totalCols += 3; // Moyenne Générale, Crédits, Décision
+        
+        $tableClass = '';
+        if ($totalCols > 20) {
+            $tableClass = 'ultra-compact';
+        }
+    @endphp
 
-    <table class="results-table {{ count($resultats) > 30 ? 'compact-table' : '' }}">
+    <table class="results-table {{ $tableClass }}">
         <thead>
             <tr class="no-break">
-                <th style="width: 4%;">N°</th>
-                <th style="width: 8%;">Matricule</th>
-                <th style="width: 12%;">Nom</th>
-                <th style="width: 10%;">Prénom</th>
+                <th class="col-numero">N°</th>
+                <th class="col-matricule">Matricule</th>
+                <th class="col-nom">Nom</th>
+                <th class="col-prenom">Prénom</th>
                 @foreach($uesStructure as $ueStructure)
+                    {{-- Toutes les colonnes EC de cette UE --}}
                     @foreach($ueStructure['ecs'] as $ecData)
-                        <th style="width: 2.5%;" class="ue-header" title="{{ $ecData['ec']->nom }}">
+                        <th class="col-ec ue-header" title="{{ $ecData['ec']->nom }}">
                             {{ $ecData['display_name'] }}
                         </th>
                     @endforeach
-                    <th style="width: 3.5%;" class="ue-header">
+                    {{-- Colonne moyenne UE --}}
+                    <th class="col-ue ue-header">
                         <div>{{ $ueStructure['ue']->abr ?? 'UE' . ($loop->index + 1) }}</div>
-                        <div>({{ $ueStructure['ue']->credits }})</div>
+                        <div>({{ $ueStructure['ue']->credits }}cr)</div>
                         <div>Moy</div>
                     </th>
                 @endforeach
-                <th style="width: 4%;">Moy.Gén</th>
-                <th style="width: 5%;">Crédits</th>
-                <th style="width: 6%;">Décision</th>
+                <th class="col-moyenne">Moy.Gén</th>
+                <th class="col-credits">Crédits</th>
+                <th class="col-decision">Décision</th>
             </tr>
         </thead>
         <tbody>
             @foreach($resultats as $index => $resultat)
                 <tr class="no-break">
-                    <td class="ordre">{{ $index + 1 }}</td>
-                    <td class="matricule">{{ $resultat['etudiant']->matricule }}</td>
-                    <td class="student-info">{{ $resultat['etudiant']->nom }}</td>
-                    <td class="student-info">{{ $resultat['etudiant']->prenom }}</td>
+                    <td class="col-numero note">{{ $index + 1 }}</td>
+                    <td class="col-matricule">{{ $resultat['etudiant']->matricule }}</td>
+                    <td class="col-nom">{{ $resultat['etudiant']->nom }}</td>
+                    <td class="col-prenom">{{ $resultat['etudiant']->prenom }}</td>
+                    
+                    {{-- TOUTES les UE et EC --}}
                     @foreach($uesStructure as $ueStructure)
                         @php
                             $moyenneUE = 0;
                             $notesUE = [];
                             $hasNoteZeroInUE = false;
                         @endphp
-                        {{-- Notes EC --}}
+                        
+                        {{-- TOUTES les notes EC de cette UE --}}
                         @foreach($ueStructure['ecs'] as $ecData)
-                            <td>
+                            <td class="col-ec">
                                 @if(isset($resultat['notes'][$ecData['ec']->id]))
                                     @php
                                         $note = $resultat['notes'][$ecData['ec']->id]->note;
@@ -405,16 +451,15 @@
                                 @endif
                             </td>
                         @endforeach
-                        {{-- CORRECTION : Moyenne UE selon votre logique --}}
-                        <td class="ue-moyenne">
+                        
+                        {{-- Moyenne UE complète --}}
+                        <td class="col-ue">
                             @php
                                 if ($hasNoteZeroInUE) {
-                                    // UE éliminée à cause d'une note de 0
                                     $moyenneUE = 0;
                                     $moyenneText = '0.00';
                                     $elimination = '(Élim)';
                                 } elseif (!empty($notesUE)) {
-                                    // Moyenne UE = somme notes / nombre EC
                                     $moyenneUE = array_sum($notesUE) / count($notesUE);
                                     $moyenneText = number_format($moyenneUE, 2);
                                     $elimination = '';
@@ -427,25 +472,24 @@
                             <div>
                                 <span class="note">{{ $moyenneText }}</span>
                                 @if($elimination)
-                                    <br><span style="font-size: 5px; color: #666;">{{ $elimination }}</span>
+                                    <br><span class="elimination">{{ $elimination }}</span>
                                 @endif
                             </div>
                         </td>
                     @endforeach
-                    <td>
+                    
+                    {{-- Moyenne générale --}}
+                    <td class="col-moyenne">
                         <span class="note">{{ number_format($resultat['moyenne_generale'], 2) }}</span>
                     </td>
-                    <td>{{ $resultat['credits_valides'] }}/{{ $resultat['total_credits'] ?? 60 }}</td>
-                    <td>
+                    
+                    {{-- Crédits --}}
+                    <td class="col-credits">{{ $resultat['credits_valides'] }}/{{ $resultat['total_credits'] ?? 60 }}</td>
+                    
+                    {{-- Décision --}}
+                    <td class="col-decision">
                         @php
                             $decision = $resultat['decision'];
-                            $decisionClass = match($decision) {
-                                'admis' => 'decision-admis',
-                                'rattrapage' => 'decision-rattrapage',
-                                'redoublant' => 'decision-redoublant',
-                                'exclus' => 'decision-exclus',
-                                default => 'decision-admis'
-                            };
                             $decisionLibelle = match($decision) {
                                 'admis' => 'Admis',
                                 'rattrapage' => 'Rattrapage',
@@ -454,36 +498,37 @@
                                 default => 'Non définie'
                             };
                         @endphp
-                        <span class="decision {{ $decisionClass }}">{{ $decisionLibelle }}</span>
+                        <span class="decision">{{ $decisionLibelle }}</span>
                     </td>
                 </tr>
-                {{-- Saut de page automatique tous les 25 étudiants --}}
-                @if(($index + 1) % 25 == 0 && !$loop->last)
+                
+                {{-- Saut de page tous les 20 étudiants pour tables larges --}}
+                @if(($index + 1) % 20 == 0 && !$loop->last)
                     </tbody>
                     </table>
                     <div class="page-break"></div>
-                    <table class="results-table {{ count($resultats) > 30 ? 'compact-table' : '' }}">
+                    <table class="results-table {{ $tableClass }}">
                         <thead>
                             <tr class="no-break">
-                                <th style="width: 4%;">N°</th>
-                                <th style="width: 8%;">Matricule</th>
-                                <th style="width: 12%;">Nom</th>
-                                <th style="width: 10%;">Prénom</th>
+                                <th class="col-numero">N°</th>
+                                <th class="col-matricule">Matricule</th>
+                                <th class="col-nom">Nom</th>
+                                <th class="col-prenom">Prénom</th>
                                 @foreach($uesStructure as $ueStructure)
                                     @foreach($ueStructure['ecs'] as $ecData)
-                                        <th style="width: 2.5%;" class="ue-header" title="{{ $ecData['ec']->nom }}">
+                                        <th class="col-ec ue-header" title="{{ $ecData['ec']->nom }}">
                                             {{ $ecData['display_name'] }}
                                         </th>
                                     @endforeach
-                                    <th style="width: 3.5%;" class="ue-header">
+                                    <th class="col-ue ue-header">
                                         <div>{{ $ueStructure['ue']->abr ?? 'UE' . ($loop->index + 1) }}</div>
-                                        <div>({{ $ueStructure['ue']->credits }})</div>
+                                        <div>({{ $ueStructure['ue']->credits }}cr)</div>
                                         <div>Moy</div>
                                     </th>
                                 @endforeach
-                                <th style="width: 4%;">Moy.Gén</th>
-                                <th style="width: 5%;">Crédits</th>
-                                <th style="width: 6%;">Décision</th>
+                                <th class="col-moyenne">Moy.Gén</th>
+                                <th class="col-credits">Crédits</th>
+                                <th class="col-decision">Décision</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -492,74 +537,7 @@
         </tbody>
     </table>
 
-    {{-- Page suivante pour le résumé si nécessaire --}}
-    @if(count($resultats) > 20)
-        <div class="page-break"></div>
-    @endif
-
-    <div class="summary-section no-break">
-        <div class="summary-title">RÉSUMÉ ANALYTIQUE</div>
-        <div class="summary-grid">
-            <div class="summary-row">
-                <div class="summary-column">
-                    <div class="summary-item"><strong>Répartition par décision:</strong></div>
-                    <div class="summary-item">• Admis: {{ $statistics['admis'] ?? 0 }} ({{ $statistics['total_etudiants'] > 0 ? round(($statistics['admis'] ?? 0) / $statistics['total_etudiants'] * 100, 1) : 0 }}%)</div>
-                    <div class="summary-item">• Rattrapage: {{ $statistics['rattrapage'] ?? 0 }} ({{ $statistics['total_etudiants'] > 0 ? round(($statistics['rattrapage'] ?? 0) / $statistics['total_etudiants'] * 100, 1) : 0 }}%)</div>
-                    <div class="summary-item">• Redoublant: {{ $statistics['redoublant'] ?? 0 }} ({{ $statistics['total_etudiants'] > 0 ? round(($statistics['redoublant'] ?? 0) / $statistics['total_etudiants'] * 100, 1) : 0 }}%)</div>
-                    @if(($statistics['exclus'] ?? 0) > 0)
-                    <div class="summary-item">• Exclus: {{ $statistics['exclus'] ?? 0 }} ({{ $statistics['total_etudiants'] > 0 ? round(($statistics['exclus'] ?? 0) / $statistics['total_etudiants'] * 100, 1) : 0 }}%)</div>
-                    @endif
-                </div>
-                <div class="summary-column">
-                    <div class="summary-item"><strong>Moyennes de promotion:</strong></div>
-                    <div class="summary-item">• Moyenne générale: {{ $statistics['moyenne_promo'] ?? 0 }}/20</div>
-                    @php
-                        $moyennes = collect($resultats)->pluck('moyenne_generale');
-                        $moyenneMin = $moyennes->min();
-                        $moyenneMax = $moyennes->max();
-                    @endphp
-                    <div class="summary-item">• Note la plus basse: {{ number_format($moyenneMin ?? 0, 2) }}/20</div>
-                    <div class="summary-item">• Note la plus haute: {{ number_format($moyenneMax ?? 0, 2) }}/20</div>
-                    <div class="summary-item">• Crédits moyens validés: {{ $statistics['credits_moyen'] ?? 0 }}/60</div>
-                </div>
-                <div class="summary-column">
-                    <div class="summary-item"><strong>Structure pédagogique:</strong></div>
-                    @foreach($uesStructure as $ueStructure)
-                        <div class="summary-item">• {{ $ueStructure['ue']->abr ?? 'UE' . ($loop->index + 1) }} - {{ $ueStructure['ue']->nom }} ({{ $ueStructure['ue']->credits }}cr)</div>
-                    @endforeach
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="summary-section no-break" style="margin-top: 10px;">
-        <div class="summary-title">LOGIQUE ACADÉMIQUE APPLIQUÉE</div>
-        <div style="display: table; width: 100%; font-size: 7px;">
-            <div style="display: table-row;">
-                <div style="display: table-cell; width: 50%; padding: 0 5px; vertical-align: top;">
-                    <div><strong>Calculs et validation:</strong></div>
-                    <div>• Moyenne UE = (Somme notes EC) ÷ (Nombre EC)</div>
-                    <div>• UE validée si Moyenne ≥ 10 ET aucune note = 0</div>
-                    <div>• Note 0 = UE éliminée (0 crédit validé)</div>
-                    <div>• Moyenne générale = Moyenne des moyennes UE</div>
-                    <div>• Crédits validés = Somme crédits UE validées</div>
-                </div>
-                <div style="display: table-cell; width: 50%; padding: 0 5px; vertical-align: top;">
-                    <div><strong>Décisions selon session:</strong></div>
-                    @if($session->type === 'Normale')
-                        <div>• 1ère session: 60 crédits validés → Admis</div>
-                        <div>• 1ère session: &lt; 60 crédits → Rattrapage</div>
-                    @else
-                        <div>• 2ème session: Note éliminatoire → Exclu</div>
-                        <div>• 2ème session: ≥ 40 crédits → Admis</div>
-                        <div>• 2ème session: &lt; 40 crédits → Redoublant</div>
-                    @endif
-                    <div>• Total crédits année: 60 ECTS</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    {{-- FOOTER --}}
     <div class="footer">
         Document généré le {{ $dateGeneration->format('d/m/Y à H:i:s') }} -
         {{ $niveau->nom }}{{ $parcours ? ' - ' . $parcours->nom : '' }} -
