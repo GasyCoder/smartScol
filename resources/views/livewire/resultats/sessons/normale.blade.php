@@ -137,16 +137,48 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
 
                 {{-- ✅ AJOUT : Bouton de rafraîchissement avec status --}}
                 <div class="flex items-center space-x-2">
-                    <button wire:click="forceReloadData"
-                            wire:loading.attr="disabled"
-                            wire:loading.class="opacity-50"
-                            class="flex items-center px-4 py-2 text-sm text-blue-600 transition-colors bg-blue-100 rounded-lg hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-400 dark:hover:bg-blue-800/50">
-                        <em class="mr-2 ni ni-reload"
-                           wire:loading.class="animate-spin"
-                           wire:target="forceReloadData,refreshResultats"></em>
-                        <span wire:loading.remove wire:target="forceReloadData,refreshResultats">Actualiser</span>
-                        <span wire:loading wire:target="forceReloadData,refreshResultats">Actualisation...</span>
-                    </button>
+
+                    {{-- ✅ NOUVEAUX BOUTONS D'EXPORT SIMPLES --}}
+                    <div class="flex items-center space-x-3">
+                        {{-- Bouton Export PDF --}}
+                        <button wire:click="exporterPDF" 
+                                wire:loading.attr="disabled"
+                                class="flex items-center px-4 py-2 text-sm font-medium text-white transition-colors bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                            <em class="mr-2 ni ni-file-pdf" wire:loading.class="animate-spin" wire:target="exporterPDF"></em>
+                            <span wire:loading.remove wire:target="exporterPDF">Export PDF</span>
+                            <span wire:loading wire:target="exporterPDF">Export...</span>
+                        </button>
+
+                        {{-- Bouton Export Excel --}}
+                        <button wire:click="exporterExcel" 
+                                wire:loading.attr="disabled"
+                                class="flex items-center px-4 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                            <em class="mr-2 ni ni-file-excel" wire:loading.class="animate-spin" wire:target="exporterExcel"></em>
+                            <span wire:loading.remove wire:target="exporterExcel">Export Excel</span>
+                            <span wire:loading wire:target="exporterExcel">Export...</span>
+                        </button>
+
+                        {{-- Bouton Export Admis seulement (optionnel) --}}
+                        @if(($statistiquesSession1['admis'] ?? 0) > 0)
+                            <button wire:click="exporterAdmisPDF" 
+                                    wire:loading.attr="disabled"
+                                    class="flex items-center px-3 py-2 text-sm font-medium text-green-800 transition-colors bg-green-100 rounded-lg hover:bg-green-200 disabled:opacity-50 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-900">
+                                <em class="mr-2 ni ni-check-circle" wire:loading.class="animate-spin" wire:target="exporterAdmisPDF"></em>
+                                <span wire:loading.remove wire:target="exporterAdmisPDF">Admis PDF ({{ $statistiquesSession1['admis'] }})</span>
+                                <span wire:loading wire:target="exporterAdmisPDF">Export...</span>
+                            </button>
+                        @endif
+
+                        {{-- Bouton Actualiser existant (garder votre code) --}}
+                        <button wire:click="forceReloadData"
+                                wire:loading.attr="disabled"
+                                wire:loading.class="opacity-50"
+                                class="flex items-center px-4 py-2 text-sm text-blue-600 transition-colors bg-blue-100 rounded-lg hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-400 dark:hover:bg-blue-800/50">
+                            <em class="mr-2 ni ni-reload" wire:loading.class="animate-spin" wire:target="forceReloadData,refreshResultats"></em>
+                            <span wire:loading.remove wire:target="forceReloadData,refreshResultats">Actualiser</span>
+                            <span wire:loading wire:target="forceReloadData,refreshResultats">Actualisation...</span>
+                        </button>
+                    </div>
 
                     {{-- ✅ Indicateur de dernière délibération --}}
                     @if(isset($deliberationStatus['date_deliberation']))
@@ -481,6 +513,32 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
         @endif
     </div>
 @endif
+
+{{-- ✅ NOTIFICATION D'EXPORT (à ajouter quelque part dans la vue) --}}
+@if (session()->has('export_success'))
+    <div class="p-4 mb-4 border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-700 rounded-xl">
+        <div class="flex items-center">
+            <em class="mr-3 text-green-600 ni ni-check-circle dark:text-green-400"></em>
+            <div>
+                <h4 class="text-sm font-medium text-green-900 dark:text-green-100">Export réussi</h4>
+                <p class="text-sm text-green-700 dark:text-green-300">{{ session('export_success') }}</p>
+            </div>
+        </div>
+    </div>
+@endif
+
+@if (session()->has('export_error'))
+    <div class="p-4 mb-4 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-700 rounded-xl">
+        <div class="flex items-center">
+            <em class="mr-3 text-red-600 ni ni-times-circle dark:text-red-400"></em>
+            <div>
+                <h4 class="text-sm font-medium text-red-900 dark:text-red-100">Erreur d'export</h4>
+                <p class="text-sm text-red-700 dark:text-red-300">{{ session('export_error') }}</p>
+            </div>
+        </div>
+    </div>
+@endif
+
 
 {{-- ✅ À ajouter en bas de votre vue Blade --}}
 @push('scripts')
