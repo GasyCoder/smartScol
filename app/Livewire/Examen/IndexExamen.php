@@ -660,53 +660,76 @@ class IndexExamen extends Component
         return $baseQuery->orderBy($this->sortField, $this->sortDirection)->get();
     }
 
-    // Méthodes de statistiques
-    public function getExamensStatistics()
+    private function emptyStats(): array
+    {
+        return [
+            'total_examens'        => 0,
+            'total_ues'            => 0,
+            'total_ecs'            => 0,
+            'enseignants_uniques'  => 0,
+            'ecs_planifiees'       => 0,
+            'taux_planification'   => 0.0,
+            'total_credits_ues'    => 0,   // 👈 NOUVEAU
+        ];
+    }
+
+    public function getExamensStatistics(): array
     {
         if (!$this->niveauId || !$this->parcoursId) {
-            return null;
+            return $this->emptyStats();
         }
 
-        return Cache::remember("examens_stats_{$this->niveauId}_{$this->parcoursId}", 3600, function() {
+        return \Cache::remember("examens_stats_v3_{$this->niveauId}_{$this->parcoursId}", 3600, function () {
+            $stats = $this->emptyStats();
+
             $examens = Examen::where('niveau_id', $this->niveauId)
                 ->where('parcours_id', $this->parcoursId)
-                ->with(['ecs', 'copies', 'manchettes', 'codesAnonymat'])
+                ->with(['ecs.ue']) // on a besoin de ue_id et des libellés
                 ->get();
 
-            $totalExamens = $examens->count();
-            $totalECs = $examens->sum(function($examen) {
-                return $examen->ecs->count();
-            });
+            $stats['total_examens'] = $examens->count();
+            $stats['total_ecs']     = $examens->sum(fn ($ex) => $ex->ecs->count());
 
-            $totalCopies = $examens->sum(function($examen) {
-                return $examen->copies->count();
-            });
+            // UEs distinctes impliquées (via les EC)
+            $ueIds = $examens->flatMap(fn ($ex) => $ex->ecs->pluck('ue_id'))
+                ->filter()
+                ->unique()
+                ->values();
 
-            $totalManchettes = $examens->sum(function($examen) {
-                return $examen->manchettes->count();
-            });
+            $stats['total_ues'] = $ueIds->count();
 
-            $examensComplets = $examens->filter(function($examen) {
-                $totalCodes = $examen->codesAnonymat->count();
-                $totalCopies = $examen->copies->count();
-                return $totalCodes > 0 && $totalCopies >= $totalCodes;
-            })->count();
+            // Total des crédits des UEs (colonne UE.credits)
+            $stats['total_credits_ues'] = $ueIds->isEmpty()
+                ? 0
+                : (float) \App\Models\UE::whereIn('id', $ueIds)->sum('credits');
 
-            $enseignantsUniques = $examens->flatMap(function($examen) {
-                return $examen->ecs->pluck('enseignant');
-            })->filter()->unique()->count();
+            // Enseignants uniques
+            $stats['enseignants_uniques'] = $examens->flatMap(fn ($ex) => $ex->ecs->pluck('enseignant'))
+                ->filter()
+                ->unique()
+                ->count();
 
-            return [
-                'total_examens' => $totalExamens,
-                'total_ecs' => $totalECs,
-                'total_copies' => $totalCopies,
-                'total_manchettes' => $totalManchettes,
-                'examens_complets' => $examensComplets,
-                'enseignants_uniques' => $enseignantsUniques,
-                'taux_completion' => $totalExamens > 0 ? round(($examensComplets / $totalExamens) * 100, 1) : 0
-            ];
+            // EC planifiées = date+heure sur le pivot
+            $ecsPlanifiees = 0;
+            foreach ($examens as $ex) {
+                foreach ($ex->ecs as $ec) {
+                    if (!empty($ec->pivot->date_specifique) && !empty($ec->pivot->heure_specifique)) {
+                        $ecsPlanifiees++;
+                    }
+                }
+            }
+            $stats['ecs_planifiees'] = $ecsPlanifiees;
+
+            $stats['taux_planification'] = $stats['total_ecs'] > 0
+                ? round(($ecsPlanifiees / $stats['total_ecs']) * 100, 1)
+                : 0.0;
+
+            return $stats;
         });
     }
+
+
+
 
     // Helper methods améliorés
     private function loadDataFromQueryParams()
