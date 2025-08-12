@@ -10,6 +10,7 @@ use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;
 use App\Models\SessionExam;
+use App\Models\PresenceExamen;
 use App\Models\ResultatFusion;
 use App\Services\FusionService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -55,6 +56,11 @@ class ResultatVerification extends Component
     protected $fusionService;
     protected $calculService;
 
+    
+
+    public $statistiquesPresence = [];
+    public $afficherInfosPresence = true; 
+
     public function __construct()
     {
         $this->fusionService = app(FusionService::class);
@@ -64,8 +70,9 @@ class ResultatVerification extends Component
     public function mount($examenId)
     {
         $this->examenId = $examenId;
+        $this->afficherMoyennesUE = session('afficher_moyennes_ue', false);
 
-        // CORRECTION : Suppression de la relation 'session' qui n'existe plus
+        // Code existant inchangé jusqu'à loadEcs()
         $this->examen = Examen::with(['niveau', 'parcours'])->find($this->examenId);
 
         if (!$this->examen) {
@@ -91,8 +98,40 @@ class ResultatVerification extends Component
         $this->loadParcours();
         $this->loadEcs();
         $this->checkEtapeFusion();
+        
+        // ✅ NOUVEAU : Charger les données de présence
+        $this->chargerDonneesPresence();
+        
         $this->loadResultats();
     }
+
+
+    public function updatedAfficherMoyennesUE($value)
+    {
+        // Sauvegarder l'état dans la session
+        session(['afficher_moyennes_ue' => $value]);
+        
+        // Recharger les résultats pour appliquer le changement
+        $this->loadResultats();
+        
+        // Émettre un événement pour le JavaScript (optionnel)
+        $this->dispatch('moyennesUEToggled', $value);
+        
+        // Message de feedback
+        if ($value) {
+            toastr()->info('Mode moyennes UE activé - Les exports incluront les calculs UE');
+        } else {
+            toastr()->info('Mode moyennes UE désactivé - Exports simples sans calculs');
+        }
+    }
+
+
+    public function toggleMoyennesUE()
+    {
+        $this->afficherMoyennesUE = !$this->afficherMoyennesUE;
+        $this->updatedAfficherMoyennesUE($this->afficherMoyennesUE);
+    }
+
 
     public function loadParcours()
     {
@@ -394,7 +433,7 @@ class ResultatVerification extends Component
             return;
         }
 
-        // CORRECTION : Ajout du filtre par session active
+        // Code existant pour le calcul de base...
         $totalQuery = ResultatFusion::where('examen_id', $this->examenId)
             ->where('session_exam_id', $this->sessionActive->id)
             ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
@@ -417,6 +456,11 @@ class ResultatVerification extends Component
         $this->resultatsNonVerifies = $this->totalResultats - $this->resultatsVerifies;
         $this->pourcentageVerification = $this->totalResultats === 0 ? 0 :
             round(($this->resultatsVerifies / $this->totalResultats) * 100, 1);
+
+        // ✅ NOUVEAU : Recharger les données de présence si nécessaire
+        if (empty($this->statistiquesPresence)) {
+            $this->chargerDonneesPresence();
+        }
     }
 
     public function marquerTousVerifies()
@@ -733,23 +777,46 @@ class ResultatVerification extends Component
     public function exportExcel()
     {
         try {
-            // Préparer les données avec moyennes UE SI le switch est activé
+            // Préparer les données avec présence
             $resultatsEnrichis = $this->prepareDataForExport();
+
+            // ✅ NOUVEAU : Ajouter les métadonnées de présence
+            $metadonneesPresence = [
+                'statistiques_presence' => $this->statistiquesPresence,
+                'statistiques_verification' => [
+                    'total_resultats' => $this->totalResultats,
+                    'resultats_verifies' => $this->resultatsVerifies,
+                    'resultats_non_verifies' => $this->resultatsNonVerifies,
+                    'pourcentage_verification' => $this->pourcentageVerification,
+                    'etape_fusion' => $this->etapeFusion
+                ],
+                'session_info' => [
+                    'type' => $this->sessionActive->type,
+                    'annee_universitaire' => $this->sessionActive->anneeUniversitaire->nom ?? 'N/A',
+                    'date_export' => now()->format('Y-m-d H:i:s')
+                ]
+            ];
 
             $filename = $this->generateFilename('xlsx');
 
             return Excel::download(
-                new ResultatsVerificationExport($resultatsEnrichis, $this->examen, $this->afficherMoyennesUE),
+                new ResultatsVerificationExport(
+                    $resultatsEnrichis, 
+                    $this->examen, 
+                    $this->afficherMoyennesUE,
+                    $metadonneesPresence // ✅ NOUVEAU paramètre
+                ),
                 $filename
             );
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'export Excel', [
+            Log::error('Erreur lors de l\'export Excel avec présence', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'examen_id' => $this->examenId,
                 'session_exam_id' => $this->sessionActive->id,
-                'user_id' => Auth::id()
+                'user_id' => Auth::id(),
+                'statistiques_presence' => $this->statistiquesPresence
             ]);
             toastr()->error('Erreur lors de l\'export Excel : ' . $e->getMessage());
         }
@@ -758,7 +825,7 @@ class ResultatVerification extends Component
     public function exportPdf($orientation = 'landscape')
     {
         try {
-            // Préparer les données avec moyennes UE SI le switch est activé
+            // Préparer les données avec présence
             $resultatsEnrichis = $this->prepareDataForExport();
 
             $data = [
@@ -771,8 +838,12 @@ class ResultatVerification extends Component
                     'verifiees' => $this->resultatsVerifies,
                     'non_verifiees' => $this->resultatsNonVerifies,
                     'pourcentage_verification' => $this->pourcentageVerification,
-                    'avec_moyennes_ue' => $this->afficherMoyennesUE
+                    'avec_moyennes_ue' => $this->afficherMoyennesUE,
+                    'etape_fusion' => $this->etapeFusion
                 ],
+                // ✅ NOUVEAU : Données de présence
+                'statistiques_presence' => $this->statistiquesPresence,
+                'coherence_presence' => $this->calculerCoherencePresence(),
                 'dateExport' => now()->format('d/m/Y H:i:s')
             ];
 
@@ -786,12 +857,13 @@ class ResultatVerification extends Component
             }, $filename, ['Content-Type' => 'application/pdf']);
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'export PDF', [
+            Log::error('Erreur lors de l\'export PDF avec présence', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'examen_id' => $this->examenId,
                 'session_exam_id' => $this->sessionActive->id,
-                'user_id' => Auth::id()
+                'user_id' => Auth::id(),
+                'statistiques_presence' => $this->statistiquesPresence
             ]);
             toastr()->error('Erreur lors de l\'export PDF : ' . $e->getMessage());
         }
@@ -804,43 +876,32 @@ class ResultatVerification extends Component
         $sessionType = $this->sessionActive->type ?? 'SESSION';
         $date = now()->format('Y-m-d_Hi');
 
-        $suffixe = $this->afficherMoyennesUE ? '-avec-moyennes-UE' : '-sans-moyennes';
+        $suffixeMoyennes = $this->afficherMoyennesUE ? '-avec-moyennes-UE' : '-sans-moyennes';
+        
+        // ✅ NOUVEAU : Ajouter info présence
+        $suffixePresence = '';
+        if ($this->statistiquesPresence) {
+            $tauxPresence = $this->statistiquesPresence['taux_presence'];
+            $suffixePresence = "-presence-{$tauxPresence}pct";
+        }
 
-        return "resultats-verification-{$niveau}-{$parcours}-{$sessionType}{$suffixe}-{$date}.{$extension}";
+        return "resultats-verification-{$niveau}-{$parcours}-{$sessionType}{$suffixeMoyennes}{$suffixePresence}-{$date}.{$extension}";
     }
 
     private function prepareDataForExport()
     {
-        if (!$this->afficherMoyennesUE) {
-            // Si switch désactivé, retourner les données normales
-            return $this->resultats;
+        $resultatsBase = $this->afficherMoyennesUE ? $this->prepareDataWithMoyennesUE() : $this->resultats;
+        
+        // ✅ NOUVEAU : Ajouter les infos de présence à chaque résultat
+        if ($this->statistiquesPresence) {
+            $resultatsBase = collect($resultatsBase)->map(function($resultat) {
+                $resultat['statistiques_presence'] = $this->statistiquesPresence;
+                $resultat['etudiant_est_present'] = true; // Puisqu'il a des résultats, il était présent
+                return $resultat;
+            })->toArray();
         }
-
-        // Si switch activé, enrichir avec moyennes UE
-        $resultatsGroupes = collect($this->resultats)->groupBy('matricule');
-        $resultatsEnrichis = [];
-
-        foreach ($resultatsGroupes as $matricule => $resultatsEtudiant) {
-            $premierResultat = $resultatsEtudiant->first();
-            $etudiantId = $premierResultat['etudiant_id'];
-
-            // Calculer les moyennes UE pour cet étudiant
-            $moyennesUE = $this->calculerMoyennesUEEtudiant($etudiantId);
-            $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiantId);
-
-            foreach ($resultatsEtudiant as $resultat) {
-                // Ajouter la moyenne UE pour ce résultat
-                if (isset($resultat['ue_id']) && isset($moyennesUE[$resultat['ue_id']])) {
-                    $resultat['moyenne_ue'] = $moyennesUE[$resultat['ue_id']]['moyenne'];
-                }
-
-                $resultat['moyennes_ue_etudiant'] = $moyennesUE;
-                $resultat['moyenne_generale'] = $moyenneGenerale;
-                $resultatsEnrichis[] = $resultat;
-            }
-        }
-
-        return $resultatsEnrichis;
+        
+        return $resultatsBase;
     }
 
     /**
@@ -967,9 +1028,284 @@ class ResultatVerification extends Component
         }
     }
 
+    // ✅ Calculer la cohérence entre présence et résultats
+    private function calculerCoherencePresence()
+    {
+        if (!$this->statistiquesPresence) {
+            return null;
+        }
+
+        $etudiantsAvecResultats = collect($this->resultats)->pluck('matricule')->unique()->count();
+        $etudiantsPresents = $this->statistiquesPresence['etudiants_presents'];
+        
+        return [
+            'etudiants_presents_declares' => $etudiantsPresents,
+            'etudiants_avec_resultats' => $etudiantsAvecResultats,
+            'ecart' => abs($etudiantsAvecResultats - $etudiantsPresents),
+            'coherence_parfaite' => $etudiantsAvecResultats === $etudiantsPresents,
+            'taux_couverture' => $etudiantsPresents > 0 ? round(($etudiantsAvecResultats / $etudiantsPresents) * 100, 1) : 0,
+            'source_presence' => $this->statistiquesPresence['source']
+        ];
+    }
+
+
+    // Export spécial "Rapport de présence"
+    public function exportRapportPresence()
+    {
+        if (!$this->statistiquesPresence) {
+            toastr()->error('Aucune donnée de présence disponible pour le rapport.');
+            return;
+        }
+
+        try {
+            // Préparer un rapport détaillé de présence
+            $rapportPresence = [
+                'examen' => [
+                    'id' => $this->examen->id,
+                    'nom' => $this->examen->nom,
+                    'niveau' => $this->examen->niveau->nom ?? 'N/A',
+                    'parcours' => $this->examen->parcours->nom ?? 'N/A'
+                ],
+                'session' => [
+                    'type' => $this->sessionActive->type,
+                    'annee' => $this->sessionActive->anneeUniversitaire->nom ?? 'N/A',
+                    'date_export' => now()
+                ],
+                'presence' => $this->statistiquesPresence,
+                'coherence' => $this->calculerCoherencePresence(),
+                'verification' => [
+                    'etape_fusion' => $this->etapeFusion,
+                    'total_resultats' => $this->totalResultats,
+                    'resultats_verifies' => $this->resultatsVerifies,
+                    'pourcentage_verification' => $this->pourcentageVerification
+                ],
+                'details_etudiants' => $this->getDetailsEtudiantsPresence()
+            ];
+
+            $filename = "rapport-presence-{$this->examen->niveau->abr}-{$this->examen->parcours->abr}-{$this->sessionActive->type}-" . now()->format('Y-m-d_Hi') . ".json";
+
+            return response()->json($rapportPresence)
+                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de l\'export rapport présence', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'session_id' => $this->sessionActive->id
+            ]);
+            toastr()->error('Erreur lors de l\'export du rapport : ' . $e->getMessage());
+        }
+    }
+
+
+
+    // Obtenir les détails des étudiants avec présence
+    private function getDetailsEtudiantsPresence()
+    {
+        $etudiantsAvecResultats = collect($this->resultats)
+            ->groupBy('matricule')
+            ->map(function($resultatsEtudiant) {
+                $premier = $resultatsEtudiant->first();
+                return [
+                    'matricule' => $premier['matricule'],
+                    'nom' => $premier['nom'],
+                    'prenom' => $premier['prenom'],
+                    'nb_resultats' => $resultatsEtudiant->count(),
+                    'nb_resultats_verifies' => $resultatsEtudiant->where('is_checked', true)->count(),
+                    'moyenne_generale' => $premier['moyenne_generale'] ?? null,
+                    'present_selon_resultats' => true
+                ];
+            })
+            ->values()
+            ->toArray();
+
+        return [
+            'nb_etudiants_avec_resultats' => count($etudiantsAvecResultats),
+            'liste_etudiants' => $etudiantsAvecResultats
+        ];
+    }
+
+    // Récupérer les statistiques de présence (similaire à FusionIndex)
+    public function getStatistiquesAvecPresence()
+    {
+        if (!$this->examenId || !$this->sessionActive) {
+            return null;
+        }
+
+        $sessionId = $this->sessionActive->id;
+
+        // Récupérer les données de présence
+        $presenceGlobale = PresenceExamen::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $sessionId)
+            ->whereNull('ec_id') // Présence globale
+            ->first();
+
+        if (!$presenceGlobale) {
+            // Fallback : calculer depuis les ResultatFusion
+            $etudiantsPresents = ResultatFusion::where('examen_id', $this->examenId)
+                ->where('session_exam_id', $sessionId)
+                ->distinct('etudiant_id')
+                ->count();
+            
+            $totalInscrits = $this->getTotalEtudiantsInscrits();
+            
+            return [
+                'total_inscrits' => $totalInscrits,
+                'etudiants_presents' => $etudiantsPresents,
+                'etudiants_absents' => $totalInscrits - $etudiantsPresents,
+                'taux_presence' => $totalInscrits > 0 ? round(($etudiantsPresents / $totalInscrits) * 100, 2) : 0,
+                'source' => 'resultats_fusion'
+            ];
+        }
+
+        return [
+            'total_inscrits' => $presenceGlobale->total_attendu ?: $presenceGlobale->total_etudiants,
+            'etudiants_presents' => $presenceGlobale->etudiants_presents,
+            'etudiants_absents' => $presenceGlobale->etudiants_absents,
+            'taux_presence' => $presenceGlobale->taux_presence,
+            'source' => 'presence_enregistree'
+        ];
+    }
+
+
+    // Obtenir le total d'étudiants inscrits
+    private function getTotalEtudiantsInscrits()
+    {
+        if (!$this->examen) {
+            return 0;
+        }
+
+        return \App\Models\Etudiant::where('niveau_id', $this->examen->niveau_id)
+            ->where('parcours_id', $this->examen->parcours_id)
+            ->where('is_active', true)
+            ->count();
+    }
+
+
+    // Charger les données de présence
+    private function chargerDonneesPresence()
+    {
+        $this->statistiquesPresence = $this->getStatistiquesAvecPresence();
+        
+        if ($this->statistiquesPresence) {
+            Log::info('Données de présence chargées pour verification', [
+                'examen_id' => $this->examenId,
+                'session_id' => $this->sessionActive->id,
+                'session_type' => $this->sessionActive->type,
+                'total_inscrits' => $this->statistiquesPresence['total_inscrits'],
+                'etudiants_presents' => $this->statistiquesPresence['etudiants_presents'],
+                'taux_presence' => $this->statistiquesPresence['taux_presence'],
+                'source' => $this->statistiquesPresence['source']
+            ]);
+        }
+    }
+
+    //  Obtenir les statistiques détaillées avec présence
+    public function getStatistiquesDetailleesAvecPresence()
+    {
+        $statsBase = $this->getStatistiquesDetaillees();
+        
+        if ($this->statistiquesPresence) {
+            $statsBase['presence'] = $this->statistiquesPresence;
+            
+            // Calculer des ratios utiles
+            if ($this->statistiquesPresence['etudiants_presents'] > 0) {
+                $statsBase['ratios'] = [
+                    'resultats_par_present' => round($this->totalResultats / $this->statistiquesPresence['etudiants_presents'], 2),
+                    'verification_vs_presents' => round(($this->resultatsVerifies / $this->statistiquesPresence['etudiants_presents']) * 100, 1),
+                    'couverture_fusion' => round(($this->totalResultats / ($this->statistiquesPresence['etudiants_presents'] * count($this->ecs))) * 100, 1)
+                ];
+            }
+        }
+        
+        return $statsBase;
+    }
+
+
+    //  Préparation des données avec moyennes UE (séparée pour clarté)
+    private function prepareDataWithMoyennesUE()
+    {
+        $resultatsGroupes = collect($this->resultats)->groupBy('matricule');
+        $resultatsEnrichis = [];
+
+        foreach ($resultatsGroupes as $matricule => $resultatsEtudiant) {
+            $premierResultat = $resultatsEtudiant->first();
+            $etudiantId = $premierResultat['etudiant_id'];
+
+            // Calculer les moyennes UE pour cet étudiant
+            $moyennesUE = $this->calculerMoyennesUEEtudiant($etudiantId);
+            $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiantId);
+
+            foreach ($resultatsEtudiant as $resultat) {
+                // Ajouter la moyenne UE pour ce résultat
+                if (isset($resultat['ue_id']) && isset($moyennesUE[$resultat['ue_id']])) {
+                    $resultat['moyenne_ue'] = $moyennesUE[$resultat['ue_id']]['moyenne'];
+                }
+
+                $resultat['moyennes_ue_etudiant'] = $moyennesUE;
+                $resultat['moyenne_generale'] = $moyenneGenerale;
+                $resultatsEnrichis[] = $resultat;
+            }
+        }
+
+        return $resultatsEnrichis;
+    }
+
+    //  Toggle affichage des infos de présence
+    public function toggleInfosPresence()
+    {
+        $this->afficherInfosPresence = !$this->afficherInfosPresence;
+    }
+
+    //  Diagnostiquer les écarts de présence
+    public function diagnostiquerEcartsPresence()
+    {
+        if (!$this->statistiquesPresence) {
+            toastr()->warning('Aucune donnée de présence disponible pour le diagnostic.');
+            return;
+        }
+
+        try {
+            $etudiantsAvecResultats = ResultatFusion::where('examen_id', $this->examenId)
+                ->where('session_exam_id', $this->sessionActive->id)
+                ->distinct('etudiant_id')
+                ->count();
+
+            $etudiantsPresents = $this->statistiquesPresence['etudiants_presents'];
+            $ecart = abs($etudiantsAvecResultats - $etudiantsPresents);
+
+            if ($ecart > 0) {
+                Log::warning('Écart détecté entre présence et résultats', [
+                    'examen_id' => $this->examenId,
+                    'session_id' => $this->sessionActive->id,
+                    'etudiants_presents_declare' => $etudiantsPresents,
+                    'etudiants_avec_resultats' => $etudiantsAvecResultats,
+                    'ecart' => $ecart,
+                    'source_presence' => $this->statistiquesPresence['source']
+                ]);
+                
+                toastr()->warning("Écart détecté : {$etudiantsPresents} présents déclarés vs {$etudiantsAvecResultats} avec résultats (écart: {$ecart})");
+            } else {
+                toastr()->success("Cohérence parfaite : {$etudiantsPresents} présents = {$etudiantsAvecResultats} avec résultats");
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du diagnostic des écarts', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'session_id' => $this->sessionActive->id
+            ]);
+            toastr()->error('Erreur lors du diagnostic : ' . $e->getMessage());
+        }
+    }
+
     public function render()
     {
+        // ✅ NOUVEAU : Calculer les statistiques détaillées avec présence
+        $statistiquesDetailleesAvecPresence = $this->getStatistiquesDetailleesAvecPresence();
+        
         return view('livewire.resultats.resultats-verification', [
+            // Données existantes
             'examen' => $this->examen,
             'sessionActive' => $this->sessionActive,
             'resultats' => $this->resultats,
@@ -984,6 +1320,26 @@ class ResultatVerification extends Component
             'pourcentageVerification' => $this->pourcentageVerification,
             'noExamenFound' => $this->noExamenFound,
             'afficherMoyennesUE' => $this->afficherMoyennesUE,
+            
+            // ✅ NOUVELLES DONNÉES DE PRÉSENCE
+            'statistiquesPresence' => $this->statistiquesPresence,
+            'afficherInfosPresence' => $this->afficherInfosPresence,
+            'statistiquesDetailleesAvecPresence' => $statistiquesDetailleesAvecPresence,
+            
+            // ✅ NOUVEAU : Indicateurs de qualité des données
+            'qualitesDonnees' => [
+                'coherence_presence' => $this->calculerCoherencePresence(),
+                'source_donnees_fiable' => $this->statistiquesPresence && $this->statistiquesPresence['source'] === 'presence_enregistree',
+                'couverture_complete' => $this->totalResultats > 0 && $this->statistiquesPresence && 
+                                    ($this->totalResultats >= $this->statistiquesPresence['etudiants_presents'] * count($this->ecs) * 0.8) // 80% de couverture minimum
+            ],
+            
+            // ✅ NOUVEAU : Actions disponibles selon les données de présence
+            'actionsDisponibles' => [
+                'peut_exporter_rapport_presence' => !empty($this->statistiquesPresence),
+                'peut_diagnostiquer_ecarts' => !empty($this->statistiquesPresence) && $this->totalResultats > 0,
+                'verification_coherence_possible' => $this->showVerification && !empty($this->statistiquesPresence)
+            ]
         ]);
     }
 }
