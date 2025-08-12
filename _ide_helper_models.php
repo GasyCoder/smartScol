@@ -13,8 +13,6 @@
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property \Illuminate\Support\Carbon $date_start
  * @property \Illuminate\Support\Carbon $date_end
@@ -39,8 +37,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $examen_id Examen concerné
  * @property int|null $session_exam_id Référence à la session d'examen
@@ -84,7 +80,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withManchetteOnly($sessionId)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|CodeAnonymat withoutTrashed()
  */
 	class CodeAnonymat extends \Eloquent {}
@@ -92,8 +88,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $examen_id Examen concerné
  * @property int|null $session_exam_id Référence à la session d'examen
@@ -150,7 +144,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSaisiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie withoutTrashed()
  */
 	class Copie extends \Eloquent {}
@@ -158,8 +152,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $niveau_id
  * @property int|null $parcours_id
@@ -203,8 +195,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string|null $abr Ex: EC1, EC2
  * @property string $nom Ex: Anatomie, Histologie
@@ -250,7 +240,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUeId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EC withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC withoutTrashed()
  */
 	class EC extends \Eloquent {}
@@ -258,8 +248,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string $matricule Numéro d'identification unique
  * @property string $nom
@@ -298,7 +286,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant whereParcoursId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant wherePrenom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Etudiant withoutTrashed()
  */
 	class Etudiant extends \Eloquent {}
@@ -306,8 +294,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $niveau_id Niveau concerné
  * @property int|null $parcours_id Parcours concerné (uniquement pour PACES/L1)
@@ -346,7 +332,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereNoteEliminatoire($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereParcoursId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Examen withoutTrashed()
  */
 	class Examen extends \Eloquent {}
@@ -354,8 +340,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $salle_id
  * @property int $examen_id
@@ -386,8 +370,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $examen_id Examen concerné
  * @property int|null $session_exam_id Référence à la session d'examen
@@ -430,7 +412,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereSaisiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Manchette withoutTrashed()
  */
 	class Manchette extends \Eloquent {}
@@ -438,8 +420,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string $abr Ex: PACES, L2, L3...
  * @property string $nom
@@ -477,8 +457,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string $abr Ex: MG, DENT, INF
  * @property string $nom Ex: Médecine générale, Dentaire, Infirmier
@@ -511,8 +489,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string $name
  * @property string|null $label
@@ -546,8 +522,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $examen_id Examen concerné
  * @property int|null $session_exam_id Session d'examen
@@ -595,7 +569,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereSessionExamId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereTotalAttendu($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen withoutTrashed()
  */
 	class PresenceExamen extends \Eloquent {}
@@ -603,8 +577,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $etudiant_id Étudiant concerné
  * @property int $examen_id Examen concerné
@@ -714,8 +686,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $resultat_final_id Référence vers le résultat final
  * @property string $type_action
@@ -762,8 +732,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property int $etudiant_id Étudiant concerné
  * @property int $examen_id Examen concerné
@@ -829,8 +797,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string|null $code_base Première lettre du préfixe (T pour 2P, S pour 2P1, etc.)
  * @property string $nom Ex: 2P, 2P1
@@ -853,8 +819,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string $type
  * @property int $annee_universitaire_id
@@ -889,8 +853,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string|null $abr Ex: UE1, UE2
  * @property string $nom Ex: Médecine humaine, Physiologie
@@ -920,7 +882,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereParcoursId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|UE withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UE withTrashed(bool $withTrashed = true)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|UE withoutTrashed()
  */
 	class UE extends \Eloquent {}
@@ -928,8 +890,6 @@ namespace App\Models{
 
 namespace App\Models{
 /**
- * 
- *
  * @property int $id
  * @property string $name
  * @property string $email
