@@ -31,6 +31,11 @@ class CopiesIndex extends Component
 {
     use WithPagination;
 
+    public $check_matricule = '';
+    public $etudiant_trouve = null;
+    public $manchette_trouvee = null;
+    public $copie_existante = null;
+
     // Variables de filtrage et contexte
     public $ecSearch = '';
     public $ec_id = null;
@@ -94,6 +99,53 @@ class CopiesIndex extends Component
     
     public $presenceData = null;
     public $presenceEnregistree = false;
+
+    public function updatedCheckMatricule()
+    {
+        $this->etudiant_trouve = null;
+        $this->manchette_trouvee = null;
+        $this->code_anonymat = '';
+        $this->copie_existante = null; // NOUVEAU
+        
+        if (!empty($this->check_matricule)) {
+            // Chercher l'étudiant
+            $etudiant = Etudiant::where('matricule', $this->check_matricule)->first();
+            
+            if ($etudiant) {
+                // Chercher sa manchette pour cette session/EC
+                $manchette = Manchette::where('etudiant_id', $etudiant->id)
+                    ->where('examen_id', $this->examen_id)
+                    ->where('session_exam_id', $this->session_exam_id)
+                    ->whereHas('codeAnonymat', function($q) {
+                        $q->where('ec_id', $this->ec_id);
+                    })
+                    ->first();
+                    
+                if ($manchette) {
+                    $this->etudiant_trouve = $etudiant;
+                    $this->manchette_trouvee = $manchette;
+                    $this->code_anonymat = $manchette->codeAnonymat->code_complet;
+                    
+                    // ✅ NOUVEAU : Vérifier si une copie existe déjà
+                    $copieExistante = Copie::where('examen_id', $this->examen_id)
+                        ->where('ec_id', $this->ec_id)
+                        ->where('session_exam_id', $this->session_exam_id)
+                        ->where('code_anonymat_id', $manchette->code_anonymat_id)
+                        ->whereNull('deleted_at')
+                        ->first();
+                    
+                    if ($copieExistante) {
+                        $this->copie_existante = $copieExistante;
+                        toastr()->warning("⚠️ Une note ({$copieExistante->note}/20) existe déjà pour cet étudiant dans cette matière !");
+                    }
+                } else {
+                    toastr()->error("❌ Aucune manchette trouvée pour ce matricule dans cette matière/session");
+                }
+            } else {
+                toastr()->error("❌ Matricule introuvable");
+            }
+        }
+    }
 
     // Mise à jour des règles de validation pour inclure session_exam_id
     protected function rules()
@@ -997,101 +1049,40 @@ class CopiesIndex extends Component
      */
     private function checkAndAutoOpenModal()
     {
-        // Vérifications préalables
+        // Vérifications préalables (garde le code existant)
         if (!$this->autoOpenModal || !$this->canAddCopies || !$this->ec_id || $this->ec_id === 'all') {
             return;
         }
 
-        // Ne pas ouvrir si on est en mode édition
-        if (isset($this->editingCopieId)) {
+        if (isset($this->editingCopieId) || $this->showCopieModal) {
             return;
         }
 
-        // Ne pas ouvrir si la modal est déjà ouverte
-        if ($this->showCopieModal) {
-            return;
+        // ✅ CORRECTION : Vérifier la présence D'ABORD
+        $this->checkPresenceEnregistree();
+        
+        if (!$this->presenceEnregistree || !$this->presenceData) {
+            return; // Pas d'auto-ouverture sans données de présence
         }
 
-        // ✅ CONDITION STRICTE : Vérifier s'il n'y a AUCUNE copie pour cette matière dans cette session
+        // ✅ UTILISER LES ÉTUDIANTS PRÉSENTS au lieu du total
+        $etudiantsPresents = $this->presenceData->etudiants_presents;
+        
+        if ($etudiantsPresents <= 0) {
+            return; // Pas d'auto-ouverture si aucun étudiant présent
+        }
+
         $totalCopiesCount = Copie::where('examen_id', $this->examen_id)
             ->where('ec_id', $this->ec_id)
             ->where('session_exam_id', $this->session_exam_id)
             ->whereNull('deleted_at')
             ->count();
 
-        // ✅ CONDITION SUPPLÉMENTAIRE : Vérifier qu'il y a des étudiants disponibles
-        $etudiantsDisponibles = count($this->etudiantsSansCopies ?? []);
-
-        // ✅ AUTO-OUVERTURE SEULEMENT SI :
-        // 1. AUCUNE copie n'existe (0 copies)
-        // 2. ET il y a des étudiants sans copie
-        if ($totalCopiesCount === 0 && $etudiantsDisponibles > 0) {
-            
-            // ✅ VÉRIFICATION SUPPLÉMENTAIRE : S'assurer qu'on peut ouvrir la modal
-            $session = SessionExam::find($this->session_exam_id);
-            if (!$session) {
-                \Log::warning('Auto-ouverture annulée : session introuvable', [
-                    'session_id' => $this->session_exam_id
-                ]);
-                return;
-            }
-
-            // ✅ NOUVELLE VÉRIFICATION : Compter les étudiants éligibles selon le type de session
-            if ($session->type === 'Normale') {
-                $etudiantsEligibles = Etudiant::where('niveau_id', $this->niveau_id)
-                    ->where('parcours_id', $this->parcours_id)
-                    ->count();
-            } else {
-                $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
-                    ->where('type', 'Normale')
-                    ->first();
-                
-                if (!$sessionNormale) {
-                    \Log::warning('Auto-ouverture annulée : session normale introuvable pour rattrapage');
-                    return;
-                }
-
-                $etudiantsEligibles = Etudiant::eligiblesRattrapage(
-                    $this->niveau_id,
-                    $this->parcours_id,
-                    $sessionNormale->id
-                )->count();
-            }
-
-            // ✅ DERNIÈRE VÉRIFICATION : S'assurer qu'il y a des étudiants éligibles
-            if ($etudiantsEligibles === 0) {
-                \Log::warning('Auto-ouverture annulée : aucun étudiant éligible', [
-                    'session_type' => $session->type,
-                    'niveau_id' => $this->niveau_id,
-                    'parcours_id' => $this->parcours_id
-                ]);
-                return;
-            }
-
-            // ✅ TOUT EST OK : Ouvrir la modal directement sans passer par openCopieModal()
+        // ✅ CONDITION CORRIGÉE : 0 copies ET étudiants présents > 0
+        if ($totalCopiesCount === 0 && $etudiantsPresents > 0) {
             $this->prepareDirectModalOpening();
             
-            // Message informatif spécifique à l'auto-ouverture
-            $sessionType = $session->type;
-            toastr()->info("✨ Première saisie pour cette matière en session {$sessionType}. Modal ouverte automatiquement pour {$etudiantsEligibles} étudiant(s) éligible(s).");
-            
-            // Log pour debug
-            \Log::info('Modal auto-ouverte pour première saisie', [
-                'ec_id' => $this->ec_id,
-                'ec_name' => $this->currentEcName,
-                'etudiants_eligibles' => $etudiantsEligibles,
-                'etudiants_disponibles' => $etudiantsDisponibles,
-                'session_id' => $this->session_exam_id,
-                'session_type' => $sessionType
-            ]);
-        } else {
-            // ✅ LOG pour debug quand l'auto-ouverture ne se fait pas
-            \Log::debug('Auto-ouverture non déclenchée', [
-                'total_copies' => $totalCopiesCount,
-                'etudiants_disponibles' => $etudiantsDisponibles,
-                'ec_id' => $this->ec_id,
-                'raison' => $totalCopiesCount > 0 ? 'Des copies existent déjà' : 'Aucun étudiant disponible'
-            ]);
+            toastr()->info("✨ Première saisie pour {$etudiantsPresents} étudiant(s) présent(s).");
         }
     }
 
@@ -1456,6 +1447,10 @@ class CopiesIndex extends Component
             if (!isset($this->editingCopieId)) {
                 // Mode ajout : préparer pour la prochaine saisie
                 $this->note = '';
+                // Réinitialiser le champ matricule après sauvegarde
+                $this->check_matricule = '';
+                $this->etudiant_trouve = null;
+                $this->manchette_trouvee = null;
 
                 // ✅ VÉRIFIER S'IL RESTE DE LA PLACE POUR UNE AUTRE COPIE (basé sur présence)
                 $copiesCountAfterSave = Copie::where('examen_id', $this->examen_id)
@@ -1908,11 +1903,13 @@ class CopiesIndex extends Component
             'note', 
             'editingCopieId',
             'code_anonymat_confirmation',
-            'note_confirmation'
+            'note_confirmation',
+            'check_matricule', // AJOUTER
+            'etudiant_trouve', // AJOUTER
+            'manchette_trouvee' // AJOUTER
         ]);
         $this->resetErrorBag();
     }
-
 
     /**
      * NOUVELLE MÉTHODE : Générer le prochain code d'anonymat pour la session courante
@@ -2152,8 +2149,13 @@ class CopiesIndex extends Component
     public function forceCloseModal()
     {
         $this->showCopieModal = false;
-        $this->showForceCloseButton = false; // Réinitialiser
+        $this->showForceCloseButton = false;
+        $this->autoOpenModal = false; // AJOUTER CETTE LIGNE
         $this->resetFormFields();
+        
+        // Réinitialiser complètement les champs de recherche
+        $this->reset(['check_matricule', 'etudiant_trouve', 'manchette_trouvee', 'code_anonymat', 'note']);
+        
         toastr()->info('Saisie fermée');
     }
 
