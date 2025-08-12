@@ -281,41 +281,47 @@
         Nouvel examen
     </a>
 </div>
-    </div>
+</div>
     
-    {{-- Statistiques --}}
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $stats['total_examens'] }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Examens</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $stats['total_ecs'] }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Matières</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ $stats['enseignants_uniques'] }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Enseignants</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{ $stats['total_copies'] }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Copies</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ $stats['total_manchettes'] }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Manchettes</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ $stats['examens_complets'] }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Complets</div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
-            <div class="text-2xl font-bold {{ $stats['taux_completion'] >= 80 ? 'text-green-600 dark:text-green-400' : ($stats['taux_completion'] >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
-                {{ $stats['taux_completion'] }}%
-            </div>
-            <div class="text-xs text-gray-600 dark:text-gray-400">Complétude</div>
-        </div>
+{{-- Statistiques (sans copies/manchettes) --}}
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $stats['total_examens'] ?? 0 }}</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400">Examens</div>
     </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ $stats['total_ues'] ?? 0 }}</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400">UE</div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $stats['total_ecs'] ?? 0 }}</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400">EC</div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ $stats['enseignants_uniques'] ?? 0 }}</div>
+        <div class="text-xs text-gray-600 dark:text-gray-400">Enseignants</div>
+    </div>
+
+    {{-- 👇 Remplacement par Total crédits (UE) --}}
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+            {{ number_format((float)($stats['total_credits_ues'] ?? 0), 2, ',', ' ') }}
+        </div>
+        <div class="text-xs text-gray-600 dark:text-gray-400">Total crédits (UE)</div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold {{ ($stats['taux_planification'] ?? 0) >= 80 ? 'text-green-600 dark:text-green-400' : (($stats['taux_planification'] ?? 0) >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
+            {{ $stats['taux_planification'] ?? 0 }}%
+        </div>
+        <div class="text-xs text-gray-600 dark:text-gray-400">Planification EC</div>
+    </div>
+</div>
+
+
 </div>
 @endif
 
