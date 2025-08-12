@@ -156,8 +156,6 @@
         @endforeach
     </div>
     @endif
-
-
     {{-- Tableau principal --}}
     <table>
         <thead>
