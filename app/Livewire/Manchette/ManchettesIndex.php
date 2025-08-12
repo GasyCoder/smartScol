@@ -117,7 +117,7 @@ class ManchettesIndex extends Component
     public function mount()
     {
         $this->niveaux = Niveau::where('is_active', true)
-            ->orderBy('abr', 'desc')
+            ->orderBy('id', 'asc')
             ->get();
         $this->parcours = collect();
         $this->salles = collect();
