@@ -48,29 +48,25 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
 
     public function array(): array
     {
-        // Grouper les résultats par étudiant
         $resultatsGroupes = $this->resultats->groupBy('matricule');
         $donnees = [];
         $numeroOrdre = 1;
 
         foreach ($resultatsGroupes as $matricule => $resultatsEtudiant) {
             $premierResultat = $resultatsEtudiant->first();
-
-            // Grouper par UE pour cet étudiant
             $resultatsParUE = $resultatsEtudiant->groupBy('ue_nom');
-
-            $premiereLigneEtudiant = true;
+            $ueIndex = 0;
 
             foreach ($resultatsParUE as $ueNom => $resultatsUE) {
-                // Ajouter une ligne pour l'UE avec la moyenne
+                $ueIndex++; // UE1, UE2, UE3...
+                
+                // Ligne pour l'UE
                 $ligneUE = [];
-
-                if ($premiereLigneEtudiant) {
+                if ($ueIndex === 1) { // Première UE seulement
                     $ligneUE[] = $numeroOrdre;
                     $ligneUE[] = $premierResultat['matricule'];
                     $ligneUE[] = $premierResultat['nom'];
                     $ligneUE[] = $premierResultat['prenom'];
-                    $premiereLigneEtudiant = false;
                 } else {
                     $ligneUE[] = '';
                     $ligneUE[] = '';
@@ -80,61 +76,51 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
 
                 $ueAbr = $resultatsUE->first()['ue_abr'] ?? 'UE';
                 $ueCredits = $resultatsUE->first()['ue_credits'] ?? 0;
-                $ueDisplay = $ueAbr . '.' . $ueNom . ($ueCredits ? " ({$ueCredits})" : '');
-                $ligneUE[] = $ueDisplay; // Ligne dédiée à l'UE
-                $ligneUE[] = ''; // Enseignant
-                $ligneUE[] = ''; // Note
+                $ueDisplay = "UE{$ueIndex}." . $ueNom . ($ueCredits ? " ({$ueCredits})" : '');
+                $ligneUE[] = $ueDisplay;
+                $ligneUE[] = '';
+                $ligneUE[] = '';
 
-                // Ajouter la moyenne UE sur la ligne de l'UE
                 if ($this->afficherMoyennesUE) {
                     $moyenneUE = $resultatsUE->first()['moyenne_ue'] ?? null;
                     $moyenneFormatee = $moyenneUE !== null ? number_format((float)$moyenneUE, 2, '.', '') : '';
                     $ligneUE[] = $moyenneFormatee;
                 }
 
-                $ligneUE[] = ''; // Commentaire
+                $ligneUE[] = '';
                 $donnees[] = $ligneUE;
 
-                // Ajouter les lignes pour chaque EC
+                // Lignes pour les ECs
                 foreach ($resultatsUE as $index => $resultat) {
                     $ligne = [];
-
-                    // Informations étudiant (vides car déjà affichées dans la ligne UE)
                     $ligne[] = '';
                     $ligne[] = '';
                     $ligne[] = '';
                     $ligne[] = '';
 
-                    // EC
-                    $ecIndex = $index + 1;
-                    $ligne[] = "- EC{$ecIndex}. " . $resultat['matiere'];
-
-                    // Enseignant
+                    // ✅ NOUVEAU : Format EC1.Matière, EC2.Matière...
+                    $ligne[] = "EC" . ($index + 1) . "." . $resultat['matiere'];
                     $ligne[] = $resultat['enseignant'] ?? 'N/A';
-
-                    // Note avec format forcé XX.00
+                    
                     $noteFormatee = number_format((float)$resultat['note'], 2, '.', '');
                     $ligne[] = $noteFormatee;
 
-                    // Moyenne UE (vide car déjà affichée dans la ligne UE)
                     if ($this->afficherMoyennesUE) {
                         $ligne[] = '';
                     }
 
-                    // Commentaire
                     $ligne[] = $resultat['commentaire'] ?? '';
-
                     $donnees[] = $ligne;
                 }
             }
 
-            // Ajouter ligne vide entre les étudiants (sauf pour le dernier)
-            if ($numeroOrdre < $resultatsGroupes->count()) {
+            $numeroOrdre++;
+            
+            // Ligne vide entre étudiants
+            if ($numeroOrdre <= $resultatsGroupes->count()) {
                 $nombreColonnes = $this->afficherMoyennesUE ? 9 : 8;
                 $donnees[] = array_fill(0, $nombreColonnes, '');
             }
-
-            $numeroOrdre++;
         }
 
         return $donnees;
@@ -167,7 +153,7 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
             $sheet->getStyle('H2:H' . $highestRow)->getNumberFormat()->setFormatCode('0.00');
         }
 
-        // Style pour les cellules avec UE et EC
+        // ✅ NOUVEAU : Style pour les cellules avec UE et EC - DIFFÉRENCIATION
         for ($row = 2; $row <= $highestRow; $row++) {
             $sheet->getStyle('E' . $row)->getAlignment()->setWrapText(true);
             $sheet->getRowDimension($row)->setRowHeight(-1); // Auto height
@@ -179,28 +165,34 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
             if (empty($cellValueA) && empty($cellValueE)) {
                 // Ligne de séparation - couleur grise
                 $sheet->getStyle('A' . $row . ':' . $lastColumn . $row)->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D1D5DB']] // Gris
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D1D5DB']]
                 ]);
             } else {
-                // Vérifier si la cellule contient un nom d'UE (sans "- EC")
-                if (!empty($cellValueE) && strpos($cellValueE, '- EC') !== 0) {
-                    // C'est une ligne d'UE, on met en gras
-                    $sheet->getStyle('E' . $row)->applyFromArray([
+                // ✅ MODIFIÉ : Différencier UE (gras) et EC (normal)
+                if (!empty($cellValueE)) {
+                    // Vérifier si c'est une ligne d'UE (ne commence pas par "EC")
+                    if (strpos($cellValueE, 'EC') !== 0) {
+                        // ✅ C'est une ligne d'UE - METTRE EN GRAS
+                        $sheet->getStyle('E' . $row)->applyFromArray([
+                            'font' => ['bold' => true]
+                        ]);
+                    } else {
+                        // ✅ C'est une ligne d'EC - NE PAS METTRE EN GRAS
+                        $sheet->getStyle('E' . $row)->applyFromArray([
+                            'font' => ['bold' => false]
+                        ]);
+                    }
+                }
+
+                // ✅ MODIFIÉ : Notes en gras seulement pour les EC (pas les UE vides)
+                $noteValue = $sheet->getCell('G' . $row)->getValue();
+                if (!empty($noteValue) && is_numeric($noteValue)) {
+                    $sheet->getStyle('G' . $row)->applyFromArray([
                         'font' => ['bold' => true]
-                    ]);
-                } else {
-                    // C'est une ligne d'EC, on ne met pas en gras
-                    $sheet->getStyle('E' . $row)->applyFromArray([
-                        'font' => ['bold' => false]
                     ]);
                 }
 
-                // Mettre en gras les notes (colonne G)
-                $sheet->getStyle('G' . $row)->applyFromArray([
-                    'font' => ['bold' => true]
-                ]);
-
-                // Mettre en gras les moyennes UE si activées (colonne H)
+                // ✅ MODIFIÉ : Moyennes UE en gras seulement si elles ont une valeur
                 if ($this->afficherMoyennesUE) {
                     $moyenneValue = $sheet->getCell('H' . $row)->getValue();
                     if (!empty($moyenneValue) && is_numeric($moyenneValue)) {
@@ -212,12 +204,14 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
             }
         }
 
-        // Fusionner les cellules "Moyenne UE" pour chaque UE
+        // ✅ AMÉLIORATION : Fusionner les cellules "Moyenne UE" pour chaque UE
         if ($this->afficherMoyennesUE) {
             $currentRow = 2;
             while ($currentRow <= $highestRow) {
                 $cellValueE = $sheet->getCell('E' . $currentRow)->getValue();
-                if (!empty($cellValueE) && strpos($cellValueE, '- EC') !== 0) {
+                
+                // ✅ MODIFIÉ : Vérifier que c'est une UE (ne commence pas par "EC")
+                if (!empty($cellValueE) && strpos($cellValueE, 'EC') !== 0) {
                     // C'est une ligne d'UE, compter le nombre d'EC qui suivent
                     $startRow = $currentRow;
                     $currentRow++;
@@ -225,7 +219,8 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
 
                     while ($currentRow <= $highestRow) {
                         $nextCellValueE = $sheet->getCell('E' . $currentRow)->getValue();
-                        if (empty($nextCellValueE) || strpos($nextCellValueE, '- EC') !== 0) {
+                        // ✅ MODIFIÉ : Compter seulement les lignes EC qui suivent
+                        if (empty($nextCellValueE) || strpos($nextCellValueE, 'EC') !== 0) {
                             break; // Fin de la liste des EC pour cette UE
                         }
                         $ecCount++;
@@ -245,6 +240,7 @@ class ResultatsVerificationExport implements FromArray, WithHeadings, WithStyles
 
         return [];
     }
+
 
     public function columnWidths(): array
     {
