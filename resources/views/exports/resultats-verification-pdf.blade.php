@@ -2,182 +2,219 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Vérification Résultats - {{ $examen->libelle ?? 'Examen' }}</title>
-    <style>
-        body {
-            font-family: DejaVu Sans, sans-serif;
-            font-size: 9px;
-            line-height: 1.3;
-            margin: 10mm;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 10mm;
-        }
-        .header h1 {
-            font-size: 14px;
-            margin: 0;
-        }
-        .header p {
-            font-size: 10px;
-            margin: 2px 0 0 0;
-        }
-        .info, .stats {
-            margin-bottom: 5mm;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 8px;
-        }
-        th, td {
-            border: 1px solid #000;
-            padding: 3px;
-            text-align: left;
-        }
-        th {
-            font-weight: bold;
-            text-align: center;
-        }
-        .center {
-            text-align: center;
-        }
-        .footer {
-            margin-top: 10mm;
-            text-align: center;
-            font-size: 7px;
-        }
-    </style>
+    <title>Relevé de Notes</title>
+<style>
+    /* ===== CONFIGURATION AVEC VRAIES MARGES ===== */
+    @page {
+        size: A4 landscape;
+        margin: 8mm 10mm 8mm 10mm; /* ✅ MARGES PAGE RÉDUITES */
+    }
+    
+    body {
+        font-family: "Arial", sans-serif;
+        font-size: 10px;
+        line-height: 1.0;
+        margin: 0;
+        padding: 0 15mm 0 15mm; /* ✅ PADDING INTERNE 15mm GAUCHE/DROITE */
+        color: #000;
+    }
+    
+    /* ===== CONTAINER AVEC MARGES ===== */
+    .container-avec-marges {
+        width: 100%;
+        max-width: 300mm; /* ✅ LARGEUR LIMITÉE */
+        margin: 0 auto; /* ✅ CENTRÉ */
+        padding: 0 5mm 0 5mm; /* ✅ PADDING SUPPLÉMENTAIRE */
+    }
+    
+    /* ===== HEADER AVEC MARGES ===== */
+    .header-compact {
+        border: 1px solid #000;
+        padding: 2mm;
+        margin-bottom: 2mm;
+        text-align: center;
+        page-break-inside: avoid;
+        width: 100%; /* ✅ LARGEUR CONTAINER */
+                max-width: 240mm; /* ✅ LARGEUR LIMITÉE */
+    }
+    
+    .header-compact h1 {
+        font-size: 11px;
+        margin: 0 0 1mm 0;
+        font-weight: bold;
+    }
+    
+    .header-compact p {
+        font-size: 8px;
+        margin: 0;
+    }
+    
+    /* ===== ESPACE 10MM NOUVELLE PAGE ===== */
+    .page-spacer {
+        height: 10mm;
+        width: 100%;
+        border-bottom: 1px solid #ddd;
+        margin-bottom: 2mm;
+        page-break-inside: avoid;
+    }
+    
+    /* ===== TABLEAU AVEC LARGEUR RÉDUITE ===== */
+    .tableau-compact {
+        width: 100%; /* ✅ RÉDUIT À 95% AU LIEU DE 100% */
+        margin: 0 auto; /* ✅ CENTRÉ */
+        border-collapse: collapse;
+        font-size: 10px;
+    }
+    
+    .tableau-compact th {
+        background-color: #f0f0f0;
+        border: 0.5px solid #000;
+        padding: 1mm;
+        text-align: center;
+        font-weight: bold;
+        font-size: 6px;
+        text-transform: uppercase;
+    }
+    
+    .tableau-compact td {
+        border: 0.5px solid #666;
+        padding: 0.8mm; /* ✅ PADDING LÉGÈREMENT AUGMENTÉ */
+        vertical-align: top;
+        font-size: 10px;
+    }
+    
+    /* ===== LARGEURS COLONNES AJUSTÉES ===== */
+    .c1 { width: 4%; text-align: center; }
+    .c2 { width: 10%; text-align: center; font-family: monospace; font-size: 6px; }
+    .c3 { width: 13%; font-size: 6px; }
+    .c4 { width: 13%; font-size: 6px; }
+    .c5 { width: 35%; font-size: 6px; }
+    .c6 { width: 17%; font-size: 6px; }
+    .c7 { width: 4%; text-align: center; font-weight: bold; }
+    .c8 { width: 4%; text-align: center; font-weight: bold; background: #f5f5f5; }
+    
+    /* ===== STYLES LIGNES ===== */
+    .etudiant-premier { 
+        background-color: #f8f8f8; 
+        font-weight: bold; 
+    }
+    
+    /* ===== PAGINATION ===== */
+    .nouvelle-page {
+        page-break-before: always;
+    }
+    
+    /* ===== FOOTER AVEC MARGES ===== */
+    .footer-minimal {
+        position: fixed;
+        bottom: 3mm;
+        left: 25mm; /* ✅ DÉCALÉ POUR MARGES */
+        right: 25mm; /* ✅ DÉCALÉ POUR MARGES */
+        text-align: center;
+        font-size: 6px;
+        border-top: 0.5px solid #000;
+        padding-top: 1mm;
+    }
+    
+    /* ===== OPTIMISATIONS ===== */
+    * { box-sizing: border-box; }
+    tr { page-break-inside: avoid; }
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>VÉRIFICATION DES RÉSULTATS</h1>
-        <p>{{ $examen->libelle ?? 'Examen' }}
-           @if($afficherMoyennesUE) - AVEC MOYENNES UE @else - SANS MOYENNES UE @endif
-        </p>
-    </div>
+    <!-- ✅ CONTAINER AVEC MARGES -->
+    <div class="container-avec-marges">
+        
+        <!-- HEADER -->
+        <div class="header-compact">
+            <h1>UNIVERSITÉ - FACULTÉ DE MÉDECINE - RELEVÉ DE NOTES</h1>
+            <p>{{ $examen->nom ?? 'Examen' }} - {{ $sessionActive->type ?? 'Session' }} - {{ $examen->niveau->nom ?? 'N/A' }} - {{ $examen->parcours->nom ?? 'N/A' }} - {{ $sessionActive->anneeUniversitaire->nom ?? 'N/A' }}</p>
+        </div>
 
-    <div class="info">
-        <strong>Session :</strong> {{ $examen->session->type ?? 'N/A' }} {{ $examen->session->anneeUniversitaire->libelle ?? '' }} |
-        <strong>Niveau :</strong> {{ $examen->niveau->nom ?? 'N/A' }} |
-        <strong>Parcours :</strong> {{ $examen->parcours->nom ?? 'N/A' }} |
-        <strong>Date :</strong> {{ $dateExport }}
-    </div>
-
-    <div class="stats">
-        <strong>Statistiques :</strong>
-        {{ $statistiques['total'] }} résultats -
-        {{ $statistiques['verifiees'] }} vérifiés ({{ $statistiques['pourcentage_verification'] }}%) -
-        {{ $statistiques['non_verifiees'] }} en attente
-        @if($afficherMoyennesUE)
-            | Mode moyennes UE activé
-        @else
-            | Mode moyennes UE désactivé
-        @endif
-    </div>
-
-    @php
-        // Grouper les résultats par étudiant
-        $resultatsGroupes = collect($resultats)->groupBy('matricule');
-        $numeroOrdre = 1;
-    @endphp
-
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 4%;">N°</th>
-                <th style="width: 10%;">Matricule</th>
-                <th style="width: 15%;">Nom</th>
-                <th style="width: 15%;">Prénom</th>
-                <th style="width: {{ $afficherMoyennesUE ? '25%' : '30%' }};">Unité d'enseignement(UE)</th>
-                <th style="width: 15%;">Enseignant</th>
-                <th style="width: 8%;">Note/20</th>
-                @if($afficherMoyennesUE)
-                    <th style="width: 8%;">Moyenne UE</th>
-                @endif
-                <th style="width: {{ $afficherMoyennesUE ? '10%' : '15%' }};">Commentaire</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($resultatsGroupes as $matricule => $resultatsEtudiant)
+        <!-- TABLEAU -->
+        <table class="tableau-compact">
+            <thead>
+                <tr>
+                    <th class="c1">N°</th>
+                    <th class="c2">Matricule</th>
+                    <th class="c3">Nom</th>
+                    <th class="c4">Prénom</th>
+                    <th class="c5">Unité d'Enseignement / Élément Constitutif</th>
+                    <th class="c6">Enseignant</th>
+                    <th class="c7">Note</th>
+                    @if($afficherMoyennesUE)
+                        <th class="c8">Moy</th>
+                    @endif
+                </tr>
+            </thead>
+            <tbody>
                 @php
-                    $premierResultat = $resultatsEtudiant->first();
-                    $resultatsParUE = $resultatsEtudiant->groupBy('ue_nom');
-                    $totalRowsForStudent = 0;
-
-                    // Calculer le nombre total de lignes pour cet étudiant (UE + ECs)
-                    foreach ($resultatsParUE as $ueNom => $resultatsUE) {
-                        $totalRowsForStudent++; // Une ligne pour l'UE
-                        $totalRowsForStudent += $resultatsUE->count(); // Lignes pour les ECs
-                    }
+                    $resultatsGroupes = collect($resultats)->groupBy('matricule');
+                    $numeroOrdre = 1;
+                    $etudiantsParPage = 0;
+                    $maxEtudiantsParPage = 8;
                 @endphp
 
-                @foreach($resultatsParUE as $ueNom => $resultatsUE)
+                @foreach($resultatsGroupes as $matricule => $resultatsEtudiant)
                     @php
-                        $ueAbr = $resultatsUE->first()['ue_abr'] ?? 'UE';
-                        $ueCredits = $resultatsUE->first()['ue_credits'] ?? 0;
-                        $ueDisplay = $ueAbr . '.' . $ueNom . ($ueCredits ? " ({$ueCredits})" : '');
-                        $rowSpanForUE = $resultatsUE->count() + 1; // UE row + EC rows
+                        $premierResultat = $resultatsEtudiant->first();
+                        $resultatsParUE = $resultatsEtudiant->groupBy('ue_nom');
+                        $ueIndex = 0;
+                        
+                        // Pagination avec espace
+                        if ($etudiantsParPage >= $maxEtudiantsParPage && $etudiantsParPage > 0) {
+                            echo '</tbody></table></div>'; // ✅ FERMER CONTAINER
+                            echo '<div class="nouvelle-page">';
+                            echo '<div class="container-avec-marges">'; // ✅ NOUVEAU CONTAINER
+                            echo '<div class="page-spacer"></div>';
+                            echo '<table class="tableau-compact">';
+                            echo '<thead><tr><th class="c1">N°</th><th class="c2">Matricule</th><th class="c3">Nom</th><th class="c4">Prénom</th><th class="c5">UE/EC</th><th class="c6">Enseignant</th><th class="c7">Note</th>' . ($afficherMoyennesUE ? '<th class="c8">Moy</th>' : '') . '</tr></thead><tbody>';
+                            $etudiantsParPage = 0;
+                        }
+                        $etudiantsParPage++;
                     @endphp
 
-                    <!-- Ligne pour l'UE -->
-                    <tr>
-                        @if($loop->first)
-                            <td class="center" rowspan="{{ $totalRowsForStudent }}">{{ $numeroOrdre }}</td>
-                            <td class="center" rowspan="{{ $totalRowsForStudent }}">{{ $matricule }}</td>
-                            <td rowspan="{{ $totalRowsForStudent }}">{{ $premierResultat['nom'] }}</td>
-                            <td rowspan="{{ $totalRowsForStudent }}">{{ $premierResultat['prenom'] }}</td>
-                        @endif
-                        <td style="font-weight: bold;">{{ $ueDisplay }}</td>
-                        <td></td>
-                        <td></td>
-                        @if($afficherMoyennesUE)
-                            <td class="center" rowspan="{{ $rowSpanForUE }}">
-                                @php
-                                    $moyenneUE = $resultatsUE->first()['moyenne_ue'] ?? null;
-                                @endphp
-                                {{ $moyenneUE !== null ? number_format((float)$moyenneUE, 2, '.', '') : '' }}
-                            </td>
-                        @endif
-                        <td></td>
-                    </tr>
-
-                    <!-- Lignes pour les ECs -->
-                    @foreach($resultatsUE as $index => $resultat)
-                        <tr>
-                            <td style="padding-left: 15px;">- EC{{ $index + 1 }}. {{ $resultat['matiere'] }}</td>
-                            <td>{{ $resultat['enseignant'] ?? 'N/A' }}</td>
-                            <td class="center">{{ number_format((float)$resultat['note'], 2, '.', '') }}</td>
-                            @if($afficherMoyennesUE)
-                                <!-- Moyenne UE already displayed in the UE row -->
-                            @endif
-                            <td>{{ $resultat['commentaire'] ?? '' }}</td>
-                        </tr>
+                    @foreach($resultatsParUE as $ueNom => $resultatsUE)
+                        @php 
+                            $ueIndex++; 
+                            $moyenneUE = $resultatsUE->avg('note');
+                            if ($resultatsUE->contains('note', 0)) $moyenneUE = 0;
+                        @endphp
+                        
+                        @foreach($resultatsUE as $indexEC => $resultat)
+                            <tr class="{{ $loop->parent->first && $indexEC === 0 ? 'etudiant-premier' : '' }}">
+                                <td class="c1">{{ ($loop->parent->first && $indexEC === 0) ? $numeroOrdre : '' }}</td>
+                                <td class="c2">{{ ($loop->parent->first && $indexEC === 0) ? $matricule : '' }}</td>
+                                <td class="c3">{{ ($loop->parent->first && $indexEC === 0) ? strtoupper($premierResultat['nom']) : '' }}</td>
+                                <td class="c4">{{ ($loop->parent->first && $indexEC === 0) ? $premierResultat['prenom'] : '' }}</td>
+                                <td class="c5">
+                                    @if($indexEC === 0)
+                                        <b>UE{{ $ueIndex }}.</b>{{ $ueNom ?? 'N/A' }} ({{ $resultat['ue_credits'] ?? 0 }})<br>
+                                    @endif
+                                    <span style="margin-left: 4mm;"><b>
+                                        EC{{ $indexEC + 1 }}.</b>
+                                        {{ $resultat['matiere'] }}
+                                    </span>
+                                </td>
+                                <td class="c6">{{ $resultat['enseignant'] ?? '' }}</td>
+                                <td class="c7">{{ number_format($resultat['note'], 2) }}</td>
+                                @if($afficherMoyennesUE)
+                                    <td class="c8">{{ $indexEC === 0 ? number_format($moyenneUE, 2) : '' }}</td>
+                                @endif
+                            </tr>
+                        @endforeach
                     @endforeach
+
+                    @php $numeroOrdre++; @endphp
                 @endforeach
+            </tbody>
+        </table>
+        
+    </div> <!-- ✅ FERMER CONTAINER -->
 
-                @php $numeroOrdre++; @endphp
-
-                <!-- Ligne de séparation entre étudiants -->
-                @if($loop->iteration < $resultatsGroupes->count())
-                    <tr style="height: 3px;">
-                        <td colspan="{{ $afficherMoyennesUE ? '9' : '8' }}" style="border: none;"></td>
-                    </tr>
-                @endif
-            @endforeach
-
-            @if($resultatsGroupes->isEmpty())
-                <tr>
-                    <td colspan="{{ $afficherMoyennesUE ? '9' : '8' }}" class="center">
-                        Aucun résultat trouvé.
-                    </td>
-                </tr>
-            @endif
-        </tbody>
-    </table>
-
-    <div class="footer">
-        <p>Document généré le {{ $dateExport }}</p>
+    <!-- FOOTER -->
+    <div class="footer-minimal">
+        Document officiel - {{ now()->format('d/m/Y') }}
     </div>
 </body>
 </html>
