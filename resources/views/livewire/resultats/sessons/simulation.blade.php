@@ -1,6 +1,4 @@
-{{-- ✅ VUE BLADE CORRIGÉE AVEC GESTION D'ERREURS --}}
-
-{{-- Onglet Simulation - AVEC PROTECTION CONTRE LES ERREURS --}}
+{{-- simulation.blade.php --}}
 @if($activeTab === 'simulation' && (!empty($resultatsSession1) || !empty($resultatsSession2)))
     <div class="space-y-6">
         {{-- ✅ STATUT DE DÉLIBÉRATION AVEC DERNIÈRES CONFIGURATIONS --}}
