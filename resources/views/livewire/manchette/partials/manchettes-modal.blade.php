@@ -74,7 +74,7 @@
                                                 placeholder="">
                                         </div>
                                         <div class="mt-1 relative">
-                                            <input type="text"
+                                            <input type="hidden"
                                                 wire:model="code_anonymat"
                                                 id="code_anonymat"
                                                 class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-20"
