@@ -64,15 +64,16 @@
                                 <div class="space-y-4">
                                     <!-- Code anonymat avec suggestion -->
                                     <div>
-                                        <label for="code_anonymat" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {{-- <label for="code_anonymat" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                             Code d'anonymat
                                         </label>
                                         <div class="mt-1 relative">
                                             <input type="text"
+                                                wire:model="code_anonymat"
                                                 id="code_fake"
                                                 class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-20"
                                                 placeholder="">
-                                        </div>
+                                        </div> --}}
                                         <div class="mt-1 relative">
                                             <input type="hidden"
                                                 wire:model="code_anonymat"
@@ -121,10 +122,12 @@
                                             </div>
                                             <input type="text"
                                                 wire:model.live="searchQuery"
+                                                wire:keydown.enter="handleEnterKey"
                                                 id="searchQuery"
                                                 class="block w-full pl-10 pr-10 border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                                placeholder="{{ $searchMode === 'matricule' ? 'Ex: ET2023001' : 'Ex: Dupont Martin' }}"
-                                                autocomplete="off">
+                                                placeholder="{{ $searchMode === 'matricule' ? 'Ex: 37014 (tapez 5 caractères)' : 'Ex: Dupont Martin' }}"
+                                                autocomplete="off"
+                                                maxlength="{{ $searchMode === 'matricule' ? 5 : 50 }}">
                                             
                                             @if($searchQuery)
                                             <button type="button"
@@ -189,16 +192,13 @@
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center space-x-3">
                                                 <div class="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                                    <em class="text-green-600 ni ni-check-circle"></em>
+                                                    <em class="text-green-600 ni ni-check-circle animate-pulse"></em>
                                                 </div>
                                                 <div>
-                                                    <div class="text-sm font-medium text-green-900 dark:text-green-200">
-                                                        ✅ Étudiant sélectionné
-                                                    </div>
                                                     <div class="text-sm text-green-800 dark:text-green-300">
                                                         {{ App\Models\Etudiant::find($etudiant_id)->nom ?? '' }} {{ App\Models\Etudiant::find($etudiant_id)->prenom ?? '' }}
                                                     </div>
-                                                    <div class="text-xs text-green-700 dark:text-green-400">
+                                                    <div class="text-lg text-green-700 dark:text-green-400">
                                                         📋 Matricule: {{ $matricule }}
                                                     </div>
                                                 </div>

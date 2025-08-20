@@ -14,26 +14,8 @@
                 <div class="sm:flex sm:items-start">
                     <div class="w-full mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
                         <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white" id="presence-modal-title">
-                            {{ $presenceEnregistree ? 'Modifier les données de présence' : 'Saisir les données de présence' }}
+                            {{ $presenceEnregistree ? 'Modifier les données de présence' : 'Totale absent et présent' }}
                         </h3>
-
-                        <!-- Informations contextuelles - MÊME STYLE QUE VOTRE MODAL -->
-                        <div class="p-3 mt-3 text-sm text-blue-800 rounded-lg bg-blue-50 dark:bg-blue-900 dark:text-blue-200">
-                            <div class="mb-1 font-semibold">Informations de saisie:</div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div><span class="font-medium">Salle:</span> {{ $currentSalleName }}</div>
-                                <div><span class="font-medium">Code salle:</span> {{ $selectedSalleCode }}</div>
-                                <div><span class="font-medium">Matière:</span> {{ $currentEcName }}</div>
-                                @if($currentEcDate)
-                                <div><span class="font-medium">Date:</span> {{ $currentEcDate }}</div>
-                                @endif
-                                @if($currentEcHeure)
-                                <div><span class="font-medium">Heure:</span> {{ $currentEcHeure }}</div>
-                                @endif
-                                <div><span class="font-medium">Session:</span> {{ $currentSessionType ?? 'N/A' }}</div>
-                            </div>
-                        </div>
-
                         <form wire:submit.prevent="savePresence" class="mt-4">
                             <div class="space-y-4">
                                 <!-- Total attendu - Information -->
@@ -51,7 +33,7 @@
                                 <!-- Nombre d'étudiants présents -->
                                 <div>
                                     <label for="etudiants_presents" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Nombre d'étudiants présents <span class="text-red-500">*</span>
+                                        Totale manchettes <span class="text-red-500">*</span>
                                     </label>
                                     <div class="mt-1">
                                         <input type="number" 
@@ -71,7 +53,7 @@
                                 <!-- Nombre d'étudiants absents -->
                                 <div>
                                     <label for="etudiants_absents" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Nombre d'étudiants absents <span class="text-red-500">*</span>
+                                        Nombre d'étudiants absents <span class="text-red-500">auto</span>
                                     </label>
                                     <div class="mt-1">
                                         <input type="number" 
@@ -123,30 +105,6 @@
                                     </div>
                                 </div>
                                 @endif
-
-                                <!-- Observations -->
-                                <div>
-                                    <label for="observations_presence" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Observations (optionnel)
-                                    </label>
-                                    <div class="mt-1">
-                                        <textarea wire:model="observations_presence"
-                                                  id="observations_presence"
-                                                  rows="3"
-                                                  maxlength="500"
-                                                  class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                                  placeholder="Remarques particulières sur la présence..."></textarea>
-                                    </div>
-                                    @if($observations_presence)
-                                    <div class="mt-1 text-xs text-gray-500">
-                                        {{ strlen($observations_presence) }}/500 caractères
-                                    </div>
-                                    @endif
-                                    @error('observations_presence') 
-                                        <p class="mt-1 text-sm text-red-600 dark:text-red-500">{{ $message }}</p> 
-                                    @enderror
-                                </div>
-
                                 <!-- Avertissement si données incohérentes -->
                                 @if(session('presence_warning'))
                                 <div class="p-3 text-sm text-orange-800 bg-orange-100 rounded-lg dark:bg-orange-900 dark:text-orange-200">

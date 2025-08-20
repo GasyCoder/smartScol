@@ -141,9 +141,11 @@ class CopiesIndex extends Component
                 } else {
                     toastr()->error("❌ Aucune manchette trouvée pour ce matricule dans cette matière/session");
                 }
-            } else {
-                toastr()->error("❌ Matricule introuvable");
-            }
+            } 
+            
+            // else {
+            //     toastr()->error("❌ Matricule introuvable");
+            // }
         }
     }
 
@@ -1236,11 +1238,6 @@ class CopiesIndex extends Component
         $sessionType = ucfirst($this->getCurrentSessionType());
         $taux = round($this->presenceData->taux_presence);
         $doubleVerifStatus = $this->enableDoubleVerification ? ' (Double vérification activée)' : '';
-        
-        $this->message = "📊 Session {$sessionType} : {$copiesCount} notes saisies sur {$etudiantsPresents} étudiants présents ({$taux}% de présence). Il reste {$restantes} note(s) à saisir.{$doubleVerifStatus}";
-        $this->messageType = 'info';
-        toastr()->info("✅ {$copiesCount}/{$etudiantsPresents} notes saisies ({$taux}% présence) - {$restantes} note(s) restante(s)");
-
         // Ouvrir la modale
         $this->showCopieModal = true;
     }
@@ -1308,14 +1305,6 @@ class CopiesIndex extends Component
                 ->whereNull('deleted_at')
                 ->count();
 
-            \Log::info('Vérification limite avec présence', [
-                'etudiants_presents' => $etudiantsPresents,
-                'copies_existantes' => $copiesCount,
-                'session_type' => $sessionExam->type,
-                'ec_id' => $this->ec_id,
-                'is_editing' => isset($this->editingCopieId) ? 'oui' : 'non'
-            ]);
-
             // ✅ VÉRIFICATION DE LIMITE CORRIGÉE : En mode AJOUT seulement
             if (!isset($this->editingCopieId)) {
                 // ✅ LOGIQUE CORRIGÉE : Vérifier contre le nombre d'étudiants présents
@@ -1325,15 +1314,6 @@ class CopiesIndex extends Component
                     $this->message = "❌ Limite atteinte ! Vous avez déjà saisi {$copiesCount} notes pour {$etudiantsPresents} étudiants présents ({$taux}% de présence en session {$sessionType}).";
                     $this->messageType = 'error';
                     toastr()->error($this->message);
-                    
-                    \Log::warning('Tentative de dépassement de limite présence', [
-                        'copies_actuelles' => $copiesCount,
-                        'etudiants_presents' => $etudiantsPresents,
-                        'taux_presence' => $taux,
-                        'session_type' => $sessionExam->type,
-                        'ec_id' => $this->ec_id,
-                        'user_id' => Auth::id()
-                    ]);
                     
                     // ✅ NE PAS FERMER LA MODAL pour que l'utilisateur voie le message
                     return;
@@ -1427,8 +1407,6 @@ class CopiesIndex extends Component
                     'saisie_par' => Auth::id(),
                     'date_saisie' => now(),
                 ]);
-
-                $this->message = 'Note enregistrée avec succès';
             }
 
             // Mettre à jour les compteurs pour cette session
@@ -1464,9 +1442,7 @@ class CopiesIndex extends Component
                     $sessionType = $sessionExam->type === 'Normale' ? 'normale' : 'rattrapage';
                     $taux = round($this->presenceData->taux_presence);
                     $this->message = "🎯 Saisie terminée ! Toutes les notes ont été saisies pour les étudiants présents en session {$sessionType} ({$copiesCountAfterSave}/{$etudiantsPresents}, {$taux}% de présence).";
-                    $this->messageType = 'success';
                     $this->showCopieModal = false;
-                    toastr()->success($this->message);
                     
                     // ✅ NOUVEAU : Émettre un événement de fin de saisie
                     $this->dispatch('saisie-notes-terminee', [
@@ -1529,47 +1505,20 @@ class CopiesIndex extends Component
 
                 // ✅ NOUVEAU : Messages avec compteur de présence
                 $restantes = $etudiantsPresents - $copiesCountAfterSave;
-                if ($restantes <= 1) {
-                    toastr()->success("Note enregistrée ! Plus qu'une seule note à saisir ! 🎯");
-                } elseif ($restantes <= 5) {
-                    toastr()->success("Note enregistrée ! Plus que {$restantes} notes pour les étudiants présents ! 🚀");
-                } else {
-                    toastr()->success("Note enregistrée ! {$restantes} notes restantes pour les étudiants présents");
-                }
-            } else {
-                // Mode édition : fermer la modale
-                $this->reset(['code_anonymat', 'note', 'editingCopieId']);
-                $this->showCopieModal = false;
-            }
-
-            $this->messageType = 'success';
+                toastr()->success("Note enregistrée ! {$restantes} notes restantes pour les étudiants présents"); 
+            } 
+             
+            $this->reset(['code_anonymat', 'note', 'editingCopieId']);
+            $this->showCopieModal = false;
             toastr()->success($this->message);
 
             // Rafraîchir la liste des matières
             $this->calculateCopiesCountsForAllEcs();
 
-            \Log::info('Copie sauvée avec limite de présence respectée', [
-                'examen_id' => $this->examen_id,
-                'ec_id' => $this->ec_id,
-                'code_anonymat' => $this->code_anonymat,
-                'session_exam_id' => $this->session_exam_id,
-                'etudiants_presents' => $etudiantsPresents,
-                'copies_apres_save' => $this->totalCopiesCount
-            ]);
-
         } catch (\Exception $e) {
             $this->message = 'Erreur: ' . $e->getMessage();
             $this->messageType = 'error';
             toastr()->error($this->message);
-
-            \Log::error('Erreur dans saveCopie avec présence', [
-                'error' => $e->getMessage(),
-                'examen_id' => $this->examen_id,
-                'ec_id' => $this->ec_id,
-                'session_id' => $this->session_exam_id,
-                'etudiants_presents' => $this->presenceData ? $this->presenceData->etudiants_presents : 'non_defini',
-                'trace' => $e->getTraceAsString()
-            ]);
         }
     }
 
@@ -1673,8 +1622,6 @@ class CopiesIndex extends Component
 
             // Réinitialiser les variables de suivi
             $this->copieToDelete = null;
-
-            toastr()->success($this->message);
 
         } catch (\Exception $e) {
             $this->message = 'Erreur: '.$e->getMessage();
@@ -2117,28 +2064,16 @@ class CopiesIndex extends Component
     }
 
     // LOGIQUE CÔTÉ LIVEWIRE UNIQUEMENT - Plus de JavaScript
-
     public function closeCopieModal()
     {
-        // Recharger l'état des étudiants pour avoir les données les plus récentes
         $this->chargerEtatEtudiants();
-        
-        // Compter SEULEMENT les étudiants restants sans copie
         $etudiantsRestants = count($this->etudiantsSansCopies ?? []);
-
-        // SI il reste des étudiants sans copie, afficher message et ne PAS fermer
         if ($etudiantsRestants > 0) {
-            $this->message = "⚠️ Attention ! Il reste encore {$etudiantsRestants} étudiant(s) sans note. Cliquez sur 'Forcer la fermeture' si vous voulez vraiment arrêter.";
             $this->messageType = 'warning';
-            
-            // Activer le mode "demande de confirmation"
             $this->showForceCloseButton = true;
-            
             toastr()->warning("Il reste {$etudiantsRestants} étudiant(s) sans note !");
-            return; // Ne pas fermer la modal
+            return; 
         }
-
-        // SINON fermeture directe (aucun étudiant restant = pas d'alerte)
         $this->forceCloseModal();
     }
 

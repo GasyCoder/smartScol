@@ -323,78 +323,278 @@ input:focus {
 
 @push('scripts')
 <script>
-document.addEventListener('livewire:load', function () {
-    // Focus automatique sur le champ de recherche après sauvegarde
-    window.livewire.on('focus-search-field', function () {
-        setTimeout(function() {
-            const searchField = document.getElementById('searchQuery');
-            if (searchField) {
-                searchField.focus();
-                searchField.select();
+document.addEventListener('DOMContentLoaded', function() {
+    let isSearchFocused = false;
+    
+    // ✅ NOUVELLE FONCTION : Nettoyer les erreurs persistantes
+    function clearPersistentErrors() {
+        // Supprimer tous les messages d'erreur pour etudiant_id
+        const etudiantErrors = document.querySelectorAll('[data-error-for="etudiant_id"], .text-red-600, .text-red-500');
+        etudiantErrors.forEach(error => {
+            if (error.textContent.includes('etudiant') || error.textContent.includes('obligatoire')) {
+                error.style.display = 'none';
+                error.remove();
             }
-        }, 200);
+        });
+
+        // Supprimer les classes d'erreur des champs
+        const inputs = document.querySelectorAll('input[wire\\:model*="etudiant"], input[wire\\:model="etudiant_id"]');
+        inputs.forEach(input => {
+            input.classList.remove('border-red-500', 'border-red-300', 'ring-red-500');
+            input.classList.add('border-gray-300');
+        });
+    }
+
+    // ✅ NOUVELLE FONCTION : Vérifier si un étudiant est sélectionné
+    function isStudentSelected() {
+        const etudiantIdField = document.querySelector('input[wire\\:model="etudiant_id"]');
+        const etudiantSelectedDiv = document.querySelector('.border-green-200'); // Div de confirmation de sélection
+        
+        return (etudiantIdField && etudiantIdField.value) || 
+               (etudiantSelectedDiv && etudiantSelectedDiv.style.display !== 'none');
+    }
+
+    // ✅ Écouter la sélection d'étudiants
+    document.addEventListener('livewire:finished', function() {
+        // Si un étudiant est sélectionné, nettoyer les erreurs
+        if (isStudentSelected()) {
+            clearPersistentErrors();
+        }
     });
 
-    // Focus après sélection rapide d'un étudiant
-    window.livewire.on('etudiant-selected-quick', function () {
-        setTimeout(function() {
-            const submitButton = document.querySelector('button[type="submit"]');
-            if (submitButton) {
-                submitButton.focus();
-            }
-        }, 100);
-    });
+    // Support Livewire v2
+    if (window.livewire) {
+        // Focus automatique sur le champ de recherche après sauvegarde
+        window.livewire.on('focus-search-field', function () {
+            setTimeout(function() {
+                clearPersistentErrors(); // ✅ AJOUT
+                const searchField = document.getElementById('searchQuery');
+                if (searchField) {
+                    searchField.focus();
+                    searchField.select();
+                }
+            }, 200);
+        });
 
-    // Raccourcis clavier basiques
+        // Focus après sélection rapide d'un étudiant
+        window.livewire.on('etudiant-selected-quick', function () {
+            setTimeout(function() {
+                clearPersistentErrors(); // ✅ AJOUT
+                const submitButton = document.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.focus();
+                    // ✅ NOUVELLE ANIMATION pour indiquer que l'étudiant est sélectionné
+                    submitButton.classList.add('ring-2', 'ring-green-500', 'ring-opacity-50');
+                    setTimeout(() => {
+                        submitButton.classList.remove('ring-2', 'ring-green-500', 'ring-opacity-50');
+                    }, 2000);
+                }
+            }, 100);
+        });
+
+        // ✅ NOUVEAU : Écouter la sélection automatique
+        window.livewire.on('etudiant-auto-selected', function () {
+            setTimeout(function() {
+                clearPersistentErrors();
+                
+                // Indiquer visuellement que l'étudiant a été sélectionné
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                notification.textContent = '✅ Étudiant sélectionné automatiquement';
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+
+                // Focus sur le bouton de soumission
+                const submitButton = document.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.focus();
+                    submitButton.classList.add('animate-pulse');
+                    setTimeout(() => {
+                        submitButton.classList.remove('animate-pulse');
+                    }, 2000);
+                }
+            }, 150);
+        });
+
+        // Écouter les changements de session
+        window.livewire.on('session-changed', function (data) {
+            console.log('Session changée:', data);
+            clearPersistentErrors(); // ✅ AJOUT
+        });
+    }
+
+    // Support pour Livewire v3
+    if (window.Livewire) {
+        document.addEventListener('livewire:initialized', function () {
+            // Focus automatique
+            Livewire.on('focus-search-field', function () {
+                setTimeout(function() {
+                    clearPersistentErrors(); // ✅ AJOUT
+                    const searchField = document.getElementById('searchQuery');
+                    if (searchField) {
+                        searchField.focus();
+                        searchField.select();
+                    }
+                }, 200);
+            });
+
+            // Focus après sélection
+            Livewire.on('etudiant-selected-quick', function () {
+                setTimeout(function() {
+                    clearPersistentErrors(); // ✅ AJOUT
+                    const submitButton = document.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.focus();
+                    }
+                }, 100);
+            });
+
+            // ✅ NOUVEAU : Sélection automatique pour Livewire v3
+            Livewire.on('etudiant-auto-selected', function () {
+                setTimeout(function() {
+                    clearPersistentErrors();
+                    const submitButton = document.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.focus();
+                    }
+                }, 150);
+            });
+        });
+    }
+
+    // ✅ AMÉLIORATION : Gestion des raccourcis clavier
     document.addEventListener('keydown', function(e) {
         const modal = document.querySelector('[aria-modal="true"]');
         if (!modal) return;
 
+        const searchField = document.getElementById('searchQuery');
+        isSearchFocused = searchField && document.activeElement === searchField;
+
         // Échapper pour fermer la modal
         if (e.key === 'Escape') {
             e.preventDefault();
-            @this.call('closeModalWithConfirmation');
+            if (typeof Livewire !== 'undefined') {
+                Livewire.first().call('closeModalWithConfirmation');
+            } else if (window.livewire) {
+                window.livewire.emitTo('manchettes-index', 'closeModalWithConfirmation');
+            }
         }
 
-        // Ctrl+Enter pour sauvegarder
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        // Enter pour traiter la saisie
+        if (e.key === 'Enter' && isSearchFocused) {
             e.preventDefault();
-            const submitButton = document.querySelector('button[type="submit"]');
-            if (submitButton && !submitButton.disabled) {
-                submitButton.click();
+            
+            if (!searchField) return;
+            
+            const searchQuery = searchField.value.trim();
+            
+            // ✅ VÉRIFICATION AMÉLIORÉE
+            if (typeof Livewire !== 'undefined') {
+                const component = Livewire.first();
+                const searchMode = component.get('searchMode');
+                
+                if (searchMode === 'matricule' && searchQuery.length < 5) {
+                    // Matricule incomplet - message visuel amélioré
+                    searchField.classList.add('border-yellow-500', 'ring-1', 'ring-yellow-500');
+                    
+                    const hint = document.createElement('div');
+                    hint.className = 'absolute top-full left-0 mt-1 text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded shadow-sm border border-yellow-200';
+                    hint.textContent = 'Matricule incomplet (5 caractères requis)';
+                    
+                    const parent = searchField.parentElement;
+                    if (parent && !parent.querySelector('.text-yellow-600')) {
+                        parent.style.position = 'relative';
+                        parent.appendChild(hint);
+                        
+                        setTimeout(() => {
+                            hint.remove();
+                            searchField.classList.remove('border-yellow-500', 'ring-1', 'ring-yellow-500');
+                        }, 2000);
+                    }
+                    return;
+                }
+                
+                // Appeler la méthode de gestion
+                component.call('handleEnterKey');
+            } else if (window.livewire) {
+                // Livewire v2
+                const searchMode = @this.get('searchMode');
+                
+                if (searchMode === 'matricule' && searchQuery.length < 5) {
+                    alert('Veuillez terminer la saisie du matricule (5 caractères)');
+                    return;
+                }
+                
+                @this.call('handleEnterKey');
             }
         }
     });
 
-    // Écouter les changements de session
-    window.livewire.on('session-changed', function (data) {
-        console.log('Session changée:', data);
-    });
-});
-
-// Support pour Livewire v3
-document.addEventListener('livewire:initialized', function () {
-    // Focus automatique
-    Livewire.on('focus-search-field', function () {
-        setTimeout(function() {
-            const searchField = document.getElementById('searchQuery');
-            if (searchField) {
-                searchField.focus();
-                searchField.select();
+    // ✅ NOUVEAU : Observer les changements dans la modal pour nettoyer les erreurs
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList') {
+                // Si un élément de confirmation d'étudiant apparaît, nettoyer les erreurs
+                const confirmationDiv = document.querySelector('.border-green-200, .bg-green-50');
+                if (confirmationDiv && confirmationDiv.style.display !== 'none') {
+                    clearPersistentErrors();
+                }
             }
-        }, 200);
+        });
     });
 
-    // Focus après sélection
-    Livewire.on('etudiant-selected-quick', function () {
-        setTimeout(function() {
-            const submitButton = document.querySelector('button[type="submit"]');
-            if (submitButton) {
-                submitButton.focus();
-            }
-        }, 100);
+    // Observer les changements dans le body
+    observer.observe(document.body, { 
+        childList: true, 
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class']
     });
+
+    // ✅ NOUVEAU : Nettoyer les erreurs au changement de champ
+    document.addEventListener('input', function(e) {
+        if (e.target.hasAttribute('wire:model')) {
+            const model = e.target.getAttribute('wire:model');
+            
+            // Si c'est le champ de recherche et qu'il y a du contenu, nettoyer les erreurs
+            if (model.includes('searchQuery') && e.target.value.trim() !== '') {
+                clearPersistentErrors();
+            }
+        }
+    });
+
+    // ✅ NOUVEAU : Forcer le nettoyage des erreurs au clic sur le bouton submit
+    document.addEventListener('click', function(e) {
+        if (e.target.type === 'submit' && e.target.textContent.includes('Enregistrer')) {
+            // Vérifier si un étudiant est sélectionné avant de permettre la soumission
+            if (isStudentSelected()) {
+                clearPersistentErrors();
+            }
+        }
+    });
+
+    // ✅ NETTOYAGE INITIAL au chargement de la page
+    setTimeout(clearPersistentErrors, 1000);
 });
+
+// ✅ FONCTION GLOBALE pour debug (à supprimer en production)
+window.debugValidationState = function() {
+    console.log('=== ÉTAT DE VALIDATION DEBUG ===');
+    console.log('Étudiant sélectionné:', isStudentSelected());
+    console.log('Erreurs visibles:', document.querySelectorAll('.text-red-600, .text-red-500').length);
+    
+    if (typeof Livewire !== 'undefined') {
+        const component = Livewire.first();
+        console.log('Livewire état:', {
+            etudiant_id: component.get('etudiant_id'),
+            matricule: component.get('matricule'),
+            searchQuery: component.get('searchQuery')
+        });
+    }
+};
 </script>
 @endpush
 

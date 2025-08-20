@@ -1412,16 +1412,92 @@ class ManchettesIndex extends Component
     {
         if (strlen($this->searchQuery) >= 2) {
             $this->searchEtudiant();
+            
+            // Si matricule complet (5 caractères), auto-sélectionner
+            if ($this->searchMode === 'matricule' && strlen($this->searchQuery) == 5) {
+                // Chercher l'étudiant avec ce matricule exact
+                if ($this->searchResults && count($this->searchResults) > 0) {
+                    $etudiantTrouve = null;
+                    
+                    foreach ($this->searchResults as $etudiant) {
+                        if ($etudiant->matricule === $this->searchQuery) {
+                            $etudiantTrouve = $etudiant;
+                            break;
+                        }
+                    }
+                    
+                    if ($etudiantTrouve) {
+                        // ✅ RESET COMPLET DES ERREURS D'ABORD
+                        $this->resetErrorBag();
+                        $this->resetValidation();
+                        
+                        // Puis définir les valeurs
+                        $this->etudiant_id = $etudiantTrouve->id;
+                        $this->matricule = $etudiantTrouve->matricule;
+                        $this->searchQuery = '';
+                        $this->searchResults = [];
+                        
+                        toastr()->success("✅ {$etudiantTrouve->nom} {$etudiantTrouve->prenom} sélectionné automatiquement !");
+                        
+                        // Émettre événement pour focus sur bouton
+                        $this->dispatch('etudiant-auto-selected');
+                    }
+                }
+            }
         } else {
             $this->searchResults = [];
         }
     }
+
+
+
 
     public function updatedSearchMode()
     {
         $this->searchQuery = '';
         $this->searchResults = [];
     }
+
+
+    /**
+     * MÉTHODE SIMPLE : handleEnterKey - Vérification matricule complet
+     */
+    public function handleEnterKey()
+    {
+        // Si un étudiant est déjà sélectionné, enregistrer directement
+        if ($this->etudiant_id) {
+            // ✅ RESET COMPLET DES ERREURS AVANT SAUVEGARDE
+            $this->resetErrorBag();
+            $this->resetValidation();
+            
+            $this->saveManchette();
+            return;
+        }
+
+        // Si matricule incomplet, montrer message
+        if ($this->searchMode === 'matricule' && strlen($this->searchQuery) < 5) {
+            toastr()->info("Tapez le matricule complet (5 caractères)");
+            return;
+        }
+
+        // Si des résultats existent, sélectionner le premier
+        if ($this->searchResults && count($this->searchResults) > 0) {
+            $etudiant = $this->searchResults[0];
+            
+            // ✅ RESET COMPLET DES ERREURS D'ABORD
+            $this->resetErrorBag();
+            $this->resetValidation();
+            
+            // Puis définir les valeurs
+            $this->etudiant_id = $etudiant->id;
+            $this->matricule = $etudiant->matricule;
+            $this->searchQuery = '';
+            $this->searchResults = [];
+            
+            toastr()->success("✅ {$etudiant->nom} {$etudiant->prenom} sélectionné !");
+        }
+    }
+
 
     public function searchEtudiant()
     {
@@ -1809,6 +1885,8 @@ class ManchettesIndex extends Component
 
             // Mettre à jour les compteurs pour la session courante
             $this->updateCountersForCurrentSession();
+            $this->resetErrorBag();
+            $this->resetValidation();
             $this->messageType = 'success';
 
             \Log::info('Manchette sauvegardée avec succès', [
