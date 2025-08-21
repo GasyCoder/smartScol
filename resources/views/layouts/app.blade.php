@@ -11,7 +11,12 @@
         <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('images/favicon/apple-touch-icon.png') }}" />
         <link rel="manifest" href="{{ asset('images/favicon/site.webmanifest') }}" />
         <title>@isset($title) {{ $title }} | @endisset{{ config('app.desc') }}</title>
-        @vite(['resources/dashwin/css/app.css'])
+        @if(app()->environment('local'))
+            @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @else
+            <link rel="stylesheet" href="{{ asset('build/assets/app-[hash].css') }}">
+            <script src="{{ asset('build/assets/app-[hash].js') }}" defer></script>
+        @endif
     </head>
     <body class="bg-gray-50 font-body text-sm leading-relaxed text-slate-600 dark:text-slate-300 dark:bg-gray-1000 font-normal min-w-[320px]" dir="{{ gcs('direction', 'ltr') }}">
         <div class="overflow-hidden nk-app-root">

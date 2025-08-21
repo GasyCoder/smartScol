@@ -12,7 +12,6 @@ export default defineConfig({
                 'resources/dashwin/js/scripts.js',
                 'resources/dashwin/js/apps.js',
                 'resources/dashwin/js/charts.js',
-
             ],
             refresh: true,
         }),
@@ -25,4 +24,12 @@ export default defineConfig({
             },
         }),
     ],
+    server: {
+        host: '0.0.0.0',
+        port: 5174,
+        hmr: {
+            host: '192.168.88.198',
+            port: 5174
+        }
+    }
 });
