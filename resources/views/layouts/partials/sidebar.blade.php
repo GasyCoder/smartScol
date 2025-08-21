@@ -128,8 +128,8 @@
                     </li>
                     @endif
 
-                    <!-- TRAITEMENTS - Accessible aux : superadmin, enseignant, secretaire -->
-                    @if(auth()->user()->hasAnyRole(['superadmin', 'enseignant', 'secretaire']))
+                    <!-- TRAITEMENTS - Accessible aux : superadmin, secretaire -->
+                    @if(auth()->user()->hasAnyRole(['superadmin', 'secretaire']))
                     <li
                         class="relative first:pt-1 pt-10 pb-2 px-6 before:absolute before:h-px before:w-full before:start-0 before:top-1/2 before:bg-gray-200 dark:before:bg-gray-900 first:before:hidden before:opacity-0 group-[&.is-compact:not(.has-hover)]/sidebar:before:opacity-100">
                         <h6
@@ -199,6 +199,8 @@
                                     </span>
                                 </a>
                             </li>
+                            @endif 
+                            @if(auth()->user()->hasAnyRole(['superadmin']))
                              <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.releve_note') ? ' active' : '' }}">
                                 <a href="{{ route('resultats.releve_note') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
                                     <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
@@ -207,9 +209,9 @@
                                     </span>
                                 </a>
                             </li>
+                            @endif
                         </ul>
                     </li>
-                    @endif
 
                     <!-- PARAMÈTRAGES - Réservé SUPERADMIN uniquement -->
                     @if(auth()->user()->hasRole('superadmin'))
