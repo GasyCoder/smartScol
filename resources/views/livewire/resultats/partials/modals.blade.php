@@ -1,5 +1,4 @@
 <!-- Modales pour le processus en 4 étapes de gestion des examens -->
-
 <!-- 1. Modal Vérification de cohérence -->
 <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
      x-show="$wire.confirmingVerification"
@@ -627,50 +626,6 @@
             >
                 Confirmer l'annulation
                 <span wire:loading wire:target="annulerResultats" class="ml-2 animate-spin icon ni ni-loader"></span>
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- 9. Modal Exportation -->
-<div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50"
-     x-show="$wire.confirmingExport"
-     x-cloak
-     role="dialog"
-     aria-modal="true"
-     aria-labelledby="export-modal-title">
-    <div class="relative w-full max-w-md p-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
-        <h3 id="export-modal-title" class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">
-            Confirmer l'exportation des résultats
-        </h3>
-        <div class="mb-6">
-            <p class="text-sm text-gray-600 dark:text-gray-300">
-                Voulez-vous exporter les résultats ? Cette action générera un fichier contenant les données des résultats.
-            </p>
-            <div class="p-3 mt-3 border border-blue-200 rounded-md bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700">
-                <p class="text-sm text-blue-800 dark:text-blue-200">
-                    <em class="mr-1 icon ni ni-info"></em>
-                    <strong>Note :</strong> Assurez-vous que les résultats sont validés avant l'exportation.
-                </p>
-            </div>
-        </div>
-        <div class="flex justify-end space-x-3">
-            <button
-                wire:click="$set('confirmingExport', false)"
-                wire:loading.attr="disabled"
-                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 disabled:opacity-50"
-                aria-label="Annuler l'exportation"
-            >
-                Annuler
-            </button>
-            <button
-                wire:click="exporterResultats"
-                wire:loading.attr="disabled"
-                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50"
-                aria-label="Exporter les résultats"
-            >
-                Exporter
-                <span wire:loading wire:target="exporterResultats" class="ml-2 animate-spin icon ni ni-loader"></span>
             </button>
         </div>
     </div>
