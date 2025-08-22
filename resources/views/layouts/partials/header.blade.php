@@ -13,7 +13,7 @@
                         <img class="absolute top-0 h-full opacity-100 dark:opacity-0 start-0" src="{{ asset('images/logo.png') }}" srcset="{{ asset('images/logo.png') }}" alt="{{ site_info('name') }}">
                     </a>
                 </div>
-                <div class="hidden px-1 py-2 xl:block">
+                {{-- <div class="hidden px-1 py-2 xl:block">
                     <a class="flex items-center transition-all duration-300" href="#">
                         <div class="inline-flex flex-shrink-0 w-8">
                             <em class="text-2xl leading-none text-primary-600 ni ni-card-view"></em>
@@ -23,7 +23,7 @@
                             <em class="text-slate-400 ms-1 ni ni-external"></em>
                         </div>
                     </a>
-                </div>
+                </div> --}}
                 <div class="px-1 py-3.5 ms-auto">
                     <ul class="flex item-center -mx-1.5 sm:-mx-2.5">
                         <li class="dropdown px-1.5 sm:px-2.5 relative inline-flex">
