@@ -14,7 +14,7 @@
                                 </span>
                             @endif
                         @else
-                            Notes d'examen
+                            Liste des copies/notes
                         @endif
                     </h3>
                 </div>

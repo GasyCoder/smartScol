@@ -242,8 +242,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'resultats.fusion',
             'resultats.view',
             'resultats.reset-fusion',
-            'resultats.validation',   // Ajoutée
-            'resultats.publication'   // Ajoutée
+            'resultats.validation',   
+            'resultats.publication',
+            'manchettes.view',
+            'copies.view',
         ]);
 
         // Créer le rôle secrétaire

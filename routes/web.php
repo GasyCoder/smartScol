@@ -6,11 +6,11 @@ use App\Livewire\UEEC\EditUnite;
 use App\Livewire\Examen\AddExamen;
 use App\Livewire\Salle\SalleIndex;
 use App\Livewire\Student\Students;
+use App\Livewire\Copie\CopieSaisie;
 use App\Livewire\Copie\CopiesIndex;
 use App\Livewire\Examen\EditExamen;
 use App\Livewire\UEEC\UniteElement;
 use App\Livewire\Examen\IndexExamen;
-use App\Livewire\Settings\Generales;
 use App\Livewire\Student\AddEtudiant;
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
@@ -19,6 +19,7 @@ use App\Livewire\Resultats\FusionIndex;
 use App\Livewire\Resultats\ReleveNotes;
 use App\Livewire\Settings\SessionExamens;
 use App\Livewire\Settings\UserManagement;
+use App\Livewire\Manchette\ManchetteSaisie;
 use App\Livewire\Manchette\ManchettesIndex;
 use App\Livewire\Resultats\ResultatsFinale;
 use App\Livewire\Settings\AnneeUniversites;
@@ -60,12 +61,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Copies
         Route::prefix('copies')->name('copies.')->group(function () {
             Route::get('/', CopiesIndex::class)->name('index');
+            Route::get('/saisie', CopieSaisie::class)->name('saisie');
             Route::get('/corbeille', CopiesCorbeille::class)->name('corbeille');
         });
 
         // Manchettes
         Route::prefix('manchettes')->name('manchettes.')->group(function () {
             Route::get('/', ManchettesIndex::class)->name('index');
+            Route::get('/saisie', ManchetteSaisie::class)->name('saisie');
             Route::get('/corbeille', ManchettesCorbeille::class)->name('corbeille');
         });
 

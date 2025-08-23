@@ -40,11 +40,11 @@
                         </div>
                     </th>
                     <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">
-                        Matière
+                        ECS
                     </th>
                     <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('created_at')">
                         <div class="flex items-center">
-                            Date de saisie
+                            Date 
                             @if(isset($sortField) && $sortField === 'created_at')
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     @if(isset($sortDirection) && $sortDirection === 'asc')

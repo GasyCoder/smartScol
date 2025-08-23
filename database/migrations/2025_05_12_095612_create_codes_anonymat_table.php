@@ -26,12 +26,7 @@ return new class extends Migration
             $table->foreign('session_exam_id')->references('id')->on('session_exams')->onDelete('set null');
             $table->foreign('ec_id')->references('id')->on('ecs')->onDelete('cascade');
 
-            // ✅ CORRIGÉ : Contraintes d'unicité avec les bonnes colonnes
-            // Un code complet doit être unique par examen, EC et session
             $table->unique(['examen_id', 'ec_id', 'session_exam_id', 'code_complet'], 'codes_examen_ec_session_code_unique');
-
-            // Alternative plus simple si le code doit être unique globalement par session
-            // $table->unique(['session_exam_id', 'code_complet'], 'codes_session_code_unique');
 
             // Index pour les recherches fréquentes
             $table->index(['examen_id', 'session_exam_id'], 'codes_examen_session_idx');

@@ -6,7 +6,7 @@
                 <div>
                     <h3 class="text-base font-medium leading-6 text-gray-900 dark:text-white">
                         @if($examen_id && $ec_id)
-                            Manchettes pour toutes les matières
+                            Manchettes pour toutes les ECS
                             @if($currentSalleName)
                                 <span class="inline-flex items-center mx-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
                                     <em class="mr-1 text-sm icon ni ni-building"></em>
@@ -14,7 +14,7 @@
                                 </span>
                             @endif
                         @else
-                            Manchettes d'examen
+                            Listes des manchettes
                         @endif
                     </h3>
                 </div>

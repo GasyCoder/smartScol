@@ -128,49 +128,62 @@
                     </li>
                     @endif
 
-                    <!-- TRAITEMENTS - Accessible aux : superadmin, secretaire -->
-                    @if(auth()->user()->hasAnyRole(['superadmin', 'secretaire']))
-                    <li
-                        class="relative first:pt-1 pt-10 pb-2 px-6 before:absolute before:h-px before:w-full before:start-0 before:top-1/2 before:bg-gray-200 dark:before:bg-gray-900 first:before:hidden before:opacity-0 group-[&.is-compact:not(.has-hover)]/sidebar:before:opacity-100">
-                        <h6
-                            class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-slate-400 dark:text-slate-300 whitespace-nowrap uppercase font-bold text-xs tracking-relaxed leading-tight">
-                            <span class="inline-flex items-center">
-                                <em class="mr-2 text-xs text-green-500 ni ni-activity"></em>
-                                Traitements
-                            </span>
+                    {{-- Afficher l’en-tête s’il a au moins une des permissions concernées --}}
+                    @if(auth()->user()->canAny(['manchettes.view','manchettes.create','copies.view','copies.create']))
+                    <li class="relative pt-10 px-6 pb-2 border-t border-gray-200 dark:border-gray-700">
+                        <h6 class="text-slate-400 dark:text-slate-300 uppercase font-bold text-xs tracking-wide flex items-center">
+                            <em class="mr-2 text-xs text-green-500 ni ni-activity"></em>
+                            Traitements
                         </h6>
                     </li>
-
-                    <li class="nk-menu-item py-0.5{{ request()->routeIs('manchettes.*') ? ' active' : '' }} group/item">
-                        <a href="{{ route('manchettes.index') }}"
-                            class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
-                            <span
-                                class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                <em
-                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-notice"></em>
-                            </span>
-                            <span
-                                class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                            MANCHETTES
-                            </span>
-                        </a>
-                    </li>
-
-                    <li class="nk-menu-item py-0.5{{ request()->routeIs('copies.*') ? ' active' : '' }} group/item">
-                        <a href="{{ route('copies.index') }}"
-                            class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
-                            <span
-                                class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                <em
-                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-notes-alt"></em>
-                            </span>
-                            <span
-                                class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                            COPIES/NOTES
-                            </span>
-                        </a>
-                    </li>
                     @endif
+
+                    {{-- === MANCHETTES (même niveau) === --}}
+                    @can('manchettes.view')
+                    <li class="nk-menu-item {{ request()->routeIs('manchettes.index') ? 'active' : '' }}">
+                        <a href="{{ route('manchettes.index') }}"
+                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                {{ request()->routeIs('manchettes.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
+                            <span class="flex-grow">Listes des Manchettes</span>
+                        </a>
+                    </li>
+                    @endcan
+
+                    @can('manchettes.create')
+                    <li class="nk-menu-item {{ request()->routeIs('manchettes.saisie') ? 'active' : '' }}">
+                        <a href="{{ route('manchettes.saisie') }}"
+                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                {{ request()->routeIs('manchettes.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
+                            <span class="flex-grow">Saisie Manchettes</span>
+                        </a>
+                    </li>
+                    @endcan
+
+                    {{-- === COPIES (même niveau) === --}}
+                    @can('copies.view')
+                    <li class="nk-menu-item {{ request()->routeIs('copies.index') ? 'active' : '' }}">
+                        <a href="{{ route('copies.index') }}"
+                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                {{ request()->routeIs('copies.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
+                            <span class="flex-grow">Listes des Copies</span>
+                        </a>
+                    </li>
+                    @endcan
+
+                    @can('copies.create')
+                    <li class="nk-menu-item {{ request()->routeIs('copies.saisie') ? 'active' : '' }}">
+                        <a href="{{ route('copies.saisie') }}"
+                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                {{ request()->routeIs('copies.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
+                            <span class="flex-grow">Saisie Copies</span>
+                        </a>
+                    </li>
+                    @endcan
+
                     @if(auth()->user()->hasAnyRole(['superadmin', 'enseignant']))
                     <li class="nk-menu-item py-0.5 has-sub group/item {{ is_route('resultats.index.*') ? ' active' : '' }}">
                         <a href="#" class="nk-menu-link sub nk-menu-toggle flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
