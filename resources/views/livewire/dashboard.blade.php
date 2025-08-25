@@ -1,5 +1,9 @@
 {{-- resources/views/livewire/dashboard.blade.php --}}
 <div class="space-y-6">
+
+    @if(auth()->user()->hasRole('secretaire'))
+        @livewire('secretaire-dashboard')
+    @else 
     {{-- Header du Dashboard --}}
     <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg">
         <div class="p-6 text-white">
@@ -202,6 +206,7 @@
             </div>
         </div>
     @endif
+      @endif
 </div>
 
 @push('scripts')

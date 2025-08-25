@@ -196,6 +196,8 @@ namespace App\Models{
 namespace App\Models{
 /**
  * @property int $id
+ * @property int|null $niveau_id
+ * @property int|null $parcours_id
  * @property string|null $abr Ex: EC1, EC2
  * @property string $nom Ex: Anatomie, Histologie
  * @property numeric $coefficient
@@ -237,7 +239,9 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereEnseignant($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereNom($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereParcoursId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUeId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC withTrashed(bool $withTrashed = true)

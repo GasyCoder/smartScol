@@ -43,6 +43,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/etudiants/ajouter/{niveau}/{parcour}', AddEtudiant::class)->name('add_etudiant');
         Route::get('/etudiants/modifier/{etudiant}', EditEtudiant::class)->name('edit_etudiant');
         Route::get('/salle', SalleIndex::class)->name('salles.index');
+        // Students
+        Route::get('/etudiants', Students::class)->name('students');
         Route::prefix('examens')->name('examens.')->group(function () {
             Route::get('/', IndexExamen::class)->name('index');
             Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
@@ -57,23 +59,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ========================================
     // TRAITEMENTS - Accessible aux : superadmin, enseignant, secretaire
     // ========================================
-    Route::middleware(['role:superadmin|enseignant|secretaire'])->group(function () {
+    Route::middleware(['role:enseignant|secretaire'])->group(function () {
         // Copies
         Route::prefix('copies')->name('copies.')->group(function () {
-            Route::get('/', CopiesIndex::class)->name('index');
             Route::get('/saisie', CopieSaisie::class)->name('saisie');
-            Route::get('/corbeille', CopiesCorbeille::class)->name('corbeille');
         });
 
         // Manchettes
         Route::prefix('manchettes')->name('manchettes.')->group(function () {
-            Route::get('/', ManchettesIndex::class)->name('index');
             Route::get('/saisie', ManchetteSaisie::class)->name('saisie');
-            Route::get('/corbeille', ManchettesCorbeille::class)->name('corbeille');
         });
-
-        // Students
-        Route::get('/etudiants', Students::class)->name('students');
     });
 
     // ========================================
@@ -86,6 +81,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/finale', ResultatsFinale::class)->name('finale');
             Route::get('/releve-notes', ReleveNotes::class)->name('releve_note');
         });
+
+        Route::get('/liste-manchettes', ManchettesIndex::class)->name('manchette.index');
+        Route::get('/liste-copies-notes', CopiesIndex::class)->name('copie.index');
+
+        Route::get('/corbeille/manchettes', ManchettesCorbeille::class)->name('manchettes.corbeille');
+        Route::get('/corbeille/copies', CopiesCorbeille::class)->name('copies.corbeille');
     });
 
     // ========================================

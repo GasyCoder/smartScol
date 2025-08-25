@@ -140,10 +140,10 @@
 
                     {{-- === MANCHETTES (même niveau) === --}}
                     @can('manchettes.view')
-                    <li class="nk-menu-item {{ request()->routeIs('manchettes.index') ? 'active' : '' }}">
-                        <a href="{{ route('manchettes.index') }}"
+                    <li class="nk-menu-item {{ request()->routeIs('manchette.index') ? 'active' : '' }}">
+                        <a href="{{ route('manchette.index') }}"
                         class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('manchettes.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                                {{ request()->routeIs('manchette.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
                             <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
                             <span class="flex-grow">Listes des Manchettes</span>
                         </a>
@@ -163,10 +163,10 @@
 
                     {{-- === COPIES (même niveau) === --}}
                     @can('copies.view')
-                    <li class="nk-menu-item {{ request()->routeIs('copies.index') ? 'active' : '' }}">
-                        <a href="{{ route('copies.index') }}"
+                    <li class="nk-menu-item {{ request()->routeIs('copie.index') ? 'active' : '' }}">
+                        <a href="{{ route('copie.index') }}"
                         class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('copies.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                                {{ request()->routeIs('copie.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
                             <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
                             <span class="flex-grow">Listes des Copies</span>
                         </a>
