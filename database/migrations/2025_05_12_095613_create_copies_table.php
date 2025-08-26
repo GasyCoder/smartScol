@@ -19,7 +19,7 @@ return new class extends Migration
             $table->unsignedBigInteger('code_anonymat_id')->comment('Référence au code d\'anonymat');
             $table->decimal('note', 5, 2)->comment('Note obtenue');
             $table->unsignedBigInteger('saisie_par')->comment('Utilisateur ayant saisi la note');
-            $table->foreignId('modifie_par')->nullable()->constrained('users')->onDelete('set null');
+             $table->foreignId('modifie_par')->nullable()->constrained('users')->onDelete('set null');
             $table->timestamp('date_saisie')->useCurrent();
             $table->decimal('note_old', 5, 2)->nullable()->comment('Note corrigée');
             $table->boolean('is_checked')->default(false);
