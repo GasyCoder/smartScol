@@ -106,7 +106,7 @@
                     </td>
                     <td class="px-6 py-3 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900 dark:text-white">
-                            {{ $copie->ec->nom ?? 'Matière non spécifiée' }}
+                            {{ $copie->ec->nom ?? 'ECS non spécifiée' }}
                         </div>
                         @if($copie->ec && $copie->ec->code)
                             <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -256,12 +256,12 @@
                                     Veuillez sélectionner une session d'examen active pour voir et saisir des notes.
                                 </p>
                             @elseif($examen_id && $ec_id)
-                                <p class="mb-4 text-lg font-medium">Aucune note saisie pour cette matière</p>
+                                <p class="mb-4 text-lg font-medium">Aucune note saisie pour cette EC</p>
                                 <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
                                     Session actuelle : <span class="font-medium">{{ $currentSessionType }}</span>
                                 </div>
                                 <p class="max-w-md mb-6 text-sm text-center text-gray-500 dark:text-gray-400">
-                                    Vous pouvez commencer à saisir les notes des étudiants pour cette matière dans la session {{ $currentSessionType }}.
+                                    Vous pouvez commencer à saisir les notes des étudiants pour cette EC dans la session {{ $currentSessionType }}.
                                 </p>
                                 @can('copies.create')
                                 <button
@@ -274,7 +274,7 @@
                             @else
                                 <p class="mb-4 text-lg font-medium">Aucune donnée à afficher</p>
                                 <p class="max-w-md mb-6 text-sm text-center text-gray-500 dark:text-gray-400">
-                                    Veuillez sélectionner un niveau, un parcours, une salle et une matière pour voir ou saisir des notes.
+                                    Veuillez sélectionner un niveau, un parcours, une salle et une EC pour voir ou saisir des notes.
                                 </p>
                             @endif
                         </div>

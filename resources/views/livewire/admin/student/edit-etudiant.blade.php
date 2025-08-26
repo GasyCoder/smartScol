@@ -81,25 +81,6 @@
                                     <p class="mt-2 text-sm text-red-600 dark:text-red-500">{{ $message }}</p>
                                 @enderror
                             </div>
-
-                            <!-- Sexe -->
-                            <div class="sm:col-span-3">
-                                <label for="sexe" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Sexe *</label>
-                                <div class="mt-1">
-                                    <select
-                                        id="sexe"
-                                        wire:model="sexe"
-                                        class="block w-full rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white @error('sexe') border-red-300 text-red-900 focus:outline-none focus:ring-red-500 focus:border-red-500 @enderror"
-                                    >
-                                        <option value="M">Masculin (M)</option>
-                                        <option value="F">Féminin (F)</option>
-                                    </select>
-                                </div>
-                                @error('sexe')
-                                    <p class="mt-2 text-sm text-red-600 dark:text-red-500">{{ $message }}</p>
-                                @enderror
-                            </div>
-
                             <!-- Nom -->
                             <div class="sm:col-span-3">
                                 <label for="nom" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nom *</label>

@@ -1,12 +1,12 @@
     <!-- En-tête du tableau avec stats et filtres -->
     <div class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
         <div class="px-4 py-3 sm:px-6">
-            <!-- Titre et informations de la matière -->
+            <!-- Titre et informations de la ECS -->
             <div class="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                 <div>
                     <h3 class="text-base font-medium leading-6 text-gray-900 dark:text-white">
                         @if($examen_id && $ec_id)
-                            Notes pour toutes les matières
+                            Notes pour toutes les ECS
                             @if($currentSalleName)
                                 <span class="inline-flex items-center mx-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
                                    <em class="mr-1 text-sm icon ni ni-building"></em>

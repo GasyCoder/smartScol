@@ -1,289 +1,532 @@
-{{-- resources/views/livewire/dashboard.blade.php --}}
-<div class="space-y-6">
-
-    @if(auth()->user()->hasRole('secretaire'))
-        @livewire('secretaire-dashboard')
-    @else 
-    {{-- Header du Dashboard --}}
-    <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg">
-        <div class="p-6 text-white">
+<div class="min-h-screen bg-gray-50 dark:bg-gray-950 font-body">
+    <!-- Header -->
+    <div class="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-800">
+        <div class="container mx-auto px-6 py-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold font-heading -tracking-snug leading-tighter">
-                        Tableau de Bord Académique
-                    </h1>
-                    <p class="text-blue-100 mt-2">
-                        Année Universitaire {{ $anneeActive?->libelle ?? 'Non définie' }}
-                        @if($sessionDeliberee)
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">
-                                Session délibérée
-                            </span>
-                        @else
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ml-2">
-                                Session en cours
-                            </span>
-                        @endif
-                    </p>
+                    <h1 class="text-3xl font-heading font-bold text-gray-800 dark:text-gray-100">Dashboard</h1>
+                    <p class="text-gray-600 dark:text-gray-400 mt-1 text-sm">Vue d'ensemble des performances académiques</p>
                 </div>
-                <div class="flex items-center space-x-4">
-                    {{-- Sélecteur d'année --}}
-                    <div class="relative">
-                        <select wire:model.live="selectedYear" 
-                                class="bg-white bg-opacity-20 border border-white border-opacity-30 rounded-md px-3 py-2 text-white placeholder-blue-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50">
+                <button wire:click="refresh" 
+                        class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 {{ $refreshing ? 'opacity-75' : '' }}">
+                    <svg class="w-4 h-4 mr-2 {{ $refreshing ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    {{ $refreshing ? 'Actualisation...' : 'Actualiser' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-6 py-8">
+        <!-- Main Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <!-- Total Étudiants -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ number_format($totalEtudiants) }}</p>
+                            @if($progressionEtudiants != 0)
+                                <span class="ml-2 text-sm font-semibold {{ $progressionEtudiants >= 0 ? 'text-green-600' : 'text-red-600' }}">
+                                    {{ $progressionEtudiants >= 0 ? '+' : '' }}{{ $progressionEtudiants }}%
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admis -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Admis</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-green-700 dark:text-green-400">{{ number_format($etudiantsAdmis) }}</p>
+                            @if($totalEtudiants > 0)
+                                <span class="ml-2 text-sm font-medium text-green-600 dark:text-green-500">
+                                    {{ round(($etudiantsAdmis / $totalEtudiants) * 100, 1) }}%
+                                </span>
+                            @endif
+                        </div>
+                        @if($progressionAdmis != 0)
+                            <div class="mt-1 text-xs {{ $progressionAdmis >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500' }}">
+                                {{ $progressionAdmis >= 0 ? '↗' : '↘' }} {{ abs($progressionAdmis) }}% vs précédent
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Redoublants -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Redoublants</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{{ number_format($redoublants) }}</p>
+                            @if($totalEtudiants > 0)
+                                <span class="ml-2 text-sm font-medium text-yellow-600 dark:text-yellow-500">
+                                    {{ round(($redoublants / $totalEtudiants) * 100, 1) }}%
+                                </span>
+                            @endif
+                        </div>
+                        @if($progressionRedoublants != 0)
+                            <div class="mt-1 text-xs {{ $progressionRedoublants >= 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500' }}">
+                                {{ $progressionRedoublants >= 0 ? '↗' : '↘' }} {{ abs($progressionRedoublants) }}% vs précédent
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rattrapage -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Rattrapage</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-cyan-700 dark:text-cyan-400">{{ number_format($rattrapage) }}</p>
+                            @if($totalEtudiants > 0)
+                                <span class="ml-2 text-sm font-medium text-cyan-600 dark:text-cyan-500">
+                                    {{ round(($rattrapage / $totalEtudiants) * 100, 1) }}%
+                                </span>
+                            @endif
+                        </div>
+                        @if($progressionRattrapage != 0)
+                            <div class="mt-1 text-xs {{ $progressionRattrapage >= 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500' }}">
+                                {{ $progressionRattrapage >= 0 ? '↗' : '↘' }} {{ abs($progressionRattrapage) }}% vs précédent
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exclus -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Exclus</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-red-700 dark:text-red-400">{{ number_format($exclus) }}</p>
+                            @if($totalEtudiants > 0)
+                                <span class="ml-2 text-sm font-medium text-red-600 dark:text-red-500">
+                                    {{ round(($exclus / $totalEtudiants) * 100, 1) }}%
+                                </span>
+                            @endif
+                        </div>
+                        @if($progressionExclus != 0)
+                            <div class="mt-1 text-xs {{ $progressionExclus >= 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500' }}">
+                                {{ $progressionExclus >= 0 ? '↗' : '↘' }} {{ abs($progressionExclus) }}% vs précédent
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Overview -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Taux de Réussite -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Taux de Réussite</h3>
+                    <div class="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                        <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                @php
+                    $tauxReussite = $totalEtudiants > 0 ? round(($etudiantsAdmis / $totalEtudiants) * 100, 1) : 0;
+                @endphp
+                <div class="flex items-end space-x-2">
+                    <span class="text-3xl font-bold text-green-600 dark:text-green-400">{{ $tauxReussite }}%</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400 pb-1">{{ $etudiantsAdmis }}/{{ $totalEtudiants }}</span>
+                </div>
+                <div class="mt-3 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500" 
+                         style="width: {{ $tauxReussite }}%"></div>
+                </div>
+            </div>
+
+            <!-- Taux d'Échec -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Taux d'Échec</h3>
+                    <div class="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+                        <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                        </svg>
+                    </div>
+                </div>
+                @php
+                    $tauxEchec = $totalEtudiants > 0 ? round((($redoublants + $exclus) / $totalEtudiants) * 100, 1) : 0;
+                @endphp
+                <div class="flex items-end space-x-2">
+                    <span class="text-3xl font-bold text-red-600 dark:text-red-400">{{ $tauxEchec }}%</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400 pb-1">{{ $redoublants + $exclus }}/{{ $totalEtudiants }}</span>
+                </div>
+                <div class="mt-3 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div class="bg-gradient-to-r from-red-500 to-red-600 h-2 rounded-full transition-all duration-500" 
+                         style="width: {{ $tauxEchec }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Évolution Mensuelle -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Évolution Mensuelle</h3>
+                    <div class="flex items-center space-x-3">
+                        <select wire:model="selectedYear" wire:change="changeYear($event.target.value)" 
+                                class="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
                             @foreach($anneesUniversitaires as $annee)
-                                <option value="{{ $annee->id }}" class="text-gray-900">
-                                    {{ $annee->date_start->format('Y') }}-{{ $annee->date_end->format('Y') }}
-                                </option>
+                                <option value="{{ $annee->id }}">{{ $annee->nom }}</option>
                             @endforeach
                         </select>
+                        <div class="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                            <button wire:click="changeChartType('line')" 
+                                    class="px-3 py-1 text-xs font-medium transition-colors {{ $selectedChartType === 'line' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700' }}">
+                                Ligne
+                            </button>
+                            <button wire:click="changeChartType('bar')" 
+                                    class="px-3 py-1 text-xs font-medium transition-colors {{ $selectedChartType === 'bar' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700' }}">
+                                Barres
+                            </button>
+                        </div>
                     </div>
-                    
-                    {{-- Bouton refresh --}}
-                    <button wire:click="refresh" 
-                            class="bg-white bg-opacity-20 hover:bg-opacity-30 rounded-md p-2 transition-all duration-200"
-                            wire:loading.class="opacity-50 cursor-not-allowed">
-                        <svg wire:loading.remove wire:target="refresh" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </div>
+                <div class="h-80">
+                    <canvas id="evolutionChart" class="w-full h-full"></canvas>
+                </div>
+            </div>
+
+            <!-- Répartition Actuelle -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Répartition des Résultats</h3>
+                </div>
+                <div class="h-80">
+                    <canvas id="distributionChart" class="w-full h-full"></canvas>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-4">
+                    <div class="text-center">
+                        <div class="w-4 h-4 bg-green-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Admis</p>
+                        <p class="font-semibold text-green-600 dark:text-green-400">{{ $etudiantsAdmis }}</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-4 h-4 bg-red-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Échecs</p>
+                        <p class="font-semibold text-red-600 dark:text-red-400">{{ $redoublants + $exclus }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Tables -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <!-- Statistiques par Niveau -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Statistiques par Niveau</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Niveau</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Étudiants</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Admis</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Taux</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                            @forelse($statistiquesNiveaux as $niveau)
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-white">{{ $niveau->abr }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="ml-3">
+                                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $niveau->nom }}</div>
+                                                <div class="flex space-x-1 mt-1">
+                                                    @if($niveau->is_concours)
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                                                            Concours
+                                                        </span>
+                                                    @endif
+                                                    @if($niveau->has_rattrapage)
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200">
+                                                            Rattrapage
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ number_format($niveau->etudiants_count) }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-green-600 dark:text-green-400">{{ $niveau->admis_count ?? 0 }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $niveau->taux_reussite ?? 0 }}%</div>
+                                            <div class="ml-2 w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                                <div class="bg-green-500 h-2 rounded-full transition-all duration-300" 
+                                                     style="width: {{ $niveau->taux_reussite ?? 0 }}%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Aucun niveau trouvé</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Statistiques par Parcours -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Statistiques par Parcours</h3>
+                        <div class="flex space-x-2">
+                            <select wire:model="selectedNiveauFilter" 
+                                    class="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                                <option value="">Tous les niveaux</option>
+                                @foreach($statistiquesNiveaux as $niveau)
+                                    <option value="{{ $niveau->id }}">{{ $niveau->nom }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Parcours</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Niveau</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Admis/Total</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Taux</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                            @php
+                                $filteredParcours = $selectedNiveauFilter ? 
+                                    $statistiquesParcours->where('niveau.id', $selectedNiveauFilter) : 
+                                    $statistiquesParcours;
+                            @endphp
+                            @forelse($filteredParcours as $parcours)
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-white">{{ substr($parcours->abr, 0, 2) }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="ml-3">
+                                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $parcours->nom }}</div>
+                                                <div class="text-xs text-gray-500 dark:text-gray-400">{{ $parcours->abr }}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200">
+                                            {{ $parcours->niveau->abr }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                            <span class="text-green-600 dark:text-green-400">{{ $parcours->admis_count ?? 0 }}</span>/<span>{{ $parcours->etudiants_count }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ $parcours->taux_reussite ?? 0 }}%</div>
+                                            <div class="ml-2 w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                                                <div class="bg-green-500 h-1.5 rounded-full transition-all duration-300" 
+                                                     style="width: {{ $parcours->taux_reussite ?? 0 }}%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Aucun parcours trouvé</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Status Alert -->
+        @if($sessionDeliberee)
+            <div class="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
                         </svg>
-                        <svg wire:loading wire:target="refresh" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-green-800 dark:text-green-200">
+                            <span class="font-medium">Session délibérée</span> - Les résultats ont été validés par le jury.
+                        </p>
+                    </div>
                 </div>
             </div>
-            
-            {{-- Indicateurs rapides --}}
-            <div class="mt-4 flex items-center space-x-6">
-                <div class="text-sm">
-                    <span class="text-blue-200">Dernière mise à jour:</span>
-                    <span class="font-medium">{{ now()->format('d/m/Y à H:i') }}</span>
-                </div>
-                <div class="text-sm">
-                    <span class="text-blue-200">Total étudiants:</span>
-                    <span class="font-bold">{{ number_format($totalEtudiants) }}</span>
-                </div>
-            </div>
-        </div>
+        @endif
     </div>
-
-    {{-- Cartes de Statistiques Principales --}}
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        {{-- Total Étudiants --}}
-        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow dark:bg-gray-950 dark:border-gray-900">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Étudiants</h3>
-                    <p class="text-3xl font-bold text-gray-900 dark:text-white mt-2">{{ number_format($totalEtudiants) }}</p>
-                    @if($progressionEtudiants > 0)
-                        <p class="text-green-600 text-sm mt-1">
-                            <span class="inline-flex items-center">
-                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                                </svg>
-                                +{{ $progressionEtudiants }}%
-                            </span>
-                        </p>
-                    @elseif($progressionEtudiants < 0)
-                        <p class="text-red-600 text-sm mt-1">
-                            <span class="inline-flex items-center">
-                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                                </svg>
-                                {{ $progressionEtudiants }}%
-                            </span>
-                        </p>
-                    @endif
-                </div>
-                <div class="bg-blue-100 p-3 rounded-full dark:bg-blue-900">
-                    <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        {{-- Étudiants Admis --}}
-        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow dark:bg-gray-950 dark:border-gray-900">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Étudiants Admis</h3>
-                    <p class="text-3xl font-bold text-green-600 mt-2">{{ number_format($etudiantsAdmis) }}</p>
-                    @if($progressionAdmis != 0)
-                        <p class="text-{{ $progressionAdmis > 0 ? 'green' : 'red' }}-600 text-sm mt-1">
-                            {{ $progressionAdmis > 0 ? '+' : '' }}{{ $progressionAdmis }}%
-                        </p>
-                    @endif
-                </div>
-                <div class="bg-green-100 p-3 rounded-full dark:bg-green-900">
-                    <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        {{-- Redoublants --}}
-        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow dark:bg-gray-950 dark:border-gray-900">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Redoublants</h3>
-                    <p class="text-3xl font-bold text-blue-600 mt-2">{{ number_format($redoublants) }}</p>
-                    @if($progressionRedoublants != 0)
-                        <p class="text-{{ $progressionRedoublants > 0 ? 'red' : 'green' }}-600 text-sm mt-1">
-                            {{ $progressionRedoublants > 0 ? '+' : '' }}{{ $progressionRedoublants }}%
-                        </p>
-                    @endif
-                </div>
-                <div class="bg-blue-100 p-3 rounded-full dark:bg-blue-900">
-                    <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        {{-- Rattrapage --}}
-        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow dark:bg-gray-950 dark:border-gray-900">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Rattrapage</h3>
-                    <p class="text-3xl font-bold text-yellow-600 mt-2">{{ number_format($rattrapage) }}</p>
-                    @if($progressionRattrapage != 0)
-                        <p class="text-{{ $progressionRattrapage > 0 ? 'red' : 'green' }}-600 text-sm mt-1">
-                            {{ $progressionRattrapage > 0 ? '+' : '' }}{{ $progressionRattrapage }}%
-                        </p>
-                    @endif
-                </div>
-                <div class="bg-yellow-100 p-3 rounded-full dark:bg-yellow-900">
-                    <svg class="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        {{-- Exclus --}}
-        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow dark:bg-gray-950 dark:border-gray-900">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Exclus</h3>
-                    <p class="text-3xl font-bold text-red-600 mt-2">{{ number_format($exclus) }}</p>
-                    @if($progressionExclus != 0)
-                        <p class="text-{{ $progressionExclus > 0 ? 'red' : 'green' }}-600 text-sm mt-1">
-                            {{ $progressionExclus > 0 ? '+' : '' }}{{ $progressionExclus }}%
-                        </p>
-                    @endif
-                </div>
-                <div class="bg-red-100 p-3 rounded-full dark:bg-red-900">
-                    <svg class="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {{-- Contenu principal du dashboard --}}
-    <div class="grid grid-cols-12 grid-flow-dense gap-7">
-        {{-- Graphiques --}}
-        @include('livewire.pages.graphiques')
-        
-        {{-- Tableau des statistiques --}}
-        @include('livewire.pages.table-statistique')
-        
-        {{-- Top étudiants --}}
-        @include('livewire.pages.top-etudiants')
-    </div>
-
-    {{-- Modal de chargement --}}
-    @if($refreshing)
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-lg p-6 max-w-sm mx-auto">
-                <div class="flex items-center space-x-3">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <span class="text-gray-700">Actualisation des données...</span>
-                </div>
-            </div>
-        </div>
-    @endif
-      @endif
 </div>
 
 @push('scripts')
-    @vite(['resources/dashwin/js/charts.js'])
-    <script type="module">
-        // Vos graphiques existants avec données dynamiques
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        const gridColor = isDarkMode ? '#374151' : '#f1f5f9';
+        const textColor = isDarkMode ? '#d1d5db' : '#6b7280';
 
-        // Graphique en ligne - Statistiques des résultats avec VOS données réelles
-        var salesStatistics = {
-            labels : ["01 Jan", "02 Jan", "03 Jan", "04 Jan", "05 Jan", "06 Jan", "07 Jan", "08 Jan", "09 Jan", "10 Jan", "11 Jan", "12 Jan","13 Jan", "14 Jan", "15 Jan", "16 Jan", "17 Jan", "18 Jan", "19 Jan", "20 Jan", "21 Jan", "22 Jan", "23 Jan", "24 Jan", "25 Jan", "26 Jan", "27 Jan", "28 Jan", "29 Jan", "30 Jan"],
-            dataUnit : 'Étudiants',
-            lineTension : .4,
-            datasets : [{
-                label : "Admis - Session normale",
-                color : "#6576ff",
-                dash : [0,0],
-                background : hexRGB('#6576ff',.15),
-                data: {!! json_encode($chartDataAdmis) !!}
-            },{
-                label : "Exclus - Session normale",
-                color : "#eb6459",
-                dash : [5,5],
-                background : "transparent",
-                data: {!! json_encode($chartDataExclus) !!}
-            },{
-                label : "Admis - Rattrapage",
-                color : "#10b981",
-                dash : [0,0],
-                background : "transparent",
-                data: {!! json_encode($chartDataRattrapage) !!}
-            },{
-                label : "Exclus - Rattrapage",
-                color : "#f59e0b",
-                dash : [3,3],
-                background : "transparent",
-                data: {!! json_encode($chartDataRedoublants) !!}
-            }]
-        };
-        
-        // Utiliser votre fonction Line existante
-        Line({selector:'#salesStatistics', data:salesStatistics, tooltip: "tooltipDark", scales: "scales2" });
-
-        // Graphique en anneau - Répartition avec VOS données réelles
-        var orderStatistics = {
-            labels : ["Admis", "Redoublants", "Exclus"],
-            dataUnit : 'Étudiants',
-            legend: false,
-            datasets : [{
-                borderColor : "#fff",
-                background : ["#816bff","#13c9f2","#ff82b7"],
-                data: [{{ $etudiantsAdmis ?? 0 }}, {{ $redoublants ?? 0 }}, {{ $exclus ?? 0 }}]
-            }]
-        };
-        
-        // Utiliser votre fonction Doughnut existante
-        Doughnut({selector:'#orderStatistics', data:orderStatistics, tooltip: "tooltipDark"});
-
-        // Event Listeners pour l'interactivité Livewire
-        document.addEventListener('livewire:initialized', () => {
-            @this.on('dashboard-refreshed', () => {
-                // Recharger les graphiques après refresh
-                setTimeout(() => {
-                    location.reload();
-                }, 500);
-            });
-            
-            @this.on('top-etudiants-refreshed', () => {
-                // Actions spécifiques pour top étudiants
-                console.log('Top étudiants actualisés');
-            });
+        const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
+        const evolutionChart = new Chart(evolutionCtx, {
+            type: '{{ $selectedChartType }}',
+            data: {
+                labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'],
+                datasets: [
+                    {
+                        label: 'Admis',
+                        data: @json($chartDataAdmis),
+                        borderColor: '#18b38a',
+                        backgroundColor: '#18b38a20',
+                        tension: 0.4,
+                        fill: false
+                    },
+                    {
+                        label: 'Redoublants',
+                        data: @json($chartDataRedoublants),
+                        borderColor: '#f4bd0e',
+                        backgroundColor: '#f4bd0e20',
+                        tension: 0.4,
+                        fill: false
+                    },
+                    {
+                        label: 'Exclus',
+                        data: @json($chartDataExclus),
+                        borderColor: '#e85347',
+                        backgroundColor: '#e8534720',
+                        tension: 0.4,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true,
+                            color: textColor
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: gridColor
+                        },
+                        ticks: {
+                            color: textColor
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: textColor
+                        }
+                    }
+                }
+            }
         });
 
-        // Auto-refresh toutes les 5 minutes (optionnel)
-        setInterval(() => {
-            console.log('Auto-refresh dashboard...');
-            @this.call('refresh');
-        }, 300000); // 5 minutes
+        const distributionCtx = document.getElementById('distributionChart').getContext('2d');
+        const distributionChart = new Chart(distributionCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Admis', 'Redoublants', 'Exclus', 'Rattrapage'],
+                datasets: [{
+                    data: [{{ $etudiantsAdmis }}, {{ $redoublants }}, {{ $exclus }}, {{ $rattrapage }}],
+                    backgroundColor: ['#18b38a', '#f4bd0e', '#e85347', '#09c2de'],
+                    borderWidth: 3,
+                    borderColor: isDarkMode ? '#111827' : '#ffffff',
+                    hoverBorderWidth: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
 
-    </script>
+        Livewire.on('dashboard-refreshed', () => {
+            evolutionChart.config.type = '{{ $selectedChartType }}';
+            evolutionChart.update();
+            distributionChart.update();
+        });
+    });
+</script>
 @endpush

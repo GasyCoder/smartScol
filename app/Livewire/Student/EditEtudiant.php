@@ -19,7 +19,6 @@ class EditEtudiant extends Component
     public $nom;
     public $prenom;
     public $date_naissance;
-    public $sexe;
     public $is_active;
 
     // IDs pour les relations
@@ -47,7 +46,6 @@ class EditEtudiant extends Component
             'nom' => 'required|string|max:50',
             'prenom' => 'nullable|string|max:50',
             'date_naissance' => 'nullable|date_format:d/m/Y|before:today',
-            'sexe' => 'required|in:M,F',
             'niveau_id' => 'required|exists:niveaux,id',
             'parcours_id' => 'required|exists:parcours,id',
             'is_active' => 'boolean',
@@ -61,7 +59,6 @@ class EditEtudiant extends Component
         'nom.required' => 'Le nom est obligatoire.',
         'date_naissance.date_format' => 'La date de naissance doit être au format JJ/MM/AAAA.',
         'date_naissance.before' => 'La date de naissance doit être antérieure à aujourd\'hui.',
-        'sexe.in' => 'Le sexe doit être soit Masculin (M) soit Féminin (F).',
         'niveau_id.required' => 'Le niveau d\'étude est obligatoire.',
         'parcours_id.required' => 'Le parcours est obligatoire.',
     ];
@@ -81,7 +78,6 @@ class EditEtudiant extends Component
             $this->nom = $this->etudiant->nom;
             $this->prenom = $this->etudiant->prenom;
             $this->date_naissance = $this->etudiant->date_naissance;
-            $this->sexe = $this->etudiant->sexe;
             $this->is_active = $this->etudiant->is_active;
             $this->niveau_id = $this->etudiant->niveau_id;
             $this->parcours_id = $this->etudiant->parcours_id;

@@ -15,17 +15,14 @@ use Illuminate\Support\Facades\Schema;
 
 class Dashboard extends Component
 {
-    // Nouvelles propriétés pour les statistiques par parcours
     public $selectedNiveauFilter = '';
     public $viewMode = 'table';
     public $refreshing = false;
-    
-    // 🔧 AJOUT : Variables pour les graphiques
     public $selectedYear;
     public $selectedChartType = 'line';
 
     /**
-     * 🔧 SOLUTION UNIVERSELLE : Détecte automatiquement la colonne parcours
+     * Détecte automatiquement la colonne parcours
      */
     private function detectParcoursColumn()
     {
@@ -40,7 +37,7 @@ class Dashboard extends Component
                 } elseif (in_array('parcour_id', $columns)) {
                     $detectedColumn = 'parcour_id';
                 } else {
-                    $detectedColumn = 'parcours_id'; // Valeur par défaut
+                    $detectedColumn = 'parcours_id';
                 }
             } catch (\Exception $e) {
                 $detectedColumn = 'parcours_id';
@@ -51,9 +48,9 @@ class Dashboard extends Component
     }
 
     /**
-     * 🔧 NOUVELLES MÉTHODES : Statistiques par niveau - SQL PUR
+     * Statistiques par niveau médical (PACES, L2, L3, M1, M2, D1)
      */
-    private function getStatistiquesNiveauxSQL()
+    private function getStatistiquesNiveauxMedicaux()
     {
         try {
             $sql = "
@@ -63,28 +60,49 @@ class Dashboard extends Component
                     n.nom,
                     n.is_concours,
                     n.has_rattrapage,
+                    n.has_parcours,
                     COUNT(e.id) as etudiants_count
                 FROM niveaux n
                 LEFT JOIN etudiants e ON n.id = e.niveau_id 
                     AND e.is_active = 1 
                     AND e.deleted_at IS NULL
                 WHERE n.is_active = 1
-                GROUP BY n.id, n.abr, n.nom, n.is_concours, n.has_rattrapage
-                ORDER BY n.abr
+                GROUP BY n.id, n.abr, n.nom, n.is_concours, n.has_rattrapage, n.has_parcours
+                ORDER BY 
+                    CASE n.abr 
+                        WHEN 'PACES' THEN 1 
+                        WHEN 'L2' THEN 2 
+                        WHEN 'L3' THEN 3 
+                        WHEN 'M1' THEN 4 
+                        WHEN 'M2' THEN 5 
+                        WHEN 'D1' THEN 6 
+                        ELSE 99 
+                    END
             ";
             
             $results = DB::select($sql);
             
-            // Convertir en collection d'objets
             $collection = collect();
             foreach ($results as $result) {
+                // Calcul réel des admis par niveau
+                $admisCount = $this->calculerAdmisParNiveauMedical($result->id);
+                $tauxReussite = $result->etudiants_count > 0 ? round(($admisCount / $result->etudiants_count) * 100, 1) : 0;
+                
+                // Spécificités par niveau médical
+                $specialites = $this->getSpecialitesParNiveau($result->abr);
+                
                 $obj = (object) [
                     'id' => $result->id,
                     'abr' => $result->abr,
                     'nom' => $result->nom,
                     'is_concours' => $result->is_concours,
                     'has_rattrapage' => $result->has_rattrapage,
-                    'etudiants_count' => $result->etudiants_count
+                    'has_parcours' => $result->has_parcours,
+                    'etudiants_count' => $result->etudiants_count,
+                    'admis_count' => $admisCount,
+                    'taux_reussite' => $tauxReussite,
+                    'specialites_count' => $specialites,
+                    'type_formation' => $this->getTypeFormation($result->abr)
                 ];
                 $collection->push($obj);
             }
@@ -92,17 +110,78 @@ class Dashboard extends Component
             return $collection;
             
         } catch (\Exception $e) {
-            Log::error('❌ Erreur calcul statistiques niveaux SQL', [
-                'error' => $e->getMessage()
-            ]);
+            Log::error('Erreur statistiques niveaux médicaux', ['error' => $e->getMessage()]);
             return collect();
         }
     }
 
     /**
-     * 🔧 NOUVELLES MÉTHODES : Statistiques par parcours - SQL PUR
+     * Nombre de spécialités par niveau
      */
-    private function getStatistiquesParcoursSQL()
+    private function getSpecialitesParNiveau($niveauAbr)
+    {
+        $specialites = [
+            'PACES' => 7, // MG, DENT, INF-G, INF-A, MAI, VET, DIET
+            'L2' => 5,    // MG, INF-G, INF-A, MAI, DIET
+            'L3' => 5,    // MG, INF-G, INF-A, MAI, DIET
+            'M1' => 1,    // MG uniquement
+            'M2' => 1,    // MG uniquement
+            'D1' => 1     // MG uniquement
+        ];
+        
+        return $specialites[$niveauAbr] ?? 0;
+    }
+
+    /**
+     * Type de formation par niveau
+     */
+    private function getTypeFormation($niveauAbr)
+    {
+        $types = [
+            'PACES' => 'Première Année Commune',
+            'L2' => 'Licence 2ème année', 
+            'L3' => 'Licence 3ème année',
+            'M1' => 'Master 1ère année',
+            'M2' => 'Master 2ème année',
+            'D1' => 'Doctorat 1ère année'
+        ];
+        
+        return $types[$niveauAbr] ?? 'Formation';
+    }
+
+    /**
+     * Calcule les admis par niveau médical
+     */
+    private function calculerAdmisParNiveauMedical($niveauId)
+    {
+        try {
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) return 0;
+
+            $sessionCourante = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                                        ->where('is_current', true)
+                                        ->first();
+            if (!$sessionCourante) return 0;
+
+            // Compte les étudiants admis pour ce niveau
+            return ResultatFinal::join('etudiants', 'resultat_finals.etudiant_id', '=', 'etudiants.id')
+                ->where('resultat_finals.session_exam_id', $sessionCourante->id)
+                ->where('resultat_finals.statut', ResultatFinal::STATUT_PUBLIE)
+                ->where('resultat_finals.jury_validated', 1)
+                ->where('resultat_finals.decision', ResultatFinal::DECISION_ADMIS)
+                ->where('etudiants.niveau_id', $niveauId)
+                ->where('etudiants.is_active', 1)
+                ->count();
+
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Statistiques par parcours médical 
+     */
+    private function getStatistiquesParcoursMediaux()
     {
         try {
             $parcoursColumn = $this->detectParcoursColumn();
@@ -125,58 +204,138 @@ class Dashboard extends Component
                     AND e.deleted_at IS NULL
                 WHERE p.is_active = 1
                 GROUP BY p.id, p.nom, p.abr, p.niveau_id, n.nom, n.abr, n.is_concours, n.has_rattrapage
-                ORDER BY n.abr, p.nom
+                ORDER BY 
+                    CASE n.abr 
+                        WHEN 'PACES' THEN 1 
+                        WHEN 'L2' THEN 2 
+                        WHEN 'L3' THEN 3 
+                        WHEN 'M1' THEN 4 
+                        WHEN 'M2' THEN 5 
+                        WHEN 'D1' THEN 6 
+                        ELSE 99 
+                    END,
+                    CASE p.abr
+                        WHEN 'MG' THEN 1
+                        WHEN 'DENT' THEN 2
+                        WHEN 'INF-G' THEN 3
+                        WHEN 'INF-A' THEN 4
+                        WHEN 'MAI' THEN 5
+                        WHEN 'VET' THEN 6
+                        WHEN 'DIET' THEN 7
+                        ELSE 99
+                    END
             ";
             
             $results = DB::select($sql);
             
-            // Convertir en collection d'objets pour la compatibilité avec la vue
             $collection = collect();
             foreach ($results as $result) {
+                // Calcul réel des admis par parcours
+                $admisCount = $this->calculerAdmisParParcoursMedical($result->id, $parcoursColumn);
+                $tauxReussite = $result->etudiants_count > 0 ? round(($admisCount / $result->etudiants_count) * 100, 1) : 0;
+                
                 $obj = (object) [
                     'id' => $result->id,
                     'nom' => $result->nom,
                     'abr' => $result->abr,
                     'etudiants_count' => $result->etudiants_count,
+                    'admis_count' => $admisCount,
+                    'taux_reussite' => $tauxReussite,
                     'niveau' => (object) [
                         'id' => $result->niveau_id,
                         'nom' => $result->niveau_nom,
                         'abr' => $result->niveau_abr,
                         'is_concours' => $result->is_concours,
                         'has_rattrapage' => $result->has_rattrapage
-                    ]
+                    ],
+                    'nom_complet' => $this->getNomCompletParcours($result->abr),
+                    'couleur_badge' => $this->getCouleurBadgeParcours($result->abr)
                 ];
                 $collection->push($obj);
             }
             
-            Log::info('✅ Statistiques parcours récupérées avec SQL', [
-                'count' => $collection->count(),
-                'colonne_utilisee' => $parcoursColumn
-            ]);
-            
             return $collection;
             
         } catch (\Exception $e) {
-            Log::error('❌ Erreur calcul statistiques parcours SQL', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('Erreur statistiques parcours médicaux', ['error' => $e->getMessage()]);
             return collect();
+        }
+    }
+
+    /**
+     * Noms complets des parcours
+     */
+    private function getNomCompletParcours($abr)
+    {
+        $noms = [
+            'MG' => 'Médecine Générale',
+            'DENT' => 'Chirurgie Dentaire',
+            'INF-G' => 'Infirmier Général',
+            'INF-A' => 'Infirmier Anesthésiste',
+            'MAI' => 'Maïeutique',
+            'VET' => 'Vétérinaire',
+            'DIET' => 'Diététique'
+        ];
+        
+        return $noms[$abr] ?? $abr;
+    }
+
+    /**
+     * Couleurs des badges par parcours
+     */
+    private function getCouleurBadgeParcours($abr)
+    {
+        $couleurs = [
+            'MG' => 'primary',
+            'DENT' => 'cyan',
+            'INF-G' => 'green',
+            'INF-A' => 'yellow',
+            'MAI' => 'red',
+            'VET' => 'slate',
+            'DIET' => 'gray'
+        ];
+        
+        return $couleurs[$abr] ?? 'gray';
+    }
+
+    /**
+     * Calcule les admis par parcours médical
+     */
+    private function calculerAdmisParParcoursMedical($parcoursId, $parcoursColumn)
+    {
+        try {
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) return 0;
+
+            $sessionCourante = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                                        ->where('is_current', true)
+                                        ->first();
+            if (!$sessionCourante) return 0;
+
+            return ResultatFinal::join('etudiants', 'resultat_finals.etudiant_id', '=', 'etudiants.id')
+                ->where('resultat_finals.session_exam_id', $sessionCourante->id)
+                ->where('resultat_finals.statut', ResultatFinal::STATUT_PUBLIE)
+                ->where('resultat_finals.jury_validated', 1)
+                ->where('resultat_finals.decision', ResultatFinal::DECISION_ADMIS)
+                ->where("etudiants.{$parcoursColumn}", $parcoursId)
+                ->where('etudiants.is_active', 1)
+                ->count();
+
+        } catch (\Exception $e) {
+            return 0;
         }
     }
 
     public function render()
     {
-        // Récupérer l'année universitaire active
         $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
         
-        // 🔧 INITIALISER selectedYear si pas défini
         if (!$this->selectedYear && $anneeActive) {
             $this->selectedYear = $anneeActive->id;
         }
 
-        // Initialisation des variables ORIGINALES
-        $totalEtudiants = 0;
+        // Données réelles faculté de médecine
+        $totalEtudiants = Etudiant::where('is_active', true)->count();
         $etudiantsAdmis = 0;
         $redoublants = 0;
         $exclus = 0;
@@ -186,23 +345,20 @@ class Dashboard extends Component
         $progressionRedoublants = 0;
         $progressionExclus = 0;
         $progressionRattrapage = 0;
+        $sessionDeliberee = false;
+        
+        // Graphiques vides par défaut
         $chartDataEtudiants = array_fill(0, 12, 0);
         $chartDataAdmis = array_fill(0, 12, 0);
         $chartDataRedoublants = array_fill(0, 12, 0);
         $chartDataExclus = array_fill(0, 12, 0);
         $chartDataRattrapage = array_fill(0, 12, 0);
-        $sessionDeliberee = false;
 
-        // ✅ NOUVELLES VARIABLES pour les statistiques par parcours
-        $statistiquesNiveaux = $this->getStatistiquesNiveauxSQL();
-        $statistiquesParcours = $this->getStatistiquesParcoursSQL();
-        $anneesUniversitaires = AnneeUniversitaire::orderBy('date_start', 'desc')->get();
-        $topEtudiants = collect();
+        // Statistiques spéciales pour PACES (concours)
+        $statsPACES = null;
+        $statsGenerales = null;
 
         if ($anneeActive) {
-            // Code ORIGINAL pour les statistiques générales
-            $totalEtudiants = Etudiant::where('is_active', true)->count();
-
             $sessionCourante = SessionExam::where('annee_universitaire_id', $anneeActive->id)
                                         ->where('is_current', true)
                                         ->first();
@@ -215,49 +371,28 @@ class Dashboard extends Component
 
                 $sessionDeliberee = $hasDeliberatedResults;
 
-                $statistiquesSession = $this->calculerStatistiquesLogiqueMedecine($sessionCourante->id);
+                // Seulement si résultats délibérés
+                if ($hasDeliberatedResults) {
+                    $statistiquesSession = $this->calculerStatistiquesLogiqueMedecine($sessionCourante->id);
+                    $etudiantsAdmis = $statistiquesSession['decisions']['admis'] ?? 0;
+                    $redoublants = $statistiquesSession['decisions']['redoublants'] ?? 0;
+                    $exclus = $statistiquesSession['decisions']['exclus'] ?? 0;
+                    $rattrapage = $statistiquesSession['decisions']['rattrapage'] ?? 0;
 
-                // 🔧 CORRECTION : Utiliser les bonnes clés
-                $etudiantsAdmis = $statistiquesSession['decisions']['admis'] ?? 0;
-                $redoublants = $statistiquesSession['decisions']['redoublants'] ?? 0;
-                $exclus = $statistiquesSession['decisions']['exclus'] ?? 0; // 🔧 Correction ici
-                $rattrapage = $statistiquesSession['decisions']['rattrapage'] ?? 0;
-
-                $sessionPrecedente = SessionExam::where('type', $sessionCourante->type)
-                                              ->where('annee_universitaire_id', $anneeActive->id)
-                                              ->where('id', '<', $sessionCourante->id)
-                                              ->orderBy('id', 'desc')
-                                              ->first();
-
-                if ($sessionPrecedente) {
-                    $anciennesStats = $this->calculerStatistiquesLogiqueMedecine($sessionPrecedente->id);
-
-                    $progressionAdmis = $this->calculerPourcentage(
-                        $anciennesStats['decisions']['admis'] ?? 0,
-                        $etudiantsAdmis
-                    );
-                    $progressionRedoublants = $this->calculerPourcentage(
-                        $anciennesStats['decisions']['redoublants'] ?? 0,
-                        $redoublants
-                    );
-                    $progressionExclus = $this->calculerPourcentage(
-                        $anciennesStats['decisions']['exclus'] ?? 0, // 🔧 Correction ici
-                        $exclus
-                    );
-                    $progressionRattrapage = $this->calculerPourcentage(
-                        $anciennesStats['decisions']['rattrapage'] ?? 0,
-                        $rattrapage
-                    );
+                    // Statistiques spécifiques PACES
+                    $statsPACES = $this->calculerStatistiquesPACES();
                 }
 
-                $chartData = $this->genererDonneesGraphiquesReelles($anneeActive->id);
+                // Graphiques évolution médecine
+                $chartData = $this->genererDonneesGraphiquesMedicales($anneeActive->id);
                 $chartDataEtudiants = $chartData['etudiants'];
                 $chartDataAdmis = $chartData['admis'];
                 $chartDataRedoublants = $chartData['redoublants'];
-                $chartDataExclus = $chartData['exclus']; // 🔧 Correction ici
+                $chartDataExclus = $chartData['excluss'];
                 $chartDataRattrapage = $chartData['rattrapage'];
             }
 
+            // Progression année précédente
             $anneePrecedente = AnneeUniversitaire::where('date_start', '<', $anneeActive->date_start)
                                                ->orderBy('date_start', 'desc')
                                                ->first();
@@ -272,7 +407,11 @@ class Dashboard extends Component
             }
         }
 
-        // ✅ RETOURNER LA VUE ORIGINALE avec les nouvelles variables
+        // Récupération données médicales
+        $statistiquesNiveaux = $this->getStatistiquesNiveauxMedicaux();
+        $statistiquesParcours = $this->getStatistiquesParcoursMediaux();
+        $anneesUniversitaires = AnneeUniversitaire::orderBy('date_start', 'desc')->get();
+
         return view('livewire.dashboard', compact(
             'totalEtudiants',
             'etudiantsAdmis',
@@ -290,20 +429,102 @@ class Dashboard extends Component
             'chartDataRedoublants',
             'chartDataExclus',
             'chartDataRattrapage',
-            // ✅ NOUVELLES VARIABLES
             'statistiquesNiveaux',
             'statistiquesParcours',
             'anneesUniversitaires',
-            'topEtudiants'
+            'statsPACES'
         ))->with([
-            // 🔧 VARIABLES POUR LES GRAPHIQUES
             'selectedYear' => $this->selectedYear,
             'selectedChartType' => $this->selectedChartType
         ]);
     }
 
     /**
-     * MÉTHODES ORIGINALES CONSERVÉES - 🔧 CORRECTION DES CLÉS
+     * Calcule statistiques spécifiques PACES (concours)
+     */
+    private function calculerStatistiquesPACES()
+    {
+        try {
+            $niveauPACES = Niveau::where('abr', 'PACES')->first();
+            if (!$niveauPACES) return null;
+
+            $etudiantsPACES = Etudiant::where('niveau_id', $niveauPACES->id)
+                                   ->where('is_active', true)
+                                   ->count();
+
+            $admisPACES = $this->calculerAdmisParNiveauMedical($niveauPACES->id);
+
+            return [
+                'total_candidats' => $etudiantsPACES,
+                'admis_concours' => $admisPACES,
+                'taux_selectivite' => $etudiantsPACES > 0 ? round(($admisPACES / $etudiantsPACES) * 100, 1) : 0,
+                'places_disponibles' => $admisPACES // Basé sur les admis réels
+            ];
+
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Génère graphiques spécifiques médecine
+     */
+    private function genererDonneesGraphiquesMedicales($anneeUniversitaireId)
+    {
+        $chartData = [
+            'etudiants' => array_fill(0, 12, 0),
+            'admis' => array_fill(0, 12, 0),
+            'redoublants' => array_fill(0, 12, 0),
+            'excluss' => array_fill(0, 12, 0),
+            'rattrapage' => array_fill(0, 12, 0)
+        ];
+
+        try {
+            $moisActuel = now();
+
+            for ($i = 11; $i >= 0; $i--) {
+                $mois = $moisActuel->copy()->subMonths($i);
+                $indexMois = 11 - $i;
+
+                // Inscriptions par niveau (focus PACES)
+                $etudiantsMois = Etudiant::whereYear('created_at', $mois->year)
+                                       ->whereMonth('created_at', $mois->month)
+                                       ->where('is_active', true)
+                                       ->count();
+
+                $chartData['etudiants'][$indexMois] = $etudiantsMois;
+
+                // Résultats délibérés par mois
+                $sessions = SessionExam::where('annee_universitaire_id', $anneeUniversitaireId)
+                    ->whereYear('created_at', $mois->year)
+                    ->whereMonth('created_at', $mois->month)
+                    ->get();
+
+                $admis = $redoublants = $excluss = $rattrapage = 0;
+
+                foreach ($sessions as $session) {
+                    $stats = $this->calculerStatistiquesLogiqueMedecine($session->id);
+                    $admis += $stats['decisions']['admis'];
+                    $redoublants += $stats['decisions']['redoublants'];
+                    $excluss += $stats['decisions']['excluss'];
+                    $rattrapage += $stats['decisions']['rattrapage'];
+                }
+
+                $chartData['admis'][$indexMois] = $admis;
+                $chartData['redoublants'][$indexMois] = $redoublants;
+                $chartData['excluss'][$indexMois] = $excluss;
+                $chartData['rattrapage'][$indexMois] = $rattrapage;
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur génération graphiques médicaux', ['error' => $e->getMessage()]);
+        }
+
+        return $chartData;
+    }
+
+    /**
+     * Calcule statistiques logique médecine
      */
     private function calculerStatistiquesLogiqueMedecine($sessionId)
     {
@@ -314,12 +535,11 @@ class Dashboard extends Component
                 ->get()
                 ->groupBy('etudiant_id');
 
-            // 🔧 CORRECTION : Standardiser les clés (sans 's' pour exclus)
             $decisions = [
                 'admis' => 0,
                 'rattrapage' => 0,
                 'redoublants' => 0,
-                'exclus' => 0  // 🔧 Changé de 'excluss' vers 'exclus'
+                'excluss' => 0
             ];
 
             $session = SessionExam::find($sessionId);
@@ -337,26 +557,12 @@ class Dashboard extends Component
 
                 if ($estDelibere) {
                     $decision = $premierResultat->decision;
-
-                    Log::info('📊 Dashboard - Décision délibérée utilisée', [
-                        'etudiant_id' => $etudiantId,
-                        'session_id' => $sessionId,
-                        'decision_deliberee' => $decision,
-                        'jury_validated' => true
-                    ]);
                 } else {
                     if ($isRattrapage) {
                         $decision = ResultatFinal::determinerDecisionRattrapage_LogiqueMedecine($etudiantId, $sessionId);
                     } else {
                         $decision = ResultatFinal::determinerDecisionPremiereSession_LogiqueMedecine($etudiantId, $sessionId);
                     }
-
-                    Log::info('📊 Dashboard - Décision calculée utilisée', [
-                        'etudiant_id' => $etudiantId,
-                        'session_id' => $sessionId,
-                        'decision_calculee' => $decision,
-                        'jury_validated' => false
-                    ]);
                 }
 
                 switch ($decision) {
@@ -370,17 +576,10 @@ class Dashboard extends Component
                         $decisions['redoublants']++;
                         break;
                     case ResultatFinal::DECISION_EXCLUS:
-                        $decisions['exclus']++; // 🔧 Correction ici
+                        $decisions['excluss']++;
                         break;
                 }
             }
-
-            Log::info('📊 Dashboard - Statistiques finales', [
-                'session_id' => $sessionId,
-                'session_type' => $session ? $session->type : 'Normale',
-                'decisions_finales' => $decisions,
-                'total_etudiants' => $etudiantsAvecResultats->count()
-            ]);
 
             return [
                 'total_etudiants' => $etudiantsAvecResultats->count(),
@@ -389,10 +588,7 @@ class Dashboard extends Component
             ];
 
         } catch (\Exception $e) {
-            Log::error('Erreur calcul statistiques logique médecine', [
-                'session_id' => $sessionId,
-                'error' => $e->getMessage()
-            ]);
+            Log::error('Erreur calcul statistiques médecine', ['error' => $e->getMessage()]);
 
             return [
                 'total_etudiants' => 0,
@@ -400,72 +596,10 @@ class Dashboard extends Component
                     'admis' => 0,
                     'rattrapage' => 0,
                     'redoublants' => 0,
-                    'exclus' => 0 // 🔧 Correction ici
-                ],
-                'session_type' => 'Normale'
+                    'excluss' => 0
+                ]
             ];
         }
-    }
-
-    private function genererDonneesGraphiquesReelles($anneeUniversitaireId)
-    {
-        $chartData = [
-            'etudiants' => array_fill(0, 12, 0),
-            'admis' => array_fill(0, 12, 0),
-            'redoublants' => array_fill(0, 12, 0),
-            'exclus' => array_fill(0, 12, 0), // 🔧 Correction ici
-            'rattrapage' => array_fill(0, 12, 0)
-        ];
-
-        try {
-            $moisActuel = now();
-
-            for ($i = 11; $i >= 0; $i--) {
-                $mois = $moisActuel->copy()->subMonths($i);
-                $indexMois = 11 - $i;
-
-                $etudiantsMois = Etudiant::whereYear('created_at', $mois->year)
-                                       ->whereMonth('created_at', $mois->month)
-                                       ->where('is_active', true)
-                                       ->count();
-
-                $chartData['etudiants'][$indexMois] = $etudiantsMois;
-
-                $sessionsFromMois = SessionExam::where('annee_universitaire_id', $anneeUniversitaireId)
-                    ->whereYear('created_at', $mois->year)
-                    ->whereMonth('created_at', $mois->month)
-                    ->get();
-
-                $decisionsFromMois = [
-                    'admis' => 0,
-                    'rattrapage' => 0,
-                    'redoublants' => 0,
-                    'exclus' => 0 // 🔧 Correction ici
-                ];
-
-                foreach ($sessionsFromMois as $session) {
-                    $statsSession = $this->calculerStatistiquesLogiqueMedecine($session->id);
-
-                    $decisionsFromMois['admis'] += $statsSession['decisions']['admis'] ?? 0;
-                    $decisionsFromMois['rattrapage'] += $statsSession['decisions']['rattrapage'] ?? 0;
-                    $decisionsFromMois['redoublants'] += $statsSession['decisions']['redoublants'] ?? 0;
-                    $decisionsFromMois['exclus'] += $statsSession['decisions']['exclus'] ?? 0; // 🔧 Correction ici
-                }
-
-                $chartData['admis'][$indexMois] = $decisionsFromMois['admis'];
-                $chartData['rattrapage'][$indexMois] = $decisionsFromMois['rattrapage'];
-                $chartData['redoublants'][$indexMois] = $decisionsFromMois['redoublants'];
-                $chartData['exclus'][$indexMois] = $decisionsFromMois['exclus']; // 🔧 Correction ici
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur génération données graphiques', [
-                'annee_universitaire_id' => $anneeUniversitaireId,
-                'error' => $e->getMessage()
-            ]);
-        }
-
-        return $chartData;
     }
 
     private function calculerPourcentage($ancienneValeur, $nouvelleValeur)
@@ -477,13 +611,12 @@ class Dashboard extends Component
         return round((($nouvelleValeur - $ancienneValeur) / $ancienneValeur) * 100, 1);
     }
 
-    // ✅ NOUVELLES MÉTHODES LIVEWIRE pour l'interactivité des parcours
+    // Méthodes Livewire
     public function updatedSelectedNiveauFilter()
     {
-        // Rien à faire, juste pour déclencher le re-render
+        // Re-render automatique
     }
 
-    // 🔧 MÉTHODES POUR LES GRAPHIQUES
     public function changeYear($yearId)
     {
         $this->selectedYear = $yearId;
@@ -495,158 +628,12 @@ class Dashboard extends Component
         $this->selectedChartType = $type;
     }
 
-    /**
-     * 🔍 Méthodes de test ajoutées
-     */
-    public function testParcours()
-    {
-        $parcoursColumn = $this->detectParcoursColumn();
-        
-        $niveaux = DB::table('niveaux')->count();
-        $parcours = DB::table('parcours')->count();
-        $etudiants = DB::table('etudiants')->where('is_active', 1)->count();
-        
-        session()->flash('info', "Test: {$niveaux} niveaux, {$parcours} parcours, {$etudiants} étudiants. Colonne: {$parcoursColumn}");
-        
-        Log::info('🔍 Test données dashboard', [
-            'niveaux' => $niveaux,
-            'parcours' => $parcours,
-            'etudiants' => $etudiants,
-            'colonne_parcours_detectee' => $parcoursColumn
-        ]);
-    }
-
-    public function testData()
-    {
-        try {
-            $statistiquesTest = $this->getStatistiquesParcoursSQL();
-            session()->flash('success', "✅ Test réussi ! {$statistiquesTest->count()} parcours trouvés.");
-        } catch (\Exception $e) {
-            session()->flash('error', "❌ Erreur test : " . $e->getMessage());
-        }
-    }
-
-    public function testSQL()
-    {
-        try {
-            $result = DB::select("SELECT COUNT(*) as total FROM parcours WHERE is_active = 1");
-            $total = $result[0]->total ?? 0;
-            session()->flash('info', "🔧 SQL Direct : {$total} parcours actifs trouvés");
-        } catch (\Exception $e) {
-            session()->flash('error', "❌ Erreur SQL : " . $e->getMessage());
-        }
-    }
-
     public function refresh()
     {
         $this->refreshing = true;
-        
-        // Simule un délai de rafraîchissement
         sleep(1);
-        
         $this->refreshing = false;
-        session()->flash('success', 'Dashboard actualisé avec succès !');
-        
+        session()->flash('success', 'Dashboard actualisé !');
         $this->dispatch('dashboard-refreshed');
-    }
-
-    public function exportTableData()
-    {
-        session()->flash('info', 'Export en cours de développement...');
-    }
-
-    // CONSERVER TOUTES VOS AUTRES MÉTHODES ORIGINALES
-    public function getStatistiquesDetailleesSession($sessionId)
-    {
-        $statsBase = $this->calculerStatistiquesLogiqueMedecine($sessionId);
-
-        $resultats = ResultatFinal::where('session_exam_id', $sessionId)
-            ->where('statut', ResultatFinal::STATUT_PUBLIE)
-            ->get();
-
-        $moyenneGeneraleSession = 0;
-        $notesEliminatoires = 0;
-        $moyennesUE = [];
-
-        $etudiantsTraites = $resultats->groupBy('etudiant_id');
-
-        foreach ($etudiantsTraites as $etudiantId => $resultatsEtudiant) {
-            $moyenneEtudiant = ResultatFinal::calculerMoyenneGenerale_LogiqueMedecine($etudiantId, $sessionId);
-            $moyennesUE[] = $moyenneEtudiant;
-
-            $notesEliminatoires += $resultatsEtudiant->where('note', 0)->count();
-        }
-
-        if (count($moyennesUE) > 0) {
-            $moyenneGeneraleSession = round(array_sum($moyennesUE) / count($moyennesUE), 2);
-        }
-
-        return array_merge($statsBase, [
-            'moyenne_generale_session' => $moyenneGeneraleSession,
-            'notes_eliminatoires' => $notesEliminatoires,
-            'taux_reussite' => $statsBase['total_etudiants'] > 0 ?
-                round(($statsBase['decisions']['admis'] / $statsBase['total_etudiants']) * 100, 1) : 0,
-            'taux_rattrapage' => $statsBase['total_etudiants'] > 0 ?
-                round(($statsBase['decisions']['rattrapage'] / $statsBase['total_etudiants']) * 100, 1) : 0
-        ]);
-    }
-
-    public function getRepartitionMoyennes($sessionId)
-    {
-        $etudiantsAvecResultats = ResultatFinal::where('session_exam_id', $sessionId)
-            ->where('statut', ResultatFinal::STATUT_PUBLIE)
-            ->distinct('etudiant_id')
-            ->pluck('etudiant_id');
-
-        $tranches = [
-            '0-5' => 0,
-            '5-10' => 0,
-            '10-12' => 0,
-            '12-14' => 0,
-            '14-16' => 0,
-            '16-20' => 0
-        ];
-
-        foreach ($etudiantsAvecResultats as $etudiantId) {
-            $moyenne = ResultatFinal::calculerMoyenneGenerale_LogiqueMedecine($etudiantId, $sessionId);
-
-            if ($moyenne < 5) {
-                $tranches['0-5']++;
-            } elseif ($moyenne < 10) {
-                $tranches['5-10']++;
-            } elseif ($moyenne < 12) {
-                $tranches['10-12']++;
-            } elseif ($moyenne < 14) {
-                $tranches['12-14']++;
-            } elseif ($moyenne < 16) {
-                $tranches['14-16']++;
-            } else {
-                $tranches['16-20']++;
-            }
-        }
-
-        return $tranches;
-    }
-
-    public function getEvolutionResultats($anneeUniversitaireId, $nombreSessions = 5)
-    {
-        $sessions = SessionExam::where('annee_universitaire_id', $anneeUniversitaireId)
-            ->orderBy('created_at', 'desc')
-            ->limit($nombreSessions)
-            ->get();
-
-        $evolution = [];
-
-        foreach ($sessions as $session) {
-            $stats = $this->calculerStatistiquesLogiqueMedecine($session->id);
-
-            $evolution[] = [
-                'session' => $session,
-                'stats' => $stats,
-                'date' => $session->created_at->format('M Y')
-            ];
-        }
-
-        return array_reverse($evolution);
     }
 }

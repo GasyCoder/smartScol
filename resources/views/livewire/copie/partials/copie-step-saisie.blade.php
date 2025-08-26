@@ -15,7 +15,7 @@
             </div>
             <button wire:click="backToStep('ec')" 
                     class="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border rounded-lg">
-                ← Changer de matière
+                ← Changer de ECS
             </button>
         </div>
     </div>
@@ -50,7 +50,7 @@
                             Aucune copie disponible
                         </h3>
                         <p class="text-sm text-yellow-700 dark:text-yellow-400">
-                            Aucune manchette n'a été créée pour cette matière.
+                            Aucune manchette n'a été créée pour cette ECS.
                         </p>
                     </div>
                 </div>

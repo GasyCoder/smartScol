@@ -196,6 +196,7 @@
                             <em class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-base leading-none text-slate-400 group-[.active]/item:text-primary-500 absolute end-5 top-1/2 -translate-y-1/2 rtl:-scale-x-100 group-[.active]/item:rotate-90 group-[.active]/item:rtl:-rotate-90 transition-all duration-300 icon ni ni-chevron-right"></em>
                         </a>
                         <ul class="nk-menu-sub mb-1 hidden group-[&.is-compact:not(.has-hover)]/sidebar:!hidden"  {{ is_route('resultats.index.*') ? 'style=display:block' : '' }}>
+                            @can('resultats.fusion')
                             <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.fusion') ? ' active' : '' }}">
                                 <a href="{{ route('resultats.fusion') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
                                     <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
@@ -204,6 +205,8 @@
                                     </span>
                                 </a>
                             </li>
+                            @endcan
+                            @can('resultats.view')
                             <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.finale') ? ' active' : '' }}">
                                 <a href="{{ route('resultats.finale') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
                                     <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
@@ -212,6 +215,7 @@
                                     </span>
                                 </a>
                             </li>
+                            @endcan
                             @endif 
                             @if(auth()->user()->hasAnyRole(['superadmin']))
                              <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.releve_note') ? ' active' : '' }}">
