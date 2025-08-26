@@ -20,6 +20,7 @@ class Copie extends Model
         'code_anonymat_id',
         'note',
         'saisie_par',
+        'modifie_par',
         'note_old',
         'is_checked',
         'commentaire',
@@ -54,6 +55,14 @@ class Copie extends Model
     public function utilisateurSaisie()
     {
         return $this->belongsTo(User::class, 'saisie_par');
+    }
+
+    /**
+     * Utilisateur qui a modifié la copie
+     */
+    public function utilisateurModification()
+    {
+        return $this->belongsTo(User::class, 'modifie_par');
     }
 
     public function codeAnonymat()

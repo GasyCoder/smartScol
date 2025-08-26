@@ -95,6 +95,7 @@ namespace App\Models{
  * @property int $code_anonymat_id Référence au code d'anonymat
  * @property numeric $note Note obtenue
  * @property int $saisie_par Utilisateur ayant saisi la note
+ * @property int|null $modifie_par
  * @property string $date_saisie
  * @property numeric|null $note_old Note corrigée
  * @property bool $is_checked
@@ -113,6 +114,7 @@ namespace App\Models{
  * @property-read \App\Models\ResultatFinal|null $resultatFinal
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
  * @property-read \App\Models\SessionExam|null $sessionExam
+ * @property-read \App\Models\User|null $utilisateurModification
  * @property-read \App\Models\User $utilisateurSaisie
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie currentSession()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie forSession($sessionId)
@@ -139,6 +141,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereIsChecked($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereModifiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNote($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNoteOld($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSaisiePar($value)
