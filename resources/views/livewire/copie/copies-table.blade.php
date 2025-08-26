@@ -209,7 +209,7 @@
                                 </span>
                             @endif
 
-                            @can('copies.edit')
+                            {{-- @can('copies.edit')
                             <button
                                 wire:click="editCopie({{ $copie->id }})"
                                 @if($copie->session_exam_id != $session_exam_id && $session_exam_id)
@@ -223,7 +223,7 @@
                                 >
                                 <em class="text-lg icon ni ni-edit"></em>
                             </button>
-                            @endcan
+                            @endcan --}}
 
                             @can('copies.delete')
                             <button

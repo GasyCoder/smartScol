@@ -38,7 +38,7 @@ class ManchettesIndex extends Component
 
     // Propriétés d'affichage et tri
     public $sortField = 'created_at';
-    public $sortDirection = 'desc';
+    public $sortDirection = 'asc';
     public $perPage = 25;
     public $search = '';
 

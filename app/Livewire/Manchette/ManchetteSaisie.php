@@ -259,8 +259,7 @@ class ManchetteSaisie extends Component
     {
         try {
             $this->ec_id = $ecId;
-            $this->ecSelected = EC::select(['id', 'nom', 'abr', 'niveau_id', 'parcours_id', 'ue_id', 'enseignant'])
-                ->find($ecId);
+            $this->ecSelected = EC::with('ue:id,nom,niveau_id,parcours_id')->find($ecId);
 
             if (!$this->ecSelected) {
                 $errorMessage = 'Matière non trouvée';
@@ -289,7 +288,7 @@ class ManchetteSaisie extends Component
             toastr()->error($errorMessage);
         }
     }
-
+    
     public function backToStep($stepName)
     {
         $this->step = $stepName;
@@ -883,22 +882,28 @@ class ManchetteSaisie extends Component
         }
 
         $q = EC::query()
-            ->select(['ecs.id','ecs.nom','ecs.abr','ecs.niveau_id','ecs.parcours_id','ecs.ue_id'])
+            ->select([
+                'ecs.id',
+                'ecs.nom', 
+                'ecs.abr',
+                'ecs.ue_id',
+                'ecs.enseignant'
+            ])
             ->join('examen_ec', 'examen_ec.ec_id', '=', 'ecs.id')
             ->where('examen_ec.examen_id', $this->examen_id)
-            ->with(['ue:id,nom']);
+            ->with(['ue:id,nom,niveau_id,parcours_id']);
 
-        if (Schema::hasColumn('ecs', 'niveau_id') && $this->niveauSelected) {
-            $q->where(function($qq) {
-                $qq->where('ecs.niveau_id', $this->niveauSelected->id)
-                   ->orWhereNull('ecs.niveau_id');
+        // Filtrage par niveau via l'UE
+        if ($this->niveauSelected) {
+            $q->whereHas('ue', function($query) {
+                $query->where('niveau_id', $this->niveauSelected->id);
             });
         }
 
-        if (Schema::hasColumn('ecs', 'parcours_id') && $this->parcoursSelected) {
-            $q->where(function($qq) {
-                $qq->where('ecs.parcours_id', $this->parcoursSelected->id)
-                   ->orWhereNull('ecs.parcours_id');
+        // Filtrage par parcours via l'UE  
+        if ($this->parcoursSelected) {
+            $q->whereHas('ue', function($query) {
+                $query->where('parcours_id', $this->parcoursSelected->id);
             });
         }
 
@@ -906,8 +911,8 @@ class ManchetteSaisie extends Component
             $s = trim($this->search);
             $q->where(function($qq) use ($s) {
                 $qq->where('ecs.nom', 'like', "%{$s}%")
-                   ->orWhere('ecs.abr', 'like', "%{$s}%")
-                   ->orWhereHas('ue', fn($uq) => $uq->where('nom', 'like', "%{$s}%"));
+                ->orWhere('ecs.abr', 'like', "%{$s}%")
+                ->orWhereHas('ue', fn($uq) => $uq->where('nom', 'like', "%{$s}%"));
             });
         }
 

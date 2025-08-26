@@ -20,8 +20,6 @@ class CopieSaisie extends Component
 {
     use WithPagination;
 
-    protected $paginationTheme = 'tailwind';
-
     // ÉTAPES
     public string $step = 'niveau';
 

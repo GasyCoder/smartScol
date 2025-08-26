@@ -62,11 +62,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'description' => 'Permet de consulter les notes saisies'
             ],
             [
-                'name' => 'copies.create',
-                'label' => 'Saisir des notes',
-                'description' => 'Permet de saisir de nouvelles notes pour un examen'
-            ],
-            [
                 'name' => 'copies.edit',
                 'label' => 'Modifier des notes',
                 'description' => 'Permet de modifier des notes existantes'
@@ -82,11 +77,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 'name' => 'manchettes.view',
                 'label' => 'Voir les manchettes',
                 'description' => 'Permet de consulter les manchettes saisies'
-            ],
-            [
-                'name' => 'manchettes.create',
-                'label' => 'Saisir des manchettes',
-                'description' => 'Permet de saisir de nouvelles manchettes pour un examen'
             ],
             [
                 'name' => 'manchettes.edit',
@@ -237,30 +227,18 @@ class RolesAndPermissionsSeeder extends Seeder
         // Créer le rôle enseignant
         $enseignant = Role::firstOrCreate(['name' => 'enseignant']);
         $enseignant->syncPermissions([
-            'examens.view',
-            'resultats.verifier',
-            'resultats.fusion',
             'resultats.view',
-            'resultats.reset-fusion',
-            'resultats.validation',   
-            'resultats.publication',
             'manchettes.view',
+            'manchettes.edit',
             'copies.view',
+            'copies.edit',
         ]);
 
         // Créer le rôle secrétaire
         $secretaire = Role::firstOrCreate(['name' => 'secretaire']);
         $secretaire->syncPermissions([
-            'examens.view',
-            'examens.create',
-            'examens.edit',
-            'manchettes.view',
             'manchettes.create',
-            'manchettes.edit',
-            'copies.view',
             'copies.create',
-            'copies.edit',
-            'resultats.view',
         ]);
     }
 }
