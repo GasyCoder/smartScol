@@ -877,46 +877,47 @@ class ManchetteSaisie extends Component
     // MÉTHODES UTILITAIRES
     private function ecsQuery()
     {
-        if (!$this->examen_id) {
-            return EC::query()->whereRaw('1=0');
-        }
-
-        $q = EC::query()
+        $query = EC::query()
             ->select([
                 'ecs.id',
                 'ecs.nom', 
                 'ecs.abr',
                 'ecs.ue_id',
-                'ecs.enseignant'
+                'ecs.enseignant',
+                'ues.nom as ue_nom',
+                'ues.niveau_id as ue_niveau_id',
+                'ues.parcours_id as ue_parcours_id'
             ])
-            ->join('examen_ec', 'examen_ec.ec_id', '=', 'ecs.id')
-            ->where('examen_ec.examen_id', $this->examen_id)
-            ->with(['ue:id,nom,niveau_id,parcours_id']);
+            ->leftJoin('ues', 'ecs.ue_id', '=', 'ues.id')
+            ->where('ecs.is_active', true); // Seulement les ECs actives
 
-        // Filtrage par niveau via l'UE
+        // Filtres optionnels seulement si nécessaire
         if ($this->niveauSelected) {
-            $q->whereHas('ue', function($query) {
-                $query->where('niveau_id', $this->niveauSelected->id);
+            $query->where(function($q) {
+                $q->where('ues.niveau_id', $this->niveauSelected->id)
+                ->orWhereNull('ues.niveau_id'); // ECs sans UE spécifique
             });
         }
-
-        // Filtrage par parcours via l'UE  
+        
         if ($this->parcoursSelected) {
-            $q->whereHas('ue', function($query) {
-                $query->where('parcours_id', $this->parcoursSelected->id);
+            $query->where(function($q) {
+                $q->where('ues.parcours_id', $this->parcoursSelected->id)
+                ->orWhereNull('ues.parcours_id'); // ECs sans parcours spécifique
             });
         }
 
+        // Recherche
         if ($this->search) {
-            $s = trim($this->search);
-            $q->where(function($qq) use ($s) {
-                $qq->where('ecs.nom', 'like', "%{$s}%")
-                ->orWhere('ecs.abr', 'like', "%{$s}%")
-                ->orWhereHas('ue', fn($uq) => $uq->where('nom', 'like', "%{$s}%"));
+            $search = trim($this->search);
+            $query->where(function($q) use ($search) {
+                $q->where('ecs.nom', 'like', "%{$search}%")
+                ->orWhere('ecs.abr', 'like', "%{$search}%")
+                ->orWhere('ues.nom', 'like', "%{$search}%")
+                ->orWhere('ecs.enseignant', 'like', "%{$search}%");
             });
         }
 
-        return $q->orderBy('ecs.abr');
+        return $query->orderBy('ecs.abr');
     }
 
     public function updateUrl()
