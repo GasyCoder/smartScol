@@ -110,7 +110,6 @@
                 @endphp
                 
                 <button wire:key="ec-{{ $ec->id }}-{{ $parcours_id }}" wire:click="selectEC({{ $ec->id }})"
-                        wire:loading.attr="disabled" wire:target="selectEC({{ $ec->id }})"
                         class="w-full p-4 border rounded-lg transition-all duration-200 text-left group disabled:opacity-50 disabled:cursor-not-allowed relative
                                {{ $hasProgress 
                                    ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30' 

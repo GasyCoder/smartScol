@@ -11,20 +11,6 @@
         <button wire:click="backToStep('parcours')" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">← Retour</button>
     </div>
 
-    @if(isset($examensList) && $examensList->count() > 1)
-        <div class="mb-3">
-            <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">Examen</label>
-            <select onchange="@this.changerExamen(this.value)" class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm">
-                <option value="">Choisir un examen</option>
-                @foreach($examensList as $ex)
-                    <option value="{{ $ex->id }}" {{ $examenId == $ex->id ? 'selected' : '' }}>
-                        {{ $ex->intitule ?? ('Examen #'.$ex->id) }}
-                    </option>
-                @endforeach
-            </select>
-        </div>
-    @endif
-
     <div class="mb-4">
         <div class="flex items-center gap-2">
             <div class="relative flex-1">
@@ -139,17 +125,6 @@
 
         <div class="mt-4">
             {{ $ecs->links(data: ['scrollTo' => false]) }}
-        </div>
-    @else
-        <div class="text-center py-8">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                @if($examenId)
-                    Aucune EC avec des manchettes pour cet examen.
-                @else
-                    Veuillez sélectionner un examen pour voir les ECS disponibles.
-                @endif
-            </p>
         </div>
     @endif
 </div>

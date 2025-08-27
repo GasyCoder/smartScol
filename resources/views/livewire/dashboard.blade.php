@@ -1,3 +1,7 @@
+<div class="space-y-6">
+@if(auth()->user()->hasRole('secretaire'))
+    @livewire('secretaire-dashboard')
+@else
 <div class="min-h-screen bg-gray-50 dark:bg-gray-950 font-body">
     <!-- Header -->
     <div class="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-800">
@@ -421,7 +425,8 @@
         @endif
     </div>
 </div>
-
+@endif
+</div>
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
