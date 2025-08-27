@@ -287,25 +287,10 @@
                 </tbody>
             </table>
         </div>
-
         <!-- Pagination -->
         @if($copies->hasPages())
-        <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 dark:bg-gray-900 dark:border-gray-700">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                    Affichage de {{ $copies->firstItem() }} à {{ $copies->lastItem() }} sur {{ $copies->total() }} résultats
-                </div>
-                <div class="flex items-center space-x-2">
-                    <select wire:model.live="perPage" 
-                            class="px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                        <option value="10">10</option>
-                        <option value="25">25</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                    </select>
-                    {{ $copies->links() }}
-                </div>
-            </div>
+        <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+            {{ $copies->links() }}
         </div>
         @endif
     </div>

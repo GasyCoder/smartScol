@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Str;
-use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Examen extends Model
 {
@@ -29,12 +28,11 @@ class Examen extends Model
     /**
      * Relations
      */
-
     public function ecs()
     {
         return $this->belongsToMany(EC::class, 'examen_ec', 'examen_id', 'ec_id')
                     ->using(ExamenEc::class)
-                    ->withPivot('salle_id', 'date_specifique', 'heure_specifique', 'code_base') // Ajouter 'code'
+                    ->withPivot('salle_id', 'code_base')
                     ->withTimestamps();
     }
 
@@ -46,11 +44,6 @@ class Examen extends Model
     public function parcours()
     {
         return $this->belongsTo(Parcour::class);
-    }
-
-    public function salles()
-    {
-        return $this->hasManyThrough(Salle::class, 'examen_ec', 'examen_id', 'id', 'id', 'salle_id');
     }
 
     public function copies()
@@ -69,296 +62,74 @@ class Examen extends Model
     }
 
     /**
-     * =====================================
-     * GESTION DES CONFLITS DE SALLES
-     * =====================================
+     * Vérifier si un examen existe déjà avec les mêmes critères
      */
-
-    /**
-     * Vérifie si une salle est disponible à une date et heure données
-     *
-     * @param int $salleId
-     * @param string $date (format Y-m-d)
-     * @param string $heure (format H:i:s)
-     * @param int $dureeMinutes
-     * @param int|null $examenIdExclude (pour exclure l'examen actuel lors de la modification)
-     * @return bool
-     */
-    public static function isSalleDisponible($salleId, $date, $heure, $dureeMinutes, $examenIdExclude = null)
+    public static function examExists($niveauId, $parcoursId, $ecIds = [])
     {
-        $dureeMinutes = (int) $dureeMinutes;
+        if (empty($ecIds)) {
+            Log::info('examExists: Aucun EC fourni');
+            return false;
+        }
 
-        $heureDebut = Carbon::parse($date . ' ' . $heure);
-        $heureFin = $heureDebut->copy()->addMinutes($dureeMinutes);
+        Log::info('examExists: Recherche examens', [
+            'niveauId' => $niveauId,
+            'parcoursId' => $parcoursId,
+            'ecIds' => $ecIds
+        ]);
 
-        // Récupérer TOUS les examens dans cette salle à cette date
-        $examensExistants = \DB::table('examen_ec')
-            ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
-            ->where('examen_ec.salle_id', $salleId)
-            ->whereDate('examen_ec.date_specifique', $date)
-            ->whereNull('examens.deleted_at')
-            ->when($examenIdExclude, function($query) use ($examenIdExclude) {
-                $query->where('examens.id', '!=', $examenIdExclude);
-            })
-            ->select('examens.duree', 'examen_ec.heure_specifique')
+        // Rechercher tous les examens avec le même niveau et parcours
+        $examensExistants = self::where('niveau_id', $niveauId)
+            ->where('parcours_id', $parcoursId)
+            ->with(['ecs' => function($query) {
+                $query->orderBy('id');
+            }])
             ->get();
 
-        // Vérifier chaque examen existant
-        foreach ($examensExistants as $existant) {
-            $heureDebutExistant = Carbon::parse($date . ' ' . $existant->heure_specifique);
-            $heureFinExistant = $heureDebutExistant->copy()->addMinutes((int) $existant->duree);
+        Log::info('examExists: Examens trouvés', [
+            'count' => $examensExistants->count(),
+            'examens' => $examensExistants->pluck('id')->toArray()
+        ]);
 
-            // CONFLIT si les créneaux se chevauchent
-            if ($heureDebut->lt($heureFinExistant) && $heureFin->gt($heureDebutExistant)) {
-                return false;
+        // Vérifier si un examen contient exactement les mêmes ECs
+        foreach ($examensExistants as $examen) {
+            $existingEcIds = $examen->ecs->pluck('id')->sort()->values()->toArray();
+            $newEcIds = collect($ecIds)->sort()->values()->toArray();
+            
+            Log::info('examExists: Comparaison', [
+                'examen_id' => $examen->id,
+                'existingEcIds' => $existingEcIds,
+                'newEcIds' => $newEcIds,
+                'identique' => $existingEcIds === $newEcIds
+            ]);
+            
+            if ($existingEcIds === $newEcIds) {
+                Log::info('examExists: Doublon trouvé', ['examen_id' => $examen->id]);
+                return $examen;
             }
         }
 
-        return true;
+        Log::info('examExists: Aucun doublon trouvé');
+        return false;
     }
 
-    /**
-     * Vérifie tous les conflits pour un examen donné
-     *
-     * @param array $ecsData [['ec_id' => 1, 'salle_id' => 1, 'date' => '2024-01-01', 'heure' => '09:00'], ...]
-     * @param int $dureeMinutes
-     * @param int|null $examenIdExclude
-     * @return array
-     */
-    public static function verifierConflitsSalles($ecsData, $dureeMinutes, $examenIdExclude = null)
+
+    public function hasEc($ecId)
     {
-        $conflits = [];
-        $dureeMinutes = (int) $dureeMinutes;
-
-        // 1. Vérifier conflits avec examens existants
-        foreach ($ecsData as $ecData) {
-            if (empty($ecData['salle_id'])) continue;
-
-            if (!self::isSalleDisponible($ecData['salle_id'], $ecData['date'], $ecData['heure'], $dureeMinutes, $examenIdExclude)) {
-                $salle = Salle::find($ecData['salle_id']);
-                $ec = EC::find($ecData['ec_id']);
-
-                $conflits[] = [
-                    'ec_id' => $ecData['ec_id'],
-                    'ec_nom' => $ec->nom ?? 'EC inconnue',
-                    'salle_id' => $ecData['salle_id'],
-                    'salle_nom' => $salle->nom ?? 'Salle inconnue',
-                    'date' => $ecData['date'],
-                    'heure' => $ecData['heure'],
-                    'type' => 'existant'
-                ];
-            }
-        }
-
-        // 2. Vérifier conflits INTERNES (entre ECs de cette session) - OPTIMISÉ
-        $conflitsInternes = [];
-        for ($i = 0; $i < count($ecsData); $i++) {
-            for ($j = $i + 1; $j < count($ecsData); $j++) {
-                $ec1 = $ecsData[$i];
-                $ec2 = $ecsData[$j];
-
-                // Même salle et même date ?
-                if ($ec1['salle_id'] == $ec2['salle_id'] && $ec1['date'] == $ec2['date']) {
-                    $debut1 = Carbon::parse($ec1['date'] . ' ' . $ec1['heure']);
-                    $fin1 = $debut1->copy()->addMinutes($dureeMinutes);
-
-                    $debut2 = Carbon::parse($ec2['date'] . ' ' . $ec2['heure']);
-                    $fin2 = $debut2->copy()->addMinutes($dureeMinutes);
-
-                    // CONFLIT INTERNE détecté
-                    if ($debut1->lt($fin2) && $fin1->gt($debut2)) {
-                        $salle = Salle::find($ec1['salle_id']);
-                        $ecModel1 = EC::find($ec1['ec_id']);
-                        $ecModel2 = EC::find($ec2['ec_id']);
-
-                        // Ajouter SEULEMENT UN conflit pour éviter les doublons
-                        $clefConflit = $ec1['salle_id'] . '_' . $ec1['date'] . '_' . min($ec1['ec_id'], $ec2['ec_id']) . '_' . max($ec1['ec_id'], $ec2['ec_id']);
-
-                        if (!isset($conflitsInternes[$clefConflit])) {
-                            $conflitsInternes[$clefConflit] = [
-                                'ec_id' => $ec1['ec_id'],
-                                'ec_nom' => $ecModel1->nom ?? 'EC inconnue',
-                                'salle_id' => $ec1['salle_id'],
-                                'salle_nom' => $salle->nom ?? 'Salle inconnue',
-                                'date' => $ec1['date'],
-                                'heure' => $ec1['heure'],
-                                'type' => 'interne',
-                                'conflit_avec' => $ecModel2->nom ?? 'EC inconnue'
-                            ];
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fusionner les conflits
-        return array_merge($conflits, array_values($conflitsInternes));
+        return $this->ecs()->where('ec_id', $ecId)->exists();
     }
 
-    /**
-     * Récupère les examens en conflit pour une salle/date/heure donnée
-     *
-     * @param int $salleId
-     * @param string $date
-     * @param string $heure
-     * @param int $dureeMinutes
-     * @param int|null $examenIdExclude
-     * @return \Illuminate\Database\Eloquent\Collection
-     */
-    public static function getExamensConflictuels($salleId, $date, $heure, $dureeMinutes, $examenIdExclude = null)
+    public function getAttachedEcIdsAttribute()
     {
-        // S'assurer que $dureeMinutes est un entier
-        $dureeMinutes = (int) $dureeMinutes;
-
-        $heureDebut = Carbon::parse($date . ' ' . $heure);
-        $heureFin = $heureDebut->copy()->addMinutes($dureeMinutes);
-
-        return self::whereHas('ecs', function($query) use ($salleId, $date) {
-                $query->where('examen_ec.salle_id', $salleId)
-                      ->whereDate('examen_ec.date_specifique', $date);
-            })
-            ->when($examenIdExclude, function($query) use ($examenIdExclude) {
-                $query->where('id', '!=', $examenIdExclude);
-            })
-            ->with(['ecs', 'niveau', 'parcours'])
-            ->get()
-            ->filter(function($examen) use ($salleId, $heureDebut, $heureFin) {
-                foreach ($examen->ecs as $ec) {
-                    if ($ec->pivot->salle_id == $salleId) {
-                        $heureDebutExistant = Carbon::parse($ec->pivot->date_specifique . ' ' . $ec->pivot->heure_specifique);
-                        // S'assurer que la durée est un entier
-                        $dureeExistante = (int) $examen->duree;
-                        $heureFinExistant = $heureDebutExistant->copy()->addMinutes($dureeExistante);
-
-                        if ($heureDebut->lt($heureFinExistant) && $heureFin->gt($heureDebutExistant)) {
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            });
+        return $this->ecs()->pluck('ec_id')->toArray();
     }
 
     /**
-     * Récupère les créneaux occupés pour une salle à une date donnée
-     *
-     * @param int $salleId
-     * @param string $date
-     * @return array
-     */
-    public static function getCreneauxOccupes($salleId, $date)
-    {
-        return \DB::table('examen_ec')
-            ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
-            ->join('ecs', 'examen_ec.ec_id', '=', 'ecs.id')
-            ->where('examen_ec.salle_id', $salleId)
-            ->whereDate('examen_ec.date_specifique', $date)
-            ->whereNull('examens.deleted_at')
-            ->select(
-                'ecs.nom as ec_nom',
-                'examen_ec.heure_specifique as heure_debut',
-                'examens.duree'
-            )
-            ->get()
-            ->map(function($item) {
-                $debut = Carbon::parse($item->heure_debut);
-                $fin = $debut->copy()->addMinutes($item->duree);
-
-                return [
-                    'ec_nom' => $item->ec_nom,
-                    'heure_debut' => $debut->format('H:i'),
-                    'heure_fin' => $fin->format('H:i'),
-                    'duree' => $item->duree
-                ];
-            })
-            ->sortBy('heure_debut')
-            ->values()
-            ->toArray();
-    }
-
-    /**
-     * Suggère des créneaux libres pour une salle à une date donnée
-     *
-     * @param int $salleId
-     * @param string $date
-     * @param int $dureeMinutes
-     * @param string $heureOuverture (défaut: 08:00)
-     * @param string $heureFermeture (défaut: 18:00)
-     * @return array
-     */
-    public static function suggererCreneauxLibres($salleId, $date, $dureeMinutes, $heureOuverture = '08:00', $heureFermeture = '18:00')
-    {
-        $dureeMinutes = (int) $dureeMinutes;
-        $creneauxLibres = [];
-
-        $heureActuelle = Carbon::parse($date . ' ' . $heureOuverture);
-        $heureLimite = Carbon::parse($date . ' ' . $heureFermeture);
-
-        while ($heureActuelle->copy()->addMinutes($dureeMinutes)->lte($heureLimite)) {
-            $heureTest = $heureActuelle->format('H:i');
-
-            if (self::isSalleDisponible($salleId, $date, $heureTest, $dureeMinutes)) {
-                $creneauxLibres[] = [
-                    'heure_debut' => $heureTest,
-                    'heure_fin' => $heureActuelle->copy()->addMinutes($dureeMinutes)->format('H:i')
-                ];
-            }
-
-            $heureActuelle->addMinutes(30);
-        }
-
-        return $creneauxLibres;
-    }
-
-    /**
-     * Valide la planification d'un examen avant sauvegarde
-     *
-     * @param array $ecsData
-     * @param int $dureeMinutes
-     * @param int|null $examenIdExclude
-     * @return array ['valid' => bool, 'conflits' => array, 'message' => string]
-     */
-    public function validerPlanification($ecsData, $dureeMinutes, $examenIdExclude = null)
-    {
-        // S'assurer que $dureeMinutes est un entier
-        $dureeMinutes = (int) $dureeMinutes;
-
-        $conflits = self::verifierConflitsSalles($ecsData, $dureeMinutes, $examenIdExclude);
-
-        if (empty($conflits)) {
-            return [
-                'valid' => true,
-                'conflits' => [],
-                'message' => 'Aucun conflit détecté. La planification est valide.'
-            ];
-        }
-
-        $messages = [];
-        foreach ($conflits as $conflit) {
-            $messages[] = "Conflit détecté pour {$conflit['ec_nom']} dans la salle {$conflit['salle_nom']} le {$conflit['date']} à {$conflit['heure']}.";
-        }
-
-        return [
-            'valid' => false,
-            'conflits' => $conflits,
-            'message' => 'Conflits de salles détectés : ' . implode(' ', $messages)
-        ];
-    }
-
-    /**
-     * =====================================
-     * MÉTHODES EXISTANTES (inchangées)
-     * =====================================
-     */
-
-    /**
-     * Récupère les étudiants concernés par cet examen en fonction du niveau et parcours
+     * Récupérer les étudiants concernés par cet examen
      */
     public function getEtudiantsConcernesAttribute()
     {
         $query = Etudiant::where('niveau_id', $this->niveau_id);
 
-        // Si examen avec parcours spécifique
         if ($this->parcours_id) {
             $query->where('parcours_id', $this->parcours_id);
         }
@@ -367,7 +138,7 @@ class Examen extends Model
     }
 
     /**
-     * Vérifie si toutes les copies ont été saisies
+     * Vérifier si toutes les copies ont été saisies
      */
     public function areAllNotesSaisies()
     {
@@ -378,7 +149,7 @@ class Examen extends Model
     }
 
     /**
-     * Vérifie si toutes les manchettes ont été saisies
+     * Vérifier si toutes les manchettes ont été saisies
      */
     public function areAllManchettesSaisies()
     {
@@ -389,30 +160,23 @@ class Examen extends Model
     }
 
     /**
-     * Vérifie si la correspondance copies-manchettes est complète pour fusion
-     * Mise à jour pour vérifier par EC
+     * Vérifier si la correspondance copies-manchettes est complète pour fusion
      */
     public function isCorrespondanceComplete()
     {
-        // Récupérer toutes les ECs pour cet examen
-        $ecs = $this->ecs;
-
-        foreach ($ecs as $ec) {
-            // Compter les codes d'anonymat pour cette EC
+        foreach ($this->ecs as $ec) {
             $codes = CodeAnonymat::where('examen_id', $this->id)
                 ->where('ec_id', $ec->id)
                 ->pluck('id')
                 ->toArray();
 
             if (empty($codes)) {
-                continue; // Passer si aucun code pour cette EC
+                continue;
             }
 
-            // Vérifier que chaque code a une copie et une manchette
             $copiesCount = Copie::whereIn('code_anonymat_id', $codes)->count();
             $manchettesCount = Manchette::whereIn('code_anonymat_id', $codes)->count();
 
-            // Si les nombres ne correspondent pas, la fusion n'est pas possible
             if ($copiesCount != count($codes) || $manchettesCount != count($codes)) {
                 return false;
             }
@@ -422,8 +186,7 @@ class Examen extends Model
     }
 
     /**
-     * Vérifie si un code d'anonymat existe déjà pour cet examen et cette matière
-     * Mise à jour pour prendre en compte l'EC
+     * Vérifier si un code d'anonymat existe déjà pour cet examen et cette matière
      */
     public function codeAnonymatExists($code, $ec_id)
     {
@@ -434,11 +197,10 @@ class Examen extends Model
     }
 
     /**
-     * Récupère le code d'anonymat d'un étudiant pour une matière spécifique de cet examen
+     * Récupérer le code d'anonymat d'un étudiant pour une matière spécifique
      */
     public function getCodeAnonymatEtudiant($etudiant_id, $ec_id)
     {
-        // Trouver la manchette qui lie l'étudiant à un code pour cette matière
         $manchette = Manchette::where('examen_id', $this->id)
             ->where('etudiant_id', $etudiant_id)
             ->whereHas('codeAnonymat', function($q) use ($ec_id) {
@@ -450,7 +212,7 @@ class Examen extends Model
     }
 
     /**
-     * Retourne les EC groupés par UE pour cet examen
+     * Retourner les EC groupés par UE pour cet examen
      */
     public function getEcsGroupedByUEAttribute()
     {
@@ -468,7 +230,7 @@ class Examen extends Model
     }
 
     /**
-     * Récupère les codes d'anonymat groupés par EC
+     * Récupérer les codes d'anonymat groupés par EC
      */
     public function getCodesGroupedByECAttribute()
     {
@@ -494,26 +256,21 @@ class Examen extends Model
     }
 
     /**
-     * Calcule le statut général des copies et manchettes, amélioré pour tenir compte des ECs
+     * Calculer le statut général des copies et manchettes
      */
     public function getStatusGeneralAttribute()
     {
         $totalEtudiants = $this->etudiantsConcernes->count();
         $totalECs = $this->ecs->count();
-
-        // Total théorique: nombre d'étudiants × nombre de matières
         $totalTheorique = $totalEtudiants * $totalECs;
 
-        // Nombre réel de codes d'anonymat, copies et manchettes
         $totalCodes = $this->codesAnonymat()->count();
         $totalCopies = $this->copies->count();
         $totalManchettes = $this->manchettes->count();
 
-        // Statut par matière
         $statutParEC = [];
         foreach ($this->ecs as $ec) {
             $codesEC = $this->codesAnonymat()->where('ec_id', $ec->id)->pluck('id')->toArray();
-
             $copiesEC = Copie::whereIn('code_anonymat_id', $codesEC)->count();
             $manchettesEC = Manchette::whereIn('code_anonymat_id', $codesEC)->count();
 
@@ -544,50 +301,7 @@ class Examen extends Model
     }
 
     /**
-     * Retourne la première date d'examen disponible dans les ECs (pour compatibilité)
-     */
-    public function getFirstDateAttribute()
-    {
-        $relation = $this->ecs;
-        $firstEC = $relation->first();
-
-        return $firstEC && $firstEC->pivot && $firstEC->pivot->date_specifique
-            ? \Carbon\Carbon::parse($firstEC->pivot->date_specifique)
-            : null;
-    }
-
-    /**
-     * Retourne la première heure de début disponible dans les ECs (pour compatibilité)
-     */
-    public function getFirstHeureDebutAttribute()
-    {
-        $relation = $this->ecs;
-        $firstEC = $relation->first();
-
-        return $firstEC && $firstEC->pivot && $firstEC->pivot->heure_specifique
-            ? \Carbon\Carbon::parse($firstEC->pivot->heure_specifique)
-            : null;
-    }
-
-    /**
-     * Retourne la première salle disponible dans les ECs (pour compatibilité)
-     */
-    public function getFirstSalleAttribute()
-    {
-        $relation = $this->ecs;
-        $firstEC = $relation->first();
-
-        return $firstEC && $firstEC->pivot && $firstEC->pivot->salle_id
-            ? Salle::find($firstEC->pivot->salle_id)
-            : null;
-    }
-
-    /**
-     * Vérifie si des examens existent pour une combinaison niveau/parcours.
-     *
-     * @param int $niveauId
-     * @param int|null $parcoursId
-     * @return bool
+     * Vérifier si des examens existent pour une combinaison niveau/parcours
      */
     public static function hasExamsForNiveauAndParcours($niveauId, $parcoursId = null)
     {
@@ -596,5 +310,56 @@ class Examen extends Model
             $query->where('parcours_id', $parcoursId);
         }
         return $query->exists();
+    }
+
+    /**
+     * Obtenir les statistiques des salles utilisées
+     */
+    public function getSalleStats()
+    {
+        $sallesUsed = [];
+        $sallesSansAffectation = 0;
+
+        foreach ($this->ecs as $ec) {
+            if ($ec->pivot->salle_id) {
+                $salle = Salle::find($ec->pivot->salle_id);
+                if ($salle) {
+                    $sallesUsed[$salle->id] = $salle->nom;
+                }
+            } else {
+                $sallesSansAffectation++;
+            }
+        }
+
+        return [
+            'salles_utilisees' => count($sallesUsed),
+            'salles_list' => $sallesUsed,
+            'ecs_sans_salle' => $sallesSansAffectation
+        ];
+    }
+
+    /**
+     * Obtenir les statistiques des codes
+     */
+    public function getCodeStats()
+    {
+        $codesDefinis = 0;
+        $codesSansAffectation = 0;
+
+        foreach ($this->ecs as $ec) {
+            if (!empty($ec->pivot->code_base)) {
+                $codesDefinis++;
+            } else {
+                $codesSansAffectation++;
+            }
+        }
+
+        return [
+            'codes_definis' => $codesDefinis,
+            'codes_manquants' => $codesSansAffectation,
+            'pourcentage_completion' => $this->ecs->count() > 0 
+                ? round(($codesDefinis / $this->ecs->count()) * 100) 
+                : 0
+        ];
     }
 }

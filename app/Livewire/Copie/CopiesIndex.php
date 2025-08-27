@@ -7,10 +7,12 @@ use App\Models\Niveau;
 use App\Models\Parcour;
 use App\Models\EC;
 use App\Models\SessionExam;
+use App\Models\AnneeUniversitaire;
 use App\Models\User;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class CopiesIndex extends Component
 {
@@ -44,8 +46,10 @@ class CopiesIndex extends Component
     public $edit_code_copie = '';
     public $edit_note = null;
 
-    // Session active
+    // Session active - AJOUT DES PROPRIÉTÉS MANQUANTES
     public $sessionActive = null;
+    public $session_exam_id = null;
+    public $currentSessionType = '';
     public $sessionInfo = '';
 
     protected function rules()
@@ -79,17 +83,33 @@ class CopiesIndex extends Component
     private function updateSessionInfo()
     {
         try {
-            $this->sessionActive = SessionExam::where('is_active', true)
-                ->where('is_current', true)
-                ->first();
+            // Récupérer la session active - CORRECTION COMPLÈTE
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if ($anneeActive) {
+                $this->sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                    ->where('is_active', true)
+                    ->where('is_current', true)
+                    ->first();
 
-            if ($this->sessionActive) {
-                $this->sessionInfo = "Session {$this->sessionActive->type} active";
+                if ($this->sessionActive) {
+                    $this->session_exam_id = $this->sessionActive->id;
+                    $this->currentSessionType = $this->sessionActive->type;
+                    $this->sessionInfo = "Session {$this->sessionActive->type} active";
+                } else {
+                    $this->session_exam_id = null;
+                    $this->currentSessionType = '';
+                    $this->sessionInfo = 'Aucune session active';
+                }
             } else {
-                $this->sessionInfo = 'Aucune session active';
+                $this->session_exam_id = null;
+                $this->currentSessionType = '';
+                $this->sessionInfo = 'Aucune année universitaire active';
             }
         } catch (\Exception $e) {
+            $this->session_exam_id = null;
+            $this->currentSessionType = '';
             $this->sessionInfo = 'Erreur session : ' . $e->getMessage();
+            Log::error('Erreur récupération session active', ['error' => $e->getMessage()]);
         }
     }
 
@@ -158,11 +178,19 @@ class CopiesIndex extends Component
                 throw new \Exception('Copie introuvable.');
             }
 
+            // Vérifier que la copie appartient à la session active
+            if ($this->session_exam_id && $this->editingCopy->session_exam_id !== $this->session_exam_id) {
+                throw new \Exception('Cette copie appartient à une autre session.');
+            }
+
             $this->edit_code_copie = $this->editingCopy->codeAnonymat->code_complet ?? '';
             $this->edit_note = $this->editingCopy->note;
             $this->showEditModal = true;
         } catch (\Exception $e) {
-            toastr()->error('Erreur: ' . $e->getMessage());
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Erreur: ' . $e->getMessage()
+            ]);
         }
     }
 
@@ -175,49 +203,132 @@ class CopiesIndex extends Component
                 throw new \Exception('Aucune copie en cours d\'édition.');
             }
 
+            // Vérifier que la copie appartient à la session active
+            if ($this->session_exam_id && $this->editingCopy->session_exam_id !== $this->session_exam_id) {
+                throw new \Exception('Cette copie appartient à une autre session.');
+            }
+
             $this->editingCopy->update([
                 'note' => $this->edit_note,
-                'modifie_par' => Auth::id(), // Enregistre l'ID de l'utilisateur qui modifie
+                'modifie_par' => Auth::id(),
                 'updated_at' => now(),
             ]);
 
             $this->showEditModal = false;
             $this->reset(['editingCopy', 'edit_code_copie', 'edit_note']);
-            toastr()->success('Copie modifiée avec succès.');
+            
+            $this->dispatch('show-toast', [
+                'type' => 'success',
+                'message' => 'Copie modifiée avec succès.'
+            ]);
         } catch (\Exception $e) {
-            toastr()->error('Erreur: ' . $e->getMessage());
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Erreur: ' . $e->getMessage()
+            ]);
         }
     }
 
     public function confirmDelete($id)
     {
-        try {
-            $this->copyToDelete = Copie::find($id);
-            
-            if (!$this->copyToDelete) {
-                throw new \Exception('Copie introuvable.');
-            }
-
-            $this->showDeleteModal = true;
-        } catch (\Exception $e) {
-            toastr()->error('Erreur: ' . $e->getMessage());
+        $copie = Copie::find($id);
+        
+        if (!$copie) {
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Copie introuvable.'
+            ]);
+            return;
         }
+
+        // CORRECTION: Vérifier que la copie appartient à la session active
+        if ($this->session_exam_id && $copie->session_exam_id !== $this->session_exam_id) {
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Cette copie appartient à une autre session.'
+            ]);
+            return;
+        }
+
+        $this->copyToDelete = $copie;
+        $this->showDeleteModal = true;
     }
 
     public function deleteCopy()
+    {
+        // Sauvegarder l'ID au début pour les logs
+        $copyId = $this->copyToDelete ? $this->copyToDelete->id : null;
+        
+        try {
+            if (!$this->copyToDelete) {
+                throw new \Exception('Manchette introuvable.');
+            }
+
+            // Sauvegarder les infos pour la notification AVANT suppression
+            $copieInfo = [
+                'code' => $this->copyToDelete->codeAnonymat->code_complet ?? 'N/A',
+                'etudiant' => $this->copyToDelete->etudiant->nom . ' ' . $this->copyToDelete->etudiant->prenom
+            ];
+
+            // Supprimer la manchette DIRECTEMENT - sans vérification d'association
+            $this->copyToDelete->delete();
+            
+            // Réinitialisation COMPLÈTE de l'état
+            $this->showDeleteModal = false;
+            $this->copyToDelete = null;
+            
+            // Notification de succès
+            toastr()->success("Manchette {$copieInfo['code']} de {$copieInfo['etudiant']} supprimée avec succès.");
+
+
+            // Rafraîchir les données
+            $this->dispatch('refresh-page');
+            
+        } catch (\Exception $e) {
+            // Réinitialisation en cas d'erreur
+            $this->showDeleteModal = false;
+            $this->copyToDelete = null;
+            
+            // Notification d'erreur
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Erreur: ' . $e->getMessage()
+            ]);
+            
+            // Log avec l'ID sauvegardé
+            Log::error('Erreur suppression manchette', [
+                'error' => $e->getMessage(),
+                'copie_id' => $copyId
+            ]);
+        }
+    }
+
+    public function deleteCopyX()
     {
         try {
             if (!$this->copyToDelete) {
                 throw new \Exception('Aucune copie à supprimer.');
             }
 
+            // Vérifier que la copie appartient à la session active
+            if ($this->session_exam_id && $this->copyToDelete->session_exam_id !== $this->session_exam_id) {
+                throw new \Exception('Cette copie appartient à une autre session.');
+            }
+
             $this->copyToDelete->delete();
             
             $this->showDeleteModal = false;
             $this->copyToDelete = null;
-            toastr()->success('Copie supprimée avec succès.');
+            
+            $this->dispatch('show-toast', [
+                'type' => 'success',
+                'message' => 'Copie supprimée avec succès.'
+            ]);
         } catch (\Exception $e) {
-            toastr()->error('Erreur: ' . $e->getMessage());
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Erreur: ' . $e->getMessage()
+            ]);
         }
     }
 

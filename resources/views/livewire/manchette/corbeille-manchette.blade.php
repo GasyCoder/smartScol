@@ -27,7 +27,7 @@
                 </button>
                 @endif
                 <!-- Bouton de retour -->
-                <a href="{{ route('manchettes.index') }}" class="mr-4 inline-flex items-center py-1.5 px-3 text-sm font-medium rounded border border-blue-300 bg-blue-700 text-white hover:bg-blue-600 focus:outline-none dark:bg-blue-800 dark:border-blue-700 dark:text-blue-200 dark:hover:bg-blue-700">
+                <a href="{{ route('manchette.index') }}" class="mr-4 inline-flex items-center py-1.5 px-3 text-sm font-medium rounded border border-blue-300 bg-blue-700 text-white hover:bg-blue-600 focus:outline-none dark:bg-blue-800 dark:border-blue-700 dark:text-blue-200 dark:hover:bg-blue-700">
                     <em class="ni ni-arrow-left mr-2"></em>
                     Retour
                 </a>
@@ -38,15 +38,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Messages d'état -->
-    @if($message)
-    <div class="mb-4">
-        <div class="{{ $messageType === 'success' ? 'bg-green-100 border-green-500 text-green-700' : 'bg-red-100 border-red-500 text-red-700' }} px-4 py-3 rounded relative border-l-4" role="alert">
-            <span class="block sm:inline">{{ $message }}</span>
-        </div>
-    </div>
-    @endif
 
     <!-- Filtres de recherche -->
     <div class="mb-6">
@@ -106,7 +97,7 @@
                                     <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <input wire:model.debounce.300ms="search" type="text" id="search" class="block w-full pl-10 pr-3 py-2 border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Rechercher un code d'anonymat ou un étudiant...">
+                            <input wire:model.live.debounce.300ms="search" type="text" id="search" class="block w-full pl-10 pr-3 py-2 border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Rechercher un code d'anonymat ou un étudiant...">
                         </div>
                     </div>
                 </div>
@@ -161,7 +152,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-700 dark:divide-gray-800">
                     @forelse($manchettes as $manchette)
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-600">
+                    <tr wire:key="manchette-{{ $manchette->id }}-{{ now()->timestamp }}" class="hover:bg-gray-50 dark:hover:bg-gray-600">
                         <td class="px-2 py-4 whitespace-nowrap">
                             <div class="flex items-center">
                                 <input type="checkbox" wire:model.live="selectedItems" value="{{ $manchette->id }}" class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600">
@@ -206,10 +197,16 @@
                         </td>
                         <td class="px-4 py-4 text-sm font-medium text-right whitespace-nowrap">
                             <div class="flex items-center justify-end space-x-2">
-                                <button wire:click="restoreManchette({{ $manchette->id }})" class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300" title="Restaurer">
+                                <button wire:click="restoreManchette({{ $manchette->id }})" 
+                                        wire:key="restore-{{ $manchette->id }}"
+                                        class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300" 
+                                        title="Restaurer">
                                     <em class="ni ni-update text-lg"></em>
                                 </button>
-                                <button wire:click="confirmDelete({{ $manchette->id }})" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" title="Supprimer définitivement">
+                                <button wire:click="confirmDelete({{ $manchette->id }})" 
+                                        wire:key="delete-{{ $manchette->id }}"
+                                        class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" 
+                                        title="Supprimer définitivement">
                                     <em class="ni ni-trash text-lg"></em>
                                 </button>
                             </div>
@@ -241,7 +238,7 @@
 
     <!-- Modal de confirmation de suppression définitive -->
     @if($showDeleteModal)
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50" wire:key="delete-modal-{{ $deleteMode }}">
         <div class="w-full max-w-md p-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
             <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Confirmation de suppression définitive</h3>
             <p class="mb-6 text-gray-700 dark:text-gray-300">
@@ -264,4 +261,51 @@
         </div>
     </div>
     @endif
+
+    <!-- Scripts pour les notifications -->
+    @push('scripts')
+    <script>
+        document.addEventListener('livewire:init', () => {
+            // Écouter les événements de toast
+            Livewire.on('show-toast', (event) => {
+                const data = event[0] || event;
+                if (typeof toastr !== 'undefined') {
+                    switch(data.type) {
+                        case 'success':
+                            toastr.success(data.message);
+                            break;
+                        case 'error':
+                            toastr.error(data.message);
+                            break;
+                        case 'warning':
+                            toastr.warning(data.message);
+                            break;
+                        case 'info':
+                            toastr.info(data.message);
+                            break;
+                        default:
+                            toastr.info(data.message);
+                    }
+                } else {
+                    // Fallback si toastr n'est pas disponible
+                    alert(data.message);
+                }
+            });
+
+            // Écouter l'événement de rafraîchissement
+            Livewire.on('refresh-page', () => {
+                // Optionnel : rafraîchir les données sans recharger la page
+                Livewire.dispatch('$refresh');
+            });
+
+            // Écouter la fermeture de modal
+            Livewire.on('modal-closed', () => {
+                // Force le re-rendu du composant
+                setTimeout(() => {
+                    Livewire.dispatch('$refresh');
+                }, 100);
+            });
+        });
+    </script>
+    @endpush
 </div>

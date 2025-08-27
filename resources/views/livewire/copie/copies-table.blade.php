@@ -1,5 +1,5 @@
 <!-- Tableau des copies - Design amélioré avec support des sessions -->
-<div class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
+<div class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700" wire:key="copies-table">
 
     @include('livewire.copie.partials.table-header')
 
@@ -9,7 +9,7 @@
             <thead class="bg-gray-50 dark:bg-gray-800">
                 <tr>
                     <!-- En-têtes avec tri interactif -->
-                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('code_anonymat')">
+                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('code_anonymat')" wire:key="header-code">
                         <div class="flex items-center">
                             Code Anonymat
                             @if($sortField === 'code_anonymat')
@@ -23,7 +23,7 @@
                             @endif
                         </div>
                     </th>
-                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('ec_id')">
+                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('ec_id')" wire:key="header-ec">
                         <div class="flex items-center">
                             ECS
                             @if($sortField === 'ec_id')
@@ -38,7 +38,7 @@
                         </div>
                     </th>
                     <!-- NOUVELLE COLONNE : Session -->
-                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('session_exam_id')">
+                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('session_exam_id')" wire:key="header-session">
                         <div class="flex items-center">
                             Session
                             @if($sortField === 'session_exam_id')
@@ -52,7 +52,7 @@
                             @endif
                         </div>
                     </th>
-                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('note')">
+                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('note')" wire:key="header-note">
                         <div class="flex items-center">
                             Note
                             @if($sortField === 'note')
@@ -66,7 +66,7 @@
                             @endif
                         </div>
                     </th>
-                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('created_at')">
+                    <th scope="col" class="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase cursor-pointer dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" wire:click="sortBy('created_at')" wire:key="header-created">
                         <div class="flex items-center">
                             Date de saisie
                             @if($sortField === 'created_at')
@@ -80,14 +80,14 @@
                             @endif
                         </div>
                     </th>
-                    <th scope="col" class="relative px-6 py-3">
+                    <th scope="col" class="relative px-6 py-3" wire:key="header-actions">
                         <span class="sr-only">Actions</span>
                     </th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-700 dark:divide-gray-800">
                 @forelse($copies as $copie)
-                <tr class="transition-colors duration-150 ease-in-out hover:bg-gray-50 dark:hover:bg-gray-600">
+                <tr class="transition-colors duration-150 ease-in-out hover:bg-gray-50 dark:hover:bg-gray-600" wire:key="copy-row-{{ $copie->id }}">
                     <td class="px-6 py-3 whitespace-nowrap">
                         <div class="text-sm font-medium text-gray-900 dark:text-white">
                             @if(is_object($copie->codeAnonymat) && $copie->codeAnonymat->code_complet)
@@ -198,7 +198,7 @@
                         </div>
                     </td>
                     <td class="px-6 py-3 text-sm font-medium text-right whitespace-nowrap">
-                        <div class="flex items-center justify-end space-x-3">
+                        <div class="flex items-center justify-end space-x-3" wire:key="actions-{{ $copie->id }}">
                             <!-- Indicateur de session actuelle/différente -->
                             @if($copie->session_exam_id != $session_exam_id && $session_exam_id)
                                 <span class="inline-flex items-center px-1.5 py-0.5 text-xs font-medium text-yellow-800 bg-yellow-100 rounded dark:bg-yellow-900 dark:text-yellow-200"
@@ -209,9 +209,10 @@
                                 </span>
                             @endif
 
-                            {{-- @can('copies.edit')
+                            @can('copies.edit')
                             <button
-                                wire:click="editCopie({{ $copie->id }})"
+                                wire:click="editCopy({{ $copie->id }})"
+                                wire:key="editcopie-{{ $copie->id }}"
                                 @if($copie->session_exam_id != $session_exam_id && $session_exam_id)
                                     disabled
                                     class="inline-flex items-center p-1.5 text-gray-400 rounded-md cursor-not-allowed opacity-50"
@@ -223,11 +224,12 @@
                                 >
                                 <em class="text-lg icon ni ni-edit"></em>
                             </button>
-                            @endcan --}}
+                            @endcan
 
                             @can('copies.delete')
                             <button
-                                wire:click="confirmDelete({{ $copie->id }})"
+                                wire:click="confirmDelete({{ $copie->id }})" 
+                                wire:key="copie-{{ $copie->id }}"
                                 @if($copie->session_exam_id != $session_exam_id && $session_exam_id)
                                     disabled
                                     class="inline-flex items-center p-1.5 text-gray-400 rounded-md cursor-not-allowed opacity-50"
@@ -244,7 +246,7 @@
                     </td>
                 </tr>
                 @empty
-                <tr>
+                <tr wire:key="empty-state">
                     <td colspan="6" class="px-6 py-8 text-sm text-center text-gray-500 dark:text-gray-400">
                         <div class="flex flex-col items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -255,7 +257,7 @@
                                 <p class="max-w-md mb-6 text-sm text-center text-gray-500 dark:text-gray-400">
                                     Veuillez sélectionner une session d'examen active pour voir et saisir des notes.
                                 </p>
-                            @elseif($examen_id && $ec_id)
+                            @elseif($ec_id)
                                 <p class="mb-4 text-lg font-medium">Aucune note saisie pour cette EC</p>
                                 <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
                                     Session actuelle : <span class="font-medium">{{ $currentSessionType }}</span>
@@ -274,7 +276,7 @@
                             @else
                                 <p class="mb-4 text-lg font-medium">Aucune donnée à afficher</p>
                                 <p class="max-w-md mb-6 text-sm text-center text-gray-500 dark:text-gray-400">
-                                    Veuillez sélectionner un niveau, un parcours, une salle et une EC pour voir ou saisir des notes.
+                                    Veuillez sélectionner un niveau, un parcours et une EC pour voir ou saisir des notes.
                                 </p>
                             @endif
                         </div>
@@ -287,7 +289,7 @@
 
     <!-- Pagination améliorée avec informations de session -->
     @if(method_exists($copies, 'hasPages') && $copies->hasPages())
-    <div class="px-4 py-3 bg-white border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+    <div class="px-4 py-3 bg-white border-t border-gray-200 dark:bg-gray-800 dark:border-gray-700" wire:key="pagination">
         <div class="flex flex-col items-center justify-between gap-3 sm:flex-row">
             <div class="flex items-center text-sm text-gray-500 dark:text-gray-400">
                 Affichage de {{ $copies->firstItem() }} à {{ $copies->lastItem() }}

@@ -95,6 +95,7 @@ namespace App\Models{
  * @property int $code_anonymat_id Référence au code d'anonymat
  * @property numeric $note Note obtenue
  * @property int $saisie_par Utilisateur ayant saisi la note
+ * @property int|null $modifie_par
  * @property string $date_saisie
  * @property numeric|null $note_old Note corrigée
  * @property bool $is_checked
@@ -113,6 +114,7 @@ namespace App\Models{
  * @property-read \App\Models\ResultatFinal|null $resultatFinal
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
  * @property-read \App\Models\SessionExam|null $sessionExam
+ * @property-read \App\Models\User|null $utilisateurModification
  * @property-read \App\Models\User $utilisateurSaisie
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie currentSession()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie forSession($sessionId)
@@ -139,6 +141,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereExamenId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereIsChecked($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereModifiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNote($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereNoteOld($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Copie whereSaisiePar($value)
@@ -313,12 +316,10 @@ namespace App\Models{
  * @property-read \App\Models\ExamenEc|null $pivot
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\EC> $ecs
  * @property-read int|null $ecs_count
+ * @property-read mixed $attached_ec_ids
  * @property-read mixed $codes_grouped_by_e_c
  * @property-read mixed $ecs_grouped_by_u_e
  * @property-read mixed $etudiants_concernes
- * @property-read mixed $first_date
- * @property-read mixed $first_heure_debut
- * @property-read mixed $first_salle
  * @property-read mixed $status_general
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Manchette> $manchettes
  * @property-read int|null $manchettes_count
@@ -349,8 +350,8 @@ namespace App\Models{
  * @property int $examen_id
  * @property int $ec_id
  * @property string|null $code_base Code saisi manuellement pour cette matière dans cet examen
- * @property \Illuminate\Support\Carbon|null $date_specifique Date spécifique de l'examen (si applicable)
- * @property \Illuminate\Support\Carbon|null $heure_specifique Heure spécifique de l'examen (si applicable)
+ * @property string|null $date_specifique Date spécifique de l'examen (si applicable)
+ * @property string|null $heure_specifique Heure spécifique de l'examen (si applicable)
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\EC $ec

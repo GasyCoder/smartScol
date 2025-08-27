@@ -22,23 +22,23 @@ class ManchettesIndex extends Component
 {
     use WithPagination;
 
-    // Propriétés de filtrage essentielles (SALLE SUPPRIMÉE)
+    // Propriétés de filtrage essentielles
     public $niveau_id;
     public $parcours_id;
     public $examen_id;
     public $ec_id;
     public $session_exam_id;
-    public $saisie_par; // NOUVEAU FILTRE
+    public $saisie_par;
 
     // Collections pour les sélecteurs
     public $niveaux = [];
     public $parcours = [];
     public $ecs = [];
-    public $secretaires = []; // NOUVEAU
+    public $secretaires = [];
 
     // Propriétés d'affichage et tri
     public $sortField = 'created_at';
-    public $sortDirection = 'asc';
+    public $sortDirection = 'desc';
     public $perPage = 25;
     public $search = '';
 
@@ -56,9 +56,9 @@ class ManchettesIndex extends Component
     public $showDeleteModal = false;
     public $manchetteToDelete = null;
 
-    // Messages
-    public $message = '';
-    public $messageType = '';
+    // SUPPRESSION DES VARIABLES DE MESSAGE - on utilise dispatch uniquement
+    // public $message = '';
+    // public $messageType = '';
 
     protected $rules = [
         'code_anonymat' => 'required|string|max:20',
@@ -71,7 +71,7 @@ class ManchettesIndex extends Component
         $this->niveaux = collect();
         $this->parcours = collect();
         $this->ecs = collect();
-        $this->secretaires = collect(); // NOUVEAU
+        $this->secretaires = collect();
 
         // Charger les niveaux
         try {
@@ -79,7 +79,7 @@ class ManchettesIndex extends Component
                 ->orderBy('id', 'asc')
                 ->get();
                 
-            // NOUVEAU : Charger les secrétaires qui ont saisi des manchettes
+            // Charger les secrétaires qui ont saisi des manchettes
             $this->secretaires = DB::table('users')
                 ->join('manchettes', 'users.id', '=', 'manchettes.saisie_par')
                 ->select('users.id', 'users.name')
@@ -164,7 +164,6 @@ class ManchettesIndex extends Component
         }
         
         $this->ecs = collect();
-
         $this->storeFilters();
         $this->resetPage();
     }
@@ -190,6 +189,15 @@ class ManchettesIndex extends Component
      * Mise à jour de l'EC
      */
     public function updatedEcId()
+    {
+        $this->storeFilters();
+        $this->resetPage();
+    }
+
+    /**
+     * Mise à jour du filtre secrétaire
+     */
+    public function updatedSaisiePar()
     {
         $this->storeFilters();
         $this->resetPage();
@@ -279,7 +287,7 @@ class ManchettesIndex extends Component
     public function resetFilters()
     {
         $this->reset([
-            'niveau_id', 'parcours_id', 'examen_id', 'ec_id', 'search'
+            'niveau_id', 'parcours_id', 'examen_id', 'ec_id', 'search', 'saisie_par'
         ]);
         
         $this->parcours = collect();
@@ -299,6 +307,7 @@ class ManchettesIndex extends Component
             'parcours_id' => $this->parcours_id,
             'examen_id' => $this->examen_id,
             'ec_id' => $this->ec_id,
+            'saisie_par' => $this->saisie_par,
         ]);
     }
 
@@ -321,24 +330,34 @@ class ManchettesIndex extends Component
                     $this->ec_id = $filters['ec_id'];
                 }
             }
+            
+            if (!empty($filters['saisie_par'])) {
+                $this->saisie_par = $filters['saisie_par'];
+            }
         }
     }
 
     /**
-     * Ouvrir la modal de modification
+     * Ouvrir la modal de modification - TOUTES NOTIFICATIONS CORRIGÉES
      */
     public function editManchette($id)
     {
         $manchette = Manchette::with(['codeAnonymat', 'etudiant'])->find($id);
         
         if (!$manchette) {
-            toastr()->error('Manchette introuvable.');
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Manchette introuvable.'
+            ]);
             return;
         }
 
         // Vérifier que la manchette appartient à la session active
         if ($this->session_exam_id && $manchette->session_exam_id !== $this->session_exam_id) {
-            toastr()->error('Cette manchette appartient à une autre session.');
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Cette manchette appartient à une autre session.'
+            ]);
             return;
         }
 
@@ -350,7 +369,7 @@ class ManchettesIndex extends Component
     }
 
     /**
-     * Sauvegarder les modifications
+     * Sauvegarder les modifications - TOUTES NOTIFICATIONS CORRIGÉES
      */
     public function updateManchette()
     {
@@ -394,6 +413,12 @@ class ManchettesIndex extends Component
                 throw new \Exception('Cet étudiant a déjà une manchette pour cette matière.');
             }
 
+            // Sauvegarder les infos pour la notification
+            $manchetteInfo = [
+                'code' => $this->code_anonymat,
+                'etudiant' => $manchette->etudiant->nom . ' ' . $manchette->etudiant->prenom
+            ];
+
             // Mettre à jour ou créer le code d'anonymat
             $codeAnonymat = $manchette->codeAnonymat;
             $codeAnonymat->update(['code_complet' => $this->code_anonymat]);
@@ -404,15 +429,26 @@ class ManchettesIndex extends Component
                 'updated_at' => now(),
             ]);
 
+            // Réinitialisation de l'état
             $this->showEditModal = false;
             $this->resetEditForm();
             
-            $this->message = 'Manchette modifiée avec succès.';
-            $this->messageType = 'success';
+            // Notification de succès
+            $this->dispatch('show-toast', [
+                'type' => 'success',
+                'message' => "Manchette {$manchetteInfo['code']} de {$manchetteInfo['etudiant']} modifiée avec succès."
+            ]);
+
+            // Rafraîchir les données
+            $this->dispatch('refresh-page');
             
         } catch (\Exception $e) {
-            $this->message = 'Erreur: ' . $e->getMessage();
-            $this->messageType = 'error';
+            // Notification d'erreur
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Erreur: ' . $e->getMessage()
+            ]);
+            
             Log::error('Erreur modification manchette', [
                 'error' => $e->getMessage(),
                 'manchette_id' => $this->editingManchetteId
@@ -421,12 +457,15 @@ class ManchettesIndex extends Component
     }
 
     /**
-     * Annuler la modification
+     * Annuler la modification - ÉTAT RÉINITIALISÉ
      */
     public function cancelEdit()
     {
         $this->showEditModal = false;
         $this->resetEditForm();
+        
+        // Force le re-rendu du composant
+        $this->dispatch('modal-closed');
     }
 
     /**
@@ -441,22 +480,23 @@ class ManchettesIndex extends Component
     }
 
     /**
-     * Confirmer la suppression
+     * Confirmer la suppression - CORRIGÉE
      */
     public function confirmDelete($id)
     {
         $manchette = Manchette::with(['codeAnonymat.ec', 'etudiant'])->find($id);
         
         if (!$manchette) {
-            $this->message = 'Manchette introuvable.';
-            $this->messageType = 'error';
+            toastr()->error('Veuillez sélectionner au moins une manchette à supprimer.');
             return;
         }
 
         // Vérifier que la manchette appartient à la session active
         if ($this->session_exam_id && $manchette->session_exam_id !== $this->session_exam_id) {
-            $this->message = 'Cette manchette appartient à une autre session.';
-            $this->messageType = 'error';
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Cette manchette appartient à une autre session.'
+            ]);
             return;
         }
 
@@ -465,45 +505,67 @@ class ManchettesIndex extends Component
     }
 
     /**
-     * Supprimer la manchette
+     * Supprimer la manchette - VERSION FONCTIONNELLE IMMÉDIATE
      */
     public function deleteManchette()
     {
+        // Sauvegarder l'ID au début pour les logs
+        $manchetteId = $this->manchetteToDelete ? $this->manchetteToDelete->id : null;
+        
         try {
             if (!$this->manchetteToDelete) {
                 throw new \Exception('Manchette introuvable.');
             }
 
-            // Vérifier si la manchette est associée à une copie
-            if (method_exists($this->manchetteToDelete, 'isAssociated') && $this->manchetteToDelete->isAssociated()) {
-                throw new \Exception('Cette manchette est associée à une copie et ne peut pas être supprimée.');
-            }
+            // Sauvegarder les infos pour la notification AVANT suppression
+            $manchetteInfo = [
+                'code' => $this->manchetteToDelete->codeAnonymat->code_complet ?? 'N/A',
+                'etudiant' => $this->manchetteToDelete->etudiant->nom . ' ' . $this->manchetteToDelete->etudiant->prenom
+            ];
 
+            // Supprimer la manchette DIRECTEMENT - sans vérification d'association
             $this->manchetteToDelete->delete();
             
+            // Réinitialisation COMPLÈTE de l'état
             $this->showDeleteModal = false;
             $this->manchetteToDelete = null;
             
-            $this->message = 'Manchette supprimée avec succès.';
-            $this->messageType = 'success';
+            // Notification de succès
+            toastr()->success("Manchette {$manchetteInfo['code']} de {$manchetteInfo['etudiant']} supprimée avec succès.");
+
+
+            // Rafraîchir les données
+            $this->dispatch('refresh-page');
             
         } catch (\Exception $e) {
-            $this->message = 'Erreur: ' . $e->getMessage();
-            $this->messageType = 'error';
+            // Réinitialisation en cas d'erreur
+            $this->showDeleteModal = false;
+            $this->manchetteToDelete = null;
+            
+            // Notification d'erreur
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Erreur: ' . $e->getMessage()
+            ]);
+            
+            // Log avec l'ID sauvegardé
             Log::error('Erreur suppression manchette', [
                 'error' => $e->getMessage(),
-                'manchette_id' => $this->manchetteToDelete->id ?? null
+                'manchette_id' => $manchetteId
             ]);
         }
     }
 
     /**
-     * Annuler la suppression
+     * Annuler la suppression - ÉTAT RÉINITIALISÉ
      */
     public function cancelDelete()
     {
         $this->manchetteToDelete = null;
         $this->showDeleteModal = false;
+        
+        // Force le re-rendu du composant
+        $this->dispatch('modal-closed');
     }
 
     /**
@@ -528,31 +590,60 @@ class ManchettesIndex extends Component
      */
     private function getManchettes()
     {
-        if (!$this->niveau_id || !$this->parcours_id || !$this->examen_id) {
-            return Manchette::where('id', 0)->paginate($this->perPage);
-        }
+        // Base query - toujours commencer par toutes les manchettes
+        $query = Manchette::with(['codeAnonymat.ec.ue', 'etudiant', 'utilisateurSaisie', 'sessionExam']);
 
-        $query = Manchette::with(['codeAnonymat.ec.ue', 'etudiant', 'utilisateurSaisie', 'sessionExam'])
-            ->where('examen_id', $this->examen_id);
-
-        // Filtre par session si définie
+        // Filtre par session active (priorité haute - toujours appliqué si disponible)
         if ($this->session_exam_id) {
             $query->where('session_exam_id', $this->session_exam_id);
         }
 
-        // Filtre par EC si sélectionnée
+        // FILTRES PROGRESSIFS - chaque filtre s'applique s'il est défini
+        
+        // 1. Filtre par niveau et parcours (via examens)
+        if ($this->niveau_id && $this->parcours_id) {
+            $examensIds = DB::table('examens')
+                ->where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->toArray();
+                
+            if (!empty($examensIds)) {
+                $query->whereIn('examen_id', $examensIds);
+            } else {
+                // Aucun examen pour cette combinaison niveau/parcours
+                return $query->where('id', 0)->paginate($this->perPage);
+            }
+        }
+        // 2. Sinon, filtre par niveau seulement (si sélectionné)
+        elseif ($this->niveau_id) {
+            $examensIds = DB::table('examens')
+                ->where('niveau_id', $this->niveau_id)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->toArray();
+                
+            if (!empty($examensIds)) {
+                $query->whereIn('examen_id', $examensIds);
+            } else {
+                return $query->where('id', 0)->paginate($this->perPage);
+            }
+        }
+
+        // 3. Filtre par EC spécifique (si sélectionnée)
         if ($this->ec_id) {
             $query->whereHas('codeAnonymat', function ($q) {
                 $q->where('ec_id', $this->ec_id);
             });
         }
 
-        // NOUVEAU : Filtre par secrétaire
+        // 4. Filtre par secrétaire (si sélectionné)
         if ($this->saisie_par) {
             $query->where('saisie_par', $this->saisie_par);
         }
 
-        // Filtre de recherche
+        // 5. Filtre de recherche textuelle
         if ($this->search) {
             $query->where(function ($q) {
                 $q->whereHas('codeAnonymat', function ($sq) {
@@ -566,46 +657,53 @@ class ManchettesIndex extends Component
             });
         }
 
-        // Tri avec sous-requêtes pour éviter les conflits
-        switch ($this->sortField) {
-            case 'code_anonymat_id':
-                $query->orderBy(
-                    CodeAnonymat::select('code_complet')
-                        ->whereColumn('codes_anonymat.id', 'manchettes.code_anonymat_id')
-                        ->limit(1),
-                    $this->sortDirection
-                );
-                break;
-            case 'etudiant_id':
-                $query->orderBy(
-                    Etudiant::select('nom')
-                        ->whereColumn('etudiants.id', 'manchettes.etudiant_id')
-                        ->limit(1),
-                    $this->sortDirection
-                )->orderBy(
-                    Etudiant::select('prenom')
-                        ->whereColumn('etudiants.id', 'manchettes.etudiant_id')
-                        ->limit(1),
-                    $this->sortDirection
-                );
-                break;
-            default:
-                $query->orderBy($this->sortField, $this->sortDirection);
-                break;
-        }
-
+        // TRI avec gestion des relations
         try {
+            switch ($this->sortField) {
+                case 'code_anonymat_id':
+                    $query->orderBy(
+                        CodeAnonymat::select('code_complet')
+                            ->whereColumn('codes_anonymat.id', 'manchettes.code_anonymat_id')
+                            ->limit(1),
+                        $this->sortDirection
+                    );
+                    break;
+                case 'etudiant_id':
+                    $query->orderBy(
+                        Etudiant::select('nom')
+                            ->whereColumn('etudiants.id', 'manchettes.etudiant_id')
+                            ->limit(1),
+                        $this->sortDirection
+                    )->orderBy(
+                        Etudiant::select('prenom')
+                            ->whereColumn('etudiants.id', 'manchettes.etudiant_id')
+                            ->limit(1),
+                        $this->sortDirection
+                    );
+                    break;
+                case 'saisie_par':
+                    $query->join('users', 'users.id', '=', 'manchettes.saisie_par')
+                          ->orderBy('users.name', $this->sortDirection)
+                          ->select('manchettes.*');
+                    break;
+                default:
+                    $query->orderBy($this->sortField, $this->sortDirection);
+                    break;
+            }
+
             return $query->paginate($this->perPage);
+            
         } catch (\Exception $e) {
             Log::error('Erreur dans getManchettes', [
                 'error' => $e->getMessage(),
                 'sortField' => $this->sortField,
-                'search' => $this->search
+                'search' => $this->search,
+                'niveau_id' => $this->niveau_id,
+                'parcours_id' => $this->parcours_id,
             ]);
             
-            // Fallback simple en cas d'erreur
+            // Fallback simple en cas d'erreur de tri
             return Manchette::with(['codeAnonymat.ec.ue', 'etudiant', 'utilisateurSaisie', 'sessionExam'])
-                ->where('examen_id', $this->examen_id)
                 ->when($this->session_exam_id, function($q) {
                     return $q->where('session_exam_id', $this->session_exam_id);
                 })

@@ -123,7 +123,8 @@
                                     </button>
                                     @endcan 
                                     @can('manchettes.delete')
-                                    <button wire:click="confirmDelete({{ $manchette->id }})"
+                                    <button wire:click="confirmDelete({{ $manchette->id }})" 
+                                        wire:key="manchette-;{{ $manchette->id }}"
                                             class="p-1 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
                                         <em class="ni ni-trash"></em>
                                     </button>
