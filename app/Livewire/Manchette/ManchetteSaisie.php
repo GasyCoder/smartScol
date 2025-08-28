@@ -659,8 +659,6 @@ class ManchetteSaisie extends Component
         $this->matricule = '';
         $this->etudiantTrouve = null;
         $this->matriculeExisteDeja = false;
-        // Nettoyer toutes les sessions possibles
-        session()->forget(['manchette_saisie_matricule', 'livewire.matricule']);
         // Déclencher les événements pour le JavaScript
         $this->dispatch('matricule-cleared');
         
