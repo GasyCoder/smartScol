@@ -175,6 +175,7 @@
 
                             @if(!empty($ec->ue))
                                 <p class="text-sm text-gray-500 dark:text-gray-400">UE: {{ $ec->ue->nom ?? 'N/A' }}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 font-bold">Enseignant:{{ $ec->enseignant ?? 'Non défini' }}</p>
                             @endif
 
                             <div class="flex items-center gap-2 mt-1">

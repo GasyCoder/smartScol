@@ -67,10 +67,10 @@ class ManchetteSaisie extends Component
     public string $messageType = 'info';
     public string $sessionType = 'normale';
 
-    public $enveloppe1 = 0;  // Pas une chaîne vide, mais 0
-    public $enveloppe2 = 0;
-    public $enveloppe3 = 0; 
-    public $enveloppe4 = 0;
+    public $enveloppe1 = '';  // Pas une chaîne vide, mais 0
+    public $enveloppe2 = '';
+    public $enveloppe3 = ''; 
+    public $enveloppe4 = '';
     public $show_envelope_calculator = false;
 
     // LISTENERS
@@ -85,7 +85,7 @@ class ManchetteSaisie extends Component
         'ec_id' => ['except' => null, 'as' => 'ec'],
         'search' => ['except' => null, 'as' => 'q'],
         'perPage' => ['except' => 30],
-        'matricule' => ['except' => ''],
+        // 'matricule' => ['except' => ''],
     ];
 
     // VALIDATION
@@ -624,7 +624,7 @@ class ManchetteSaisie extends Component
     // SAISIE MANCHETTES
     public function updatedMatricule()
     {
-        session()->put('manchette_saisie_matricule', $this->matricule);
+        // ❌ NE PAS sauvegarder en session automatiquement
         $this->etudiantTrouve = null;
         $this->matriculeExisteDeja = false;
         
@@ -650,6 +650,20 @@ class ManchetteSaisie extends Component
                     ->exists();
             }
         }
+    }
+
+    private function resetMatriculeCompletement()
+    {
+        // Triple réinitialisation pour garantir le nettoyage
+        $this->reset(['matricule', 'etudiantTrouve', 'matriculeExisteDeja']);
+        $this->matricule = '';
+        $this->etudiantTrouve = null;
+        $this->matriculeExisteDeja = false;
+        // Nettoyer toutes les sessions possibles
+        session()->forget(['manchette_saisie_matricule', 'livewire.matricule']);
+        // Déclencher les événements pour le JavaScript
+        $this->dispatch('matricule-cleared');
+        
     }
 
     public function validerParEntree()
@@ -782,12 +796,18 @@ class ManchetteSaisie extends Component
             $manchettesRestantes = $this->totalManchettesPresentes - $this->progressCount;
             
             // Préparation suivante
-            $this->matricule = '';
+            $this->reset('matricule');
             $this->etudiantTrouve = null;
             $this->matriculeExisteDeja = false;
+            $this->resetMatriculeCompletement();
             $this->prochaineSequence++;
             $this->prochainCodeAnonymat = $this->codeSalle . $this->prochaineSequence;
             
+            // Nettoyer la session
+            session()->forget('manchette_saisie_matricule');
+            // Forcer le focus sur le champ matricule
+            $this->dispatch('focus-matricule-input');
+
             $this->loadStatistiques();
 
             // Messages intelligents avec toast
@@ -1134,10 +1154,10 @@ class ManchetteSaisie extends Component
 
    public function clearEnvelopes()
     {
-        $this->enveloppe1 = 0;  // Pas '' mais 0
-        $this->enveloppe2 = 0;
-        $this->enveloppe3 = 0;
-        $this->enveloppe4 = 0;
+        $this->enveloppe1 = '';  // Pas '' mais 0
+        $this->enveloppe2 = '';
+        $this->enveloppe3 = '';
+        $this->enveloppe4 = '';
         $this->calculateFromEnvelopes(); // Recalculer après effacement
     }
 

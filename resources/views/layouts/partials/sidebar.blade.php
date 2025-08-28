@@ -50,7 +50,7 @@
                             </span>
                             <span
                                 class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500
-                                group-hover:text-primary-500">ACCUEIL</span>
+                                group-hover:text-primary-500">Accueil</span>
                         </a>
                     </li>
 
@@ -81,22 +81,6 @@
                             </span>
                         </a>
                     </li>
-
-                    <li class="nk-menu-item py-0.5{{ is_route('students') ? ' active' : '' }} group/item">
-                        <a href="{{ route('students') }}"
-                            class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
-                            <span
-                                class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                <em
-                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-users"></em>
-                            </span>
-                            <span
-                                class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                            ETUDIANTS
-                            </span>
-                        </a>
-                    </li>
-
                     <li class="nk-menu-item py-0.5{{ is_route('salles.index') ? ' active' : '' }} group/item">
                         <a href="{{ route('salles.index') }}"
                             class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
@@ -107,7 +91,7 @@
                             </span>
                             <span
                                 class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                            SALLES
+                            Salles
                             </span>
                         </a>
                     </li>
@@ -122,12 +106,27 @@
                             </span>
                             <span
                                 class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                            PROGRAMMES
+                            Programmes
                             </span>
                         </a>
                     </li>
                     @endif
-
+                    @can('etudiants.view')
+                    <li class="nk-menu-item py-0.5{{ is_route('students') ? ' active' : '' }} group/item">
+                        <a href="{{ route('students') }}"
+                            class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
+                            <span
+                                class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
+                                <em
+                                    class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-users"></em>
+                            </span>
+                            <span
+                                class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
+                            Liste des étudiants
+                            </span>
+                        </a>
+                    </li>
+                    @endcan
                     {{-- Afficher l’en-tête s’il a au moins une des permissions concernées --}}
                     @if(auth()->user()->canAny(['manchettes.view','manchettes.create','copies.view','copies.create']))
                     <li class="relative pt-10 px-6 pb-2 border-t border-gray-200 dark:border-gray-700">
@@ -137,7 +136,6 @@
                         </h6>
                     </li>
                     @endif
-
                     {{-- === MANCHETTES (même niveau) === --}}
                     @can('manchettes.view')
                     <li class="nk-menu-item {{ request()->routeIs('manchette.index') ? 'active' : '' }}">
@@ -191,7 +189,7 @@
                                 <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-award"></em>
                             </span>
                             <span class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                RESULTATS
+                                Résulats
                             </span>
                             <em class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-base leading-none text-slate-400 group-[.active]/item:text-primary-500 absolute end-5 top-1/2 -translate-y-1/2 rtl:-scale-x-100 group-[.active]/item:rotate-90 group-[.active]/item:rtl:-rotate-90 transition-all duration-300 icon ni ni-chevron-right"></em>
                         </a>

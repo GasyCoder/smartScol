@@ -80,16 +80,15 @@
                     <input 
                         type="text" 
                         id="matricule"
-                        wire:model.live.debounce.500ms="matricule"
+                        wire:model.live="matricule"
                         placeholder="Saisir le matricule..."
                         class="w-full px-4 py-3 text-lg rounded-lg border transition-colors
-                               @if($etudiantTrouve && !$noteDejaExiste) border-green-500 bg-green-50 dark:bg-green-900/20
-                               @elseif($etudiantTrouve && $noteDejaExiste) border-orange-500 bg-orange-50 dark:bg-orange-900/20
-                               @elseif($matricule && strlen($matricule) >= 3 && !$etudiantTrouve) border-red-500 bg-red-50 dark:bg-red-900/20
-                               @else border-gray-300 dark:border-gray-600 @endif
-                               bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                               focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                        @if($etudiantTrouve && !$noteDejaExiste) border-green-500 bg-green-50 dark:bg-green-900/20
+                        @elseif($etudiantTrouve && $noteDejaExiste) border-orange-500 bg-orange-50 dark:bg-orange-900/20
+                        @elseif($matricule && strlen($matricule) >= 3 && !$etudiantTrouve) border-red-500 bg-red-50 dark:bg-red-900/20
+                        @else border-gray-300 dark:border-gray-600 @endif
+                        bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                        focus:ring-2 focus:ring-blue-500 focus:border-blue-500"/>
                     @error('matricule')
                         <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror

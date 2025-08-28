@@ -55,13 +55,13 @@
                         Matricule étudiant <span class="text-red-500">*</span>
                     </label>
                     <input type="text" 
-                           wire:model.live="matricule" 
-                           id="matricule"
-                           class="w-full px-4 py-4 text-lg font-mono border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                           placeholder="Saisir le matricule de l'étudiant..."
-                           autocomplete="off"
-                           autofocus
-                           wire:keydown.enter="validerParEntree">
+                        wire:model.live="matricule" 
+                        id="matricule"
+                        class="w-full px-4 py-4 text-lg font-mono border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        placeholder="Saisir le matricule de l'étudiant..."
+                        autocomplete="off"
+                        autofocus
+                        wire:keydown.enter="validerParEntree">
                     
                     <!-- Affichage des informations de l'étudiant -->
                     @if($etudiantTrouve)
@@ -135,7 +135,6 @@
                     <li>• Le champ matricule est automatiquement focalisé</li>
                     <li>• La recherche se fait automatiquement après 3 caractères</li>
                     <li>• <strong>Appuyez sur Entrée</strong> pour enregistrer quand l'étudiant est trouvé</li>
-                    <li>• Ou utilisez le bouton "Enregistrer" ci-dessus</li>
                 </ul>
             </div>
         </div>
@@ -199,36 +198,35 @@
 
 @push('scripts')
 <script>
-    // Auto-focus sur le champ matricule
-    document.addEventListener('livewire:navigated', () => {
-        const matriculeInput = document.getElementById('matricule');
-        if (matriculeInput) {
-            matriculeInput.focus();
-        }
-    });
-    
-    // Focus automatique après render et après saisie réussie
-    Livewire.hook('morph.updated', ({ component, cleanup }) => {
-        const matriculeInput = document.getElementById('matricule');
-        if (matriculeInput) {
-            // Remettre le focus après chaque mise à jour
-            setTimeout(() => {
-                matriculeInput.focus();
-            }, 100);
-        }
-    });
-
-    // Focus après message de succès (saisie réussie)
     document.addEventListener('livewire:init', () => {
-        Livewire.on('manchette-saved', () => {
+        // Forcer la synchronisation après réinitialisation
+        Livewire.on('matricule-cleared', () => {
             setTimeout(() => {
-                const matriculeInput = document.getElementById('matricule');
-                if (matriculeInput) {
-                    matriculeInput.focus();
-                    matriculeInput.select(); // Sélectionner le contenu pour faciliter la nouvelle saisie
+                const input = document.getElementById('matricule');
+                if (input) {
+                    // Triple action pour forcer la mise à jour
+                    input.value = '';
+                    input.setAttribute('value', '');
+                    
+                    // Déclencher tous les événements possibles
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    input.dispatchEvent(new Event('keyup', { bubbles: true }));
+                    
+                    // Focus
+                    input.focus();
                 }
-            }, 200);
+            }, 50);
         });
+
+        // Focus initial
+        const focusInput = () => {
+            const input = document.getElementById('matricule');
+            if (input) input.focus();
+        };
+
+        document.addEventListener('livewire:navigated', focusInput);
+        Livewire.hook('morph.updated', () => setTimeout(focusInput, 50));
     });
 </script>
 @endpush

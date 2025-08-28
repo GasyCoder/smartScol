@@ -43,8 +43,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/etudiants/ajouter/{niveau}/{parcour}', AddEtudiant::class)->name('add_etudiant');
         Route::get('/etudiants/modifier/{etudiant}', EditEtudiant::class)->name('edit_etudiant');
         Route::get('/salle', SalleIndex::class)->name('salles.index');
-        // Students
-        Route::get('/etudiants', Students::class)->name('students');
         Route::prefix('examens')->name('examens.')->group(function () {
             Route::get('/', IndexExamen::class)->name('index');
             Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
@@ -59,7 +57,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ========================================
     // TRAITEMENTS - Accessible aux : superadmin, enseignant, secretaire
     // ========================================
-    Route::middleware(['role:enseignant|secretaire'])->group(function () {
+    Route::middleware(['role:superadmin|enseignant|secretaire'])->group(function () {
         // Copies
         Route::prefix('copies')->name('copies.')->group(function () {
             Route::get('/saisie', CopieSaisie::class)->name('saisie');
@@ -69,6 +67,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('manchettes')->name('manchettes.')->group(function () {
             Route::get('/saisie', ManchetteSaisie::class)->name('saisie');
         });
+
+        // Students
+        Route::get('/etudiants', Students::class)->name('students');
     });
 
     // ========================================

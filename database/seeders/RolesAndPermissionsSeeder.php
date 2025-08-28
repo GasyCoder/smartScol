@@ -34,6 +34,27 @@ class RolesAndPermissionsSeeder extends Seeder
         $permissions = [
             // Permissions pour les examens
             [
+                'name' => 'etudiants.view',
+                'label' => 'Voir les étudiants',
+
+                'description' => 'Permet de consulter la liste des étudiants'
+            ],
+            [
+                'name' => 'etudiants.create',
+                'label' => 'Créer des étudiants',
+                'description' => 'Permet de créer de nouveaux étudiants'
+            ],
+            [
+                'name' => 'etudiants.edit',
+                'label' => 'Modifier des étudiants',
+                'description' => 'Permet de modifier les informations des étudiants'
+            ],
+            [
+                'name' => 'etudiants.delete',
+                'label' => 'Supprimer des étudiants',
+                'description' => 'Permet de supprimer des étudiants du système'
+            ],
+            [
                 'name' => 'examens.view',
                 'label' => 'Voir les examens',
 
@@ -227,6 +248,8 @@ class RolesAndPermissionsSeeder extends Seeder
         // Créer le rôle enseignant
         $enseignant = Role::firstOrCreate(['name' => 'enseignant']);
         $enseignant->syncPermissions([
+            'etudiants.view',
+            'etudiants.edit',  
             'resultats.view',
             'manchettes.view',
             'manchettes.edit',
@@ -237,6 +260,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Créer le rôle secrétaire
         $secretaire = Role::firstOrCreate(['name' => 'secretaire']);
         $secretaire->syncPermissions([
+            'etudiants.view',
             'manchettes.create',
             'copies.create',
         ]);

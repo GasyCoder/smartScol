@@ -49,7 +49,7 @@ class Students extends Component
 
    public function mount()
    {
-        if (!Auth::user()->hasRole('superadmin')) {
+        if (!Auth::user()->can('etudiants.view')) {
             abort(403, 'Accès non autorisé.');
         }
         $this->loadDataFromQueryParams();
