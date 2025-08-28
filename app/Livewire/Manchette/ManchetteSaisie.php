@@ -67,6 +67,12 @@ class ManchetteSaisie extends Component
     public string $messageType = 'info';
     public string $sessionType = 'normale';
 
+    public $enveloppe1 = 0;  // Pas une chaîne vide, mais 0
+    public $enveloppe2 = 0;
+    public $enveloppe3 = 0; 
+    public $enveloppe4 = 0;
+    public $show_envelope_calculator = false;
+
     // LISTENERS
     protected $listeners = ['save-presence-shortcut' => 'savePresence'];
 
@@ -322,7 +328,7 @@ class ManchetteSaisie extends Component
     {
         $this->resetPresenceData();
         $this->loadCodeSalleFromExamen();
-        $this->calculateTotalEtudiants();
+        $this->calculateTotalEtudiants(); // ← Cette ligne doit être présente
         $this->loadPresenceData();
         
         if ($this->step === 'saisie') {
@@ -384,7 +390,10 @@ class ManchetteSaisie extends Component
 
     public function startEditingPresence()
     {
+        $this->calculateTotalEtudiants(); // ← Ajoutez cette ligne
         $this->isEditingPresence = true;
+        $this->show_envelope_calculator = false;
+        $this->clearEnvelopes();
         $this->dispatch('editing-started');
         
         if ($this->totalManchettesPresentes == 0) {
@@ -395,12 +404,39 @@ class ManchetteSaisie extends Component
     public function cancelEditingPresence()
     {
         $this->isEditingPresence = false;
+        $this->show_envelope_calculator = false; // Ajouter cette ligne
+        $this->clearEnvelopes(); // Ajouter cette ligne
         $this->loadPresenceData();
         $this->showMessage('Modification annulée', 'info');
     }
 
     public function savePresence()
     {
+            // Vérifications de sécurité AVANT la validation
+        if (!$this->examenSelected || !$this->examenSelected->id) {
+            $errorMessage = 'Examen non sélectionné. Veuillez recommencer la sélection.';
+            $this->showMessage($errorMessage, 'error');
+            toastr()->error($errorMessage);
+            $this->step = 'ec';
+            return;
+        }
+
+        if (!$this->ecSelected || !$this->ecSelected->id) {
+            $errorMessage = 'Matière (EC) non sélectionnée. Veuillez recommencer la sélection.';
+            $this->showMessage($errorMessage, 'error');
+            toastr()->error($errorMessage);
+            $this->step = 'ec';
+            return;
+        }
+
+        if (!$this->salleId) {
+            $errorMessage = 'Salle non trouvée. Veuillez recommencer la sélection.';
+            $this->showMessage($errorMessage, 'error');
+            toastr()->error($errorMessage);
+            $this->step = 'ec';
+            return;
+        }
+        
         if ($this->totalManchettesPresentes < 1) {
             $errorMessage = 'Le nombre de présents doit être au moins 1';
             $this->showMessage($errorMessage, 'error');
@@ -571,6 +607,7 @@ class ManchetteSaisie extends Component
     {
         if (!$this->niveauSelected) {
             $this->totalEtudiantsTheorique = 0;
+            logger("calculateTotalEtudiants: Pas de niveau sélectionné");
             return;
         }
 
@@ -994,8 +1031,34 @@ class ManchetteSaisie extends Component
     public function forceReloadEcs()
     {
         if ($this->step === 'ec') {
-            $this->resetPage();
-            $this->clearMessage();
+            try {
+                // Recharger les examens depuis la base de données
+                $this->loadExamens();
+                
+                // Recharger les statistiques de progression
+                if ($this->examenSelected && $this->examenSelected->id) {
+                    // Forcer le rechargement des statistiques sans cache
+                    Cache::forget("ec_progress_{$this->examenSelected->id}_" . Manchette::getCurrentSessionId());
+                }
+                
+                // Reset pagination et messages
+                $this->resetPage();
+                $this->clearMessage();
+                
+                // Forcer le re-render du composant
+                $this->dispatch('$refresh');
+                
+                $message = 'Liste des ECs actualisée avec succès!';
+                $this->showMessage($message, 'success');
+                toastr()->success($message);
+                
+            } catch (\Exception $e) {
+                $errorMessage = 'Erreur lors de l\'actualisation: ' . $e->getMessage();
+                $this->showMessage($errorMessage, 'error');
+                toastr()->error($errorMessage);
+            }
+        } else {
+            toastr()->info('Actualisation disponible uniquement sur la page des ECs');
         }
     }
 
@@ -1059,6 +1122,60 @@ class ManchetteSaisie extends Component
             && $this->totalEtudiantsTheorique > 0 
             && $this->codeSalle;
     }
+
+
+    public function toggleEnvelopeCalculator()
+    {
+        $this->show_envelope_calculator = !$this->show_envelope_calculator;
+        if (!$this->show_envelope_calculator) {
+            $this->clearEnvelopes();
+        }
+    }
+
+   public function clearEnvelopes()
+    {
+        $this->enveloppe1 = 0;  // Pas '' mais 0
+        $this->enveloppe2 = 0;
+        $this->enveloppe3 = 0;
+        $this->enveloppe4 = 0;
+        $this->calculateFromEnvelopes(); // Recalculer après effacement
+    }
+
+    // Calcul automatique quand les enveloppes changent
+    public function updatedEnveloppe1()
+    {
+        $this->calculateFromEnvelopes();
+    }
+
+    public function updatedEnveloppe2() 
+    {
+        $this->calculateFromEnvelopes();
+    }
+
+    public function updatedEnveloppe3()
+    {
+        $this->calculateFromEnvelopes();
+    }
+
+    public function updatedEnveloppe4()
+    {
+        $this->calculateFromEnvelopes();
+    }
+
+    public function calculateFromEnvelopes()
+    {
+        // Conversion explicite en entier pour éviter l'erreur string + string
+        $env1 = (int) ($this->enveloppe1 ?? 0);
+        $env2 = (int) ($this->enveloppe2 ?? 0); 
+        $env3 = (int) ($this->enveloppe3 ?? 0);
+        $env4 = (int) ($this->enveloppe4 ?? 0);
+        
+        $total = $env1 + $env2 + $env3 + $env4;
+        
+        $this->totalManchettesPresentes = $total;
+    
+    }
+
 
     // RENDER
     public function render()

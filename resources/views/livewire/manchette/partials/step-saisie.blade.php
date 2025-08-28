@@ -4,7 +4,9 @@
         <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
             Saisie des manchettes 
             <span class="text-base font-normal text-gray-500 dark:text-gray-400">
-                {{ $ecSelected->abr }}.{{ $ecSelected->nom }}
+                {{ $ecSelected?->abr }}.{{ $ecSelected?->nom }} 
+                @if($niveauSelected) - {{ $niveauSelected->nom }}@endif
+                @if($parcoursSelected) ({{ $parcoursSelected->nom }})@endif
             </span>
         </h2>
         <button wire:click="backToStep('setup')" 

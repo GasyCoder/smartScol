@@ -1,4 +1,4 @@
-{{-- vue setup redesignée --}}
+{{-- vue setup avec calculatrice enveloppes --}}
 <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg">
     <!-- En-tête -->
     <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
@@ -7,7 +7,7 @@
                 Configuration des présences
             </h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {{ $ecSelected->nom }} ({{ $ecSelected->abr }})
+                {{ $ecSelected?->nom ?? 'Matière' }} ({{ $ecSelected?->abr ?? 'N/A' }})
             </p>
         </div>
         <button wire:click="backToStep('ec')" 
@@ -121,51 +121,126 @@
             @if($isEditingPresence)
                 <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6">
                     <h3 class="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-6">
-                        {{ $hasExistingPresence ? '✏️ Modifier les présences' : '📋 Configurer les présences' }}
+                        {{ $hasExistingPresence ? 'Modifier les présences' : 'Configurer les présences' }}
                     </h3>
                     
                     <div class="space-y-6">
-                        <!-- Champ de saisie -->
-                        <div>
-                            <label for="totalManchettesPresentes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <!-- Champ de saisie -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="totalManchettesPresentes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Nombre d'étudiants présents <span class="text-red-500">*</span>
                             </label>
-                            <input type="number" 
-                                   wire:model.live="totalManchettesPresentes" 
-                                   id="totalManchettesPresentes"
-                                   min="{{ $progressCount }}" 
-                                   max="{{ $totalEtudiantsTheorique }}"
-                                   class="w-full px-4 py-3 text-lg border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                                   placeholder="Ex: 25">
-                            
-                            <div class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                                @if($progressCount > 0)
-                                    <p>⚠️ Minimum {{ $progressCount }} (déjà {{ $progressCount }} manchettes saisies)</p>
-                                @endif
-                                <p>Maximum {{ $totalEtudiantsTheorique }} étudiants inscrits</p>
-                            </div>
-
-                            @error('totalManchettesPresentes') 
-                                <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                            @enderror
+                            <button wire:click="toggleEnvelopeCalculator" 
+                                    class="px-2 py-0.5 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 underline hover:no-underline">
+                                {{ $show_envelope_calculator ? 'Saisie directe' : 'Calculatrice' }}
+                            </button>
                         </div>
+    
+                    <!-- Champ principal - CACHÉ si calculatrice active -->
+                    @if(!$show_envelope_calculator)
+                        <input type="number" 
+                            wire:model.live="totalManchettesPresentes" 
+                            id="totalManchettesPresentes"
+                            min="{{ $progressCount }}" 
+                            max="{{ $totalEtudiantsTheorique }}"
+                            class="w-full px-4 py-3 text-lg border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            placeholder="Ex: 25">
+                    @endif
+                    
+                    <div class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        @if($progressCount > 0)
+                            <p>Minimum {{ $progressCount }} (déjà {{ $progressCount }} manchettes saisies)</p>
+                        @endif
+                        <p>Maximum {{ $totalEtudiantsTheorique }} étudiants inscrits</p>
+                    </div>
 
+                    @error('totalManchettesPresentes') 
+                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                    <!-- Calculatrice par enveloppes -->
+                    @if($show_envelope_calculator)
+                        <div class="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                            <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4">
+                                Calculatrice enveloppes
+                            </h4>
+                            
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                <div>
+                                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Enveloppe 1</label>
+                                    <input type="number" 
+                                        wire:model.live="enveloppe1" 
+                                        min="0" max="100"
+                                        value="{{ $enveloppe1 }}"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Enveloppe 2</label>
+                                    <input type="number" 
+                                        wire:model.live="enveloppe2" 
+                                        min="0" max="100"
+                                        value="{{ $enveloppe2 }}"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Enveloppe 3</label>
+                                    <input type="number" 
+                                        wire:model.live="enveloppe3" 
+                                        min="0" max="100"
+                                        value="{{ $enveloppe3 }}"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Enveloppe 4</label>
+                                    <input type="number" 
+                                        wire:model.live="enveloppe4" 
+                                        min="0" max="100"
+                                        value="{{ $enveloppe4 }}"
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-center bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                                </div>
+                            </div>
+                            
+                            <!-- Résultat FINAL comme champ principal -->
+                            <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-sm font-medium text-blue-800 dark:text-blue-300">Calcul:</span>
+                                    <span class="text-sm text-gray-600 dark:text-gray-400">
+                                        {{ $enveloppe1 ?: '0' }} + {{ $enveloppe2 ?: '0' }} + {{ $enveloppe3 ?: '0' }} + {{ $enveloppe4 ?: '0' }}
+                                    </span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                                            Total: {{ (is_numeric($enveloppe1) ? (int)$enveloppe1 : 0) + (is_numeric($enveloppe2) ? (int)$enveloppe2 : 0) + (is_numeric($enveloppe3) ? (int)$enveloppe3 : 0) + (is_numeric($enveloppe4) ? (int)$enveloppe4 : 0) }} étudiants
+                                        </div>
+                                        <div class="text-xs text-blue-600 dark:text-blue-400">Ce total sera enregistré</div>
+                                    </div>
+                                    <button wire:click="clearEnvelopes" 
+                                            class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                                        Effacer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                         <!-- Preview automatique -->
                         @if($totalManchettesPresentes > 0)
-                            <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-                                <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-3">Aperçu des calculs</h4>
-                                <div class="grid grid-cols-3 gap-4 text-center">
+                            <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+                                <h4 class="text-xs font-medium text-gray-900 dark:text-white mb-2">Aperçu</h4>
+                                <div class="flex justify-between text-center text-xs">
                                     <div>
-                                        <div class="text-lg font-bold text-green-600 dark:text-green-400">{{ $totalManchettesPresentes }}</div>
-                                        <div class="text-xs text-gray-600 dark:text-gray-400">Présents</div>
+                                        <div class="text-sm font-bold text-green-600 dark:text-green-400">{{ $totalManchettesPresentes }}</div>
+                                        <div class="text-gray-600 dark:text-gray-400">Présents</div>
                                     </div>
                                     <div>
-                                        <div class="text-lg font-bold text-red-600 dark:text-red-400">{{ $totalEtudiantsTheorique - $totalManchettesPresentes }}</div>
-                                        <div class="text-xs text-gray-600 dark:text-gray-400">Absents</div>
+                                        <div class="text-sm font-bold text-red-600 dark:text-red-400">{{ $totalEtudiantsTheorique - $totalManchettesPresentes }}</div>
+                                        <div class="text-gray-600 dark:text-gray-400">Absents</div>
                                     </div>
                                     <div>
-                                        <div class="text-lg font-bold text-blue-600 dark:text-blue-400">{{ $totalEtudiantsTheorique > 0 ? round(($totalManchettesPresentes / $totalEtudiantsTheorique) * 100, 1) : 0 }}%</div>
-                                        <div class="text-xs text-gray-600 dark:text-gray-400">Présence</div>
+                                        <div class="text-sm font-bold text-blue-600 dark:text-blue-400">{{ $totalEtudiantsTheorique > 0 ? round(($totalManchettesPresentes / $totalEtudiantsTheorique) * 100, 1) : 0 }}%</div>
+                                        <div class="text-gray-600 dark:text-gray-400">Taux</div>
                                     </div>
                                 </div>
                             </div>
@@ -176,7 +251,7 @@
                             <button wire:click="savePresence" 
                                     class="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                                     {{ $totalManchettesPresentes < 1 || $totalManchettesPresentes > $totalEtudiantsTheorique ? 'disabled' : '' }}>
-                                💾 Enregistrer
+                                Enregistrer
                             </button>
                             <button wire:click="cancelEditingPresence" 
                                     class="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg">
@@ -268,5 +343,5 @@ document.addEventListener('livewire:init', () => {
     });
 
 });
-    </script>
+</script>
 @endpush
