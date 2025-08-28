@@ -117,14 +117,14 @@
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex items-center justify-end space-x-2">
                                     @can('manchettes.edit')
-                                    <button wire:click="editManchette({{ $manchette->id }})"
+                                    <button wire:click="editManchette({{ $manchette->id }})" wire:key="manchetteEdit-;{{ $manchette->id }}"
                                             class="p-1 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
                                         <em class="ni ni-edit"></em>
                                     </button>
                                     @endcan 
                                     @can('manchettes.delete')
                                     <button wire:click="confirmDelete({{ $manchette->id }})" 
-                                        wire:key="manchette-;{{ $manchette->id }}"
+                                        wire:key="manchetteDelete-;{{ $manchette->id }}"
                                             class="p-1 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
                                         <em class="ni ni-trash"></em>
                                     </button>
