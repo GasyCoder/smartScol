@@ -71,49 +71,6 @@
                                     <p class="mt-2 text-sm text-red-600 dark:text-red-500">{{ $message }}</p>
                                 @enderror
                             </div>
-
-                            <!-- Sexe -->
-                            <div class="sm:col-span-3">
-                                <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Sexe *</label>
-                                <div class="flex space-x-6">
-                                    <div class="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            id="sexe_m"
-                                            name="sexe"
-                                            value="M"
-                                            wire:model="sexe"
-                                            class="w-6 h-6 transition-all duration-300 bg-white border-2 border-gray-300 rounded-full outline-none cursor-pointer peer dark:bg-gray-950 checked:bg-primary-600 checked:dark:bg-primary-600 checked:hover:bg-primary-600 checked:hover:dark:bg-primary-600 checked:focus:bg-primary-600 checked:focus:dark:bg-primary-600 focus:border-primary-600 focus:dark:border-primary-600 focus:outline-offset-0 focus:outline-primary-200 focus:dark:outline-primary-950 focus:ring-0 focus:ring-offset-0 disabled:bg-slate-50 disabled:dark:bg-slate-900 disabled:checked:bg-primary-400 disabled:checked:dark:bg-primary-400 dark:border-gray-900 disabled:cursor-not-allowed"
-                                        >
-                                        <label
-                                            for="sexe_m"
-                                            class="text-slate-600 dark:text-slate-400 peer-disabled:text-slate-400 peer-disabled:dark:text-slate-700 text-sm leading-5 pt-0.5 ps-3 cursor-pointer inline-block"
-                                        >
-                                            Masculin (M)
-                                        </label>
-                                    </div>
-                                    <div class="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            id="sexe_f"
-                                            name="sexe"
-                                            value="F"
-                                            wire:model="sexe"
-                                            class="w-6 h-6 transition-all duration-300 bg-white border-2 border-gray-300 rounded-full outline-none cursor-pointer peer dark:bg-gray-950 checked:bg-primary-600 checked:dark:bg-primary-600 checked:hover:bg-primary-600 checked:hover:dark:bg-primary-600 checked:focus:bg-primary-600 checked:focus:dark:bg-primary-600 focus:border-primary-600 focus:dark:border-primary-600 focus:outline-offset-0 focus:outline-primary-200 focus:dark:outline-primary-950 focus:ring-0 focus:ring-offset-0 disabled:bg-slate-50 disabled:dark:bg-slate-900 disabled:checked:bg-primary-400 disabled:checked:dark:bg-primary-400 dark:border-gray-900 disabled:cursor-not-allowed"
-                                        >
-                                        <label
-                                            for="sexe_f"
-                                            class="text-slate-600 dark:text-slate-400 peer-disabled:text-slate-400 peer-disabled:dark:text-slate-700 text-sm leading-5 pt-0.5 ps-3 cursor-pointer inline-block"
-                                        >
-                                            Féminin (F)
-                                        </label>
-                                    </div>
-                                </div>
-                                @error('sexe')
-                                    <p class="mt-2 text-sm text-red-600 dark:text-red-500">{{ $message }}</p>
-                                @enderror
-                            </div>
-
                             <!-- Nom -->
                             <div class="sm:col-span-3">
                                 <label for="nom" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nom *</label>
