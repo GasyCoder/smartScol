@@ -196,7 +196,7 @@
 
                 <!-- Inclusion de la vue partielle du tableau -->
                 @if(count($resultats) > 0)
-                    @include('livewire.resultats.partials.table-verify-resultat')
+                    @include('livewire.fusion.partials.table-verify-resultat')
                 @else
                     <div class="p-6 text-center bg-gray-100 rounded-lg dark:bg-gray-700">
                         <em class="mb-4 text-4xl text-gray-400 icon ni ni-folder-close dark:text-gray-400"></em>

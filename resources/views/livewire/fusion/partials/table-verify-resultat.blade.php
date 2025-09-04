@@ -158,7 +158,7 @@
                                                 step="0.01"
                                                 min="0"
                                                 max="20"
-                                                class="w-16 px-1.5 py-0.5 text-xs text-gray-900 border border-gray-300 rounded dark:text-white dark:bg-gray-700 dark:border-gray-600 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                                class="px-2 py-1 text-lg text-gray-900 border border-gray-300 rounded dark:text-white dark:bg-gray-700 dark:border-gray-600 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                                 placeholder="{{ number_format($resultat['note'], 2) }}"
                                                 aria-label="Modifier la note pour {{ $resultat['matiere'] }}"
                                                 autofocus
@@ -174,7 +174,7 @@
                                             @endif
                                         </div>
                                         @if($newNote && $newNote != $resultat['note'])
-                                            <div class="text-xs text-blue-600 dark:text-blue-400">{{ number_format($resultat['note'], 2) }} → {{ number_format($newNote, 2) }}</div>
+                                            <div class="text-lg text-blue-600 dark:text-blue-400">{{ number_format($resultat['note'], 2) }} → {{ number_format($newNote, 2) }}</div>
                                         @endif
                                     @else
                                         @if($resultat['note_old'])
@@ -207,10 +207,10 @@
                             <td class="px-2 py-1 text-center">
                                 @if($editingRow === $resultat['unique_key'])
                                     <div class="flex items-center space-x-1">
-                                        <button wire:click="saveChanges('{{ $resultat['unique_key'] }}')" class="px-1.5 py-0.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700">
+                                        <button wire:click="saveChanges('{{ $resultat['unique_key'] }}')" class="px-1.5 py-0.5 text-xs text-white bg-green-600 rounded hover:bg-green-700">
                                             <em class="icon ni ni-check"></em>
                                         </button>
-                                        <button wire:click="cancelEditing" class="px-1.5 py-0.5 text-xs text-white bg-gray-600 rounded hover:bg-gray-700">
+                                        <button wire:click="cancelEditing" class="px-1.5 py-0.5 text-xs text-white bg-red-600 rounded hover:bg-red-700">
                                             <em class="icon ni ni-cross"></em>
                                         </button>
                                     </div>

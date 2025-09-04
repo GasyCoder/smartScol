@@ -1,6 +1,6 @@
 <div class="relative">
     <!-- En-tête fixe -->
-    <div class="sticky top-0 z-10 px-5 py-4 bg-white border-b border-gray-200 shadow-sm dark:bg-gray-900 dark:border-gray-800">
+    <div class="sticky top-0 z-10 px-5 py-4">
         <div class="flex items-center justify-between">
             <!-- Titre principal -->
             <h5 class="text-xl font-medium text-slate-700 dark:text-white">Gestion des étudiants</h5>
@@ -54,7 +54,7 @@
     <div class="px-5 pt-6">
         {{-- Étape 1: Sélection du niveau --}}
         @if($step === 'niveau')
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+        <div class="">
             <div class="text-center mb-8">
                 <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Choisir le niveau d'étude</h2>
                 <p class="text-gray-600 dark:text-gray-400">Commencez par sélectionner un niveau d'études</p>

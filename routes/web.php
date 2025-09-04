@@ -15,7 +15,7 @@ use App\Livewire\Student\AddEtudiant;
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
-use App\Livewire\Resultats\FusionIndex;
+use App\Livewire\Fusion\FusionIndex;
 use App\Livewire\Resultats\ReleveNotes;
 use App\Livewire\Settings\SessionExamens;
 use App\Livewire\Settings\UserManagement;
