@@ -182,12 +182,16 @@
                     </li>
                     @endcan
                     @can('resultats.fusion')
-                    <li class="nk-menu-item {{ is_route('resultats.fusion') ? ' active' : '' }}">
+                    <li class="nk-menu-item {{ request()->routeIs('resultats.fusion', 'resultats.verification') ? 'active' : '' }}">
                         <a href="{{ route('resultats.fusion') }}"
                         class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('resultats.fusion') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-shuffle"></em></span>
-                            <span class="flex-grow"> Fussion & Vérification</span>
+                                {{ request()->routeIs('resultats.fusion', 'resultats.verification') 
+                                        ? 'text-primary-500' 
+                                        : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                            <span class="w-9 flex-shrink-0 text-slate-400">
+                                <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-shuffle"></em>
+                            </span>
+                            <span class="flex-grow">Fusion & Vérification</span>
                         </a>
                     </li>
                     @endcan

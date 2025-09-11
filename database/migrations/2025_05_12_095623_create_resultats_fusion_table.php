@@ -37,15 +37,21 @@ return new class extends Migration
             $table->foreign('genere_par')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('modifie_par')->references('id')->on('users')->onDelete('set null');
 
-            // CONTRAINTE D'UNICITÉ CORRIGÉE - SEUL CHANGEMENT ICI !!!
-            // AVANT (INCORRECT) : $table->unique(['etudiant_id', 'examen_id', 'ec_id'], 'unique_resultat_fusion_etudiant');
-            // APRÈS (CORRECT) :
+            // CONTRAINTE D'UNICITÉ
             $table->unique(['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'], 'unique_resultat_fusion_etudiant');
-
-            // Index pour optimisation
+            
+            // INDEX EXISTANTS
+            $table->index(['examen_id', 'session_exam_id', 'statut'], 'rf_examen_session_statut');
+            $table->index(['etudiant_id', 'ec_id', 'session_exam_id'], 'rf_etudiant_ec_session');
             $table->index(['examen_id', 'statut', 'session_exam_id', 'ec_id', 'etudiant_id'], 'idx_resultats_fusion_session');
             $table->index(['etudiant_id', 'statut'], 'idx_fusion_etudiant_statut');
             $table->index(['operation_id'], 'idx_fusion_operation');
+            
+            // NOUVEAUX INDEX POUR OPTIMISER LA FUSION
+            $table->index(['statut', 'etape_fusion'], 'idx_rf_statut_etape_batch');
+            $table->index(['code_anonymat_id', 'session_exam_id'], 'idx_rf_code_session_join');
+            $table->index(['session_exam_id', 'statut', 'etape_fusion'], 'idx_rf_session_statut_etape');
+            $table->index(['examen_id', 'session_exam_id', 'etape_fusion'], 'idx_rf_examen_session_etape');
         });
     }
 

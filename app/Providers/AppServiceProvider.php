@@ -21,5 +21,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+        
+        if (app()->environment('production')) {
+            ini_set('max_execution_time', env('MAX_EXECUTION_TIME', 300));
+            ini_set('memory_limit', env('MEMORY_LIMIT', '512M'));
+        }
     }
 }

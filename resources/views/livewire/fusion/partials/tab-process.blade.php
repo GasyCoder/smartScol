@@ -128,6 +128,19 @@
                             </div>
                         </div>
                     @endif
+                    
+                    @if($showProgress)
+                    <div class="mt-4 p-4 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-blue-700 dark:text-blue-300">{{ $fusionStep }}</span>
+                            <span class="text-sm text-blue-600 dark:text-blue-400">{{ $fusionProgress }}%</span>
+                        </div>
+                        <div class="w-full bg-blue-200 rounded-full h-2 dark:bg-blue-800">
+                            <div class="bg-blue-600 h-2 rounded-full dark:bg-blue-400 transition-all duration-300" 
+                                style="width: {{ $fusionProgress }}%"></div>
+                        </div>
+                    </div>
+                    @endif
 
                     @if($isProcessing)
                         <div class="flex items-center mt-3 space-x-2 text-sm text-gray-600 dark:text-gray-400">
@@ -176,6 +189,7 @@
                 </div>
             </div>
         </div>
+
 
         {{-- 3. Validation --}}
         <div class="p-4 border rounded-lg {{ $statut === 'valide' ? 'bg-purple-50 border-purple-200 dark:bg-purple-900/10 dark:border-purple-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">

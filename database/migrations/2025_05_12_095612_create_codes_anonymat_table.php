@@ -26,12 +26,20 @@ return new class extends Migration
             $table->foreign('session_exam_id')->references('id')->on('session_exams')->onDelete('set null');
             $table->foreign('ec_id')->references('id')->on('ecs')->onDelete('cascade');
 
+            // CONTRAINTE D'UNICITÉ EXISTANTE
             $table->unique(['examen_id', 'ec_id', 'session_exam_id', 'code_complet'], 'codes_examen_ec_session_code_unique');
 
-            // Index pour les recherches fréquentes
+            // INDEX EXISTANTS
             $table->index(['examen_id', 'session_exam_id'], 'codes_examen_session_idx');
             $table->index(['ec_id', 'session_exam_id'], 'codes_ec_session_idx');
             $table->index(['code_complet'], 'codes_complet_idx');
+            
+            // NOUVEAUX INDEX POUR OPTIMISER LA FUSION
+            $table->index(['code_complet', 'session_exam_id'], 'idx_codes_complet_session');
+            $table->index(['session_exam_id', 'deleted_at'], 'idx_codes_session_active');
+            $table->index(['code_complet', 'ec_id'], 'idx_codes_complet_ec');
+            $table->index(['examen_id', 'session_exam_id', 'deleted_at'], 'idx_codes_fusion_lookup');
+            $table->index(['sequence', 'session_exam_id'], 'idx_codes_sequence_session');
         });
     }
 

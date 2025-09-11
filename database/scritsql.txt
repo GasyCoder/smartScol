@@ -1,0 +1,61 @@
+-- ===============================================
+-- SCRIPTS SQL POUR OPTIMISER LES PERFORMANCES
+-- ===============================================
+
+-- 1. TABLE resultats_fusion - NOUVEAUX INDEX
+ALTER TABLE resultats_fusion ADD INDEX idx_rf_statut_etape_batch (statut, etape_fusion);
+ALTER TABLE resultats_fusion ADD INDEX idx_rf_code_session_join (code_anonymat_id, session_exam_id);
+ALTER TABLE resultats_fusion ADD INDEX idx_rf_session_statut_etape (session_exam_id, statut, etape_fusion);
+ALTER TABLE resultats_fusion ADD INDEX idx_rf_examen_session_etape (examen_id, session_exam_id, etape_fusion);
+
+-- 2. TABLE manchettes - NOUVEAUX INDEX
+ALTER TABLE manchettes ADD INDEX idx_manchettes_etudiant_session (etudiant_id, session_exam_id);
+ALTER TABLE manchettes ADD INDEX idx_manchettes_session_active (session_exam_id, deleted_at);
+ALTER TABLE manchettes ADD INDEX idx_manchettes_code_etudiant (code_anonymat_id, etudiant_id);
+ALTER TABLE manchettes ADD INDEX idx_manchettes_fusion_lookup (examen_id, session_exam_id, deleted_at);
+
+-- 3. TABLE copies - NOUVEAUX INDEX
+ALTER TABLE copies ADD INDEX idx_copies_code_ec_session (code_anonymat_id, ec_id, session_exam_id);
+ALTER TABLE copies ADD INDEX idx_copies_session_active (session_exam_id, deleted_at);
+ALTER TABLE copies ADD INDEX idx_copies_note_session (note, session_exam_id);
+ALTER TABLE copies ADD INDEX idx_copies_fusion_lookup (examen_id, session_exam_id, deleted_at);
+ALTER TABLE copies ADD INDEX idx_copies_ec_note_session (ec_id, note, session_exam_id);
+
+-- 4. TABLE codes_anonymat - NOUVEAUX INDEX
+ALTER TABLE codes_anonymat ADD INDEX idx_codes_complet_session (code_complet, session_exam_id);
+ALTER TABLE codes_anonymat ADD INDEX idx_codes_session_active (session_exam_id, deleted_at);
+ALTER TABLE codes_anonymat ADD INDEX idx_codes_complet_ec (code_complet, ec_id);
+ALTER TABLE codes_anonymat ADD INDEX idx_codes_fusion_lookup (examen_id, session_exam_id, deleted_at);
+ALTER TABLE codes_anonymat ADD INDEX idx_codes_sequence_session (sequence, session_exam_id);
+
+-- ===============================================
+-- VÉRIFICATION DES INDEX CRÉÉS
+-- ===============================================
+
+-- Pour vérifier que les index ont été créés :
+SHOW INDEX FROM resultats_fusion WHERE Key_name LIKE 'idx_rf_%';
+SHOW INDEX FROM manchettes WHERE Key_name LIKE 'idx_manchettes_%';
+SHOW INDEX FROM copies WHERE Key_name LIKE 'idx_copies_%';
+SHOW INDEX FROM codes_anonymat WHERE Key_name LIKE 'idx_codes_%';
+
+-- ===============================================
+-- ANALYSE DES PERFORMANCES (OPTIONNEL)
+-- ===============================================
+
+-- Pour analyser les tables après ajout des index :
+ANALYZE TABLE resultats_fusion;
+ANALYZE TABLE manchettes;
+ANALYZE TABLE copies;
+ANALYZE TABLE codes_anonymat;
+
+-- Index pour optimiser les jointures complexes
+CREATE INDEX idx_resultats_fusion_optimized 
+ON resultats_fusion (examen_id, session_exam_id, etape_fusion, statut, etudiant_id);
+
+-- Index pour les requêtes de copies
+CREATE INDEX idx_copies_verification 
+ON copies (examen_id, session_exam_id, is_checked, ec_id, code_anonymat_id);
+
+-- Index composite pour les manchettes
+CREATE INDEX idx_manchettes_fusion_optimized 
+ON manchettes (examen_id, session_exam_id, etudiant_id, code_anonymat_id);

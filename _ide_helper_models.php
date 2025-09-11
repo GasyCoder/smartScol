@@ -542,15 +542,15 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property-read \App\Models\EC|null $ec
- * @property-read \App\Models\Examen $examen
+ * @property-read \App\Models\Examen|null $examen
  * @property-read int $ecart_attendu
  * @property-read mixed $session_libelle
  * @property-read mixed $session_type
  * @property-read float $taux_presence
  * @property-read int $total_etudiants
- * @property-read \App\Models\Salle $salle
+ * @property-read \App\Models\Salle|null $salle
  * @property-read \App\Models\SessionExam|null $sessionExam
- * @property-read \App\Models\User $utilisateurSaisie
+ * @property-read \App\Models\User|null $utilisateurSaisie
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen currentSession()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen forEc($ecId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|PresenceExamen forExamen($examenId, $sessionId, $salleId)
@@ -606,10 +606,10 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $date_fusion Date du transfert depuis fusion
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\CodeAnonymat $codeAnonymat
- * @property-read \App\Models\EC $ec
- * @property-read \App\Models\Etudiant $etudiant
- * @property-read \App\Models\Examen $examen
+ * @property-read \App\Models\CodeAnonymat|null $codeAnonymat
+ * @property-read \App\Models\EC|null $ec
+ * @property-read \App\Models\Etudiant|null $etudiant
+ * @property-read \App\Models\Examen|null $examen
  * @property-read mixed $annule_par_actuel
  * @property-read mixed $date_annulation_actuelle
  * @property-read mixed $date_reactivation_actuelle
@@ -630,7 +630,7 @@ namespace App\Models{
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
  * @property-read \App\Models\SessionExam|null $sessionExam
  * @property-read \App\Models\User|null $utilisateurAnnulation
- * @property-read \App\Models\User $utilisateurGeneration
+ * @property-read \App\Models\User|null $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
  * @property-read \App\Models\User|null $utilisateurReactivation
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
@@ -705,8 +705,8 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read mixed $libelle_type_action
- * @property-read \App\Models\ResultatFinal $resultatFinal
- * @property-read \App\Models\User $utilisateur
+ * @property-read \App\Models\ResultatFinal|null $resultatFinal
+ * @property-read \App\Models\User|null $utilisateur
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique changementsDecision()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique deliberations()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinalHistorique newModelQuery()
@@ -753,16 +753,16 @@ namespace App\Models{
  * @property string|null $operation_id
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\CodeAnonymat $codeAnonymat
- * @property-read \App\Models\EC $ec
- * @property-read \App\Models\Etudiant $etudiant
- * @property-read \App\Models\Examen $examen
+ * @property-read \App\Models\CodeAnonymat|null $codeAnonymat
+ * @property-read \App\Models\EC|null $ec
+ * @property-read \App\Models\Etudiant|null $etudiant
+ * @property-read \App\Models\Examen|null $examen
  * @property-read mixed $est_eliminatoire
  * @property-read mixed $est_reussie
  * @property-read mixed $session_libelle
  * @property-read mixed $session_type
  * @property-read \App\Models\SessionExam|null $sessionExam
- * @property-read \App\Models\User $utilisateurGeneration
+ * @property-read \App\Models\User|null $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion echoue()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFusion eliminatoire()
@@ -833,7 +833,7 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon $date_end
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\AnneeUniversitaire $anneeUniversitaire
+ * @property-read \App\Models\AnneeUniversitaire|null $anneeUniversitaire
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Examen> $examens
  * @property-read int|null $examens_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam activeInActiveYear()

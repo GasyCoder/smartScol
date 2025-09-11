@@ -52,6 +52,10 @@ class FusionIndex extends Component
     public $confirmingExport = false;
     public string $motifAnnulation = '';
 
+    public $fusionProgress = 0;
+    public $fusionStep = '';
+    public $showProgress = false;
+
     // Méthodes de confirmation raccourcies
     public function confirmVerification() { $this->confirmingVerification = true; }
     public function confirmFusion() { $this->confirmingFusion = true; }
@@ -282,25 +286,40 @@ class FusionIndex extends Component
     public function lancerFusion()
     {
         $this->confirmingFusion = false;
+        $this->showProgress = true;
+        $this->fusionProgress = 0;
+        $this->fusionStep = 'Initialisation...';
 
         try {
             if ($this->statut !== 'verification' || !$this->showFusionButton) {
                 toastr()->error('Impossible de commencer la fusion dans l\'état actuel.');
+                $this->showProgress = false;
                 return;
             }
+
+            $this->fusionStep = 'Préparation des données...';
+            $this->fusionProgress = 10;
 
             $result = (new FusionService())->fusionner($this->examen_id);
 
             if (!$result['success']) {
                 toastr()->error($result['message']);
+                $this->showProgress = false;
                 return;
             }
+
+            $this->fusionProgress = 100;
+            $this->fusionStep = 'Fusion terminée !';
+            
+            // Cacher la barre après 2 secondes
+            $this->dispatch('hide-progress-after-delay');
 
             $this->setEtat('fusion', 30, 1, true);
             toastr()->success('Fusion démarrée avec succès.');
             $this->verifierEtatActuel();
 
         } catch (\Exception $e) {
+            $this->showProgress = false;
             toastr()->error('Erreur lors du démarrage de la fusion : ' . $e->getMessage());
         }
     }

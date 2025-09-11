@@ -348,17 +348,6 @@ class FusionService
                 'issues' => $issues,
                 'session_type' => $sessionActive->type,
             ];
-
-            \Log::info('EC analysée avec données de présence', [
-                'ec_id' => $ec->id,
-                'ec_nom' => $ec->nom,
-                'session_type' => $sessionActive->type,
-                'copies_count' => $copiesEc->count(),
-                'manchettes_count' => $manchettesCorrespondantes->count(),
-                'etudiants_presents' => $etudiantsAttendus,
-                'source_presence' => $donneesPresence['source'],
-                'complet' => $complet
-            ]);
         }
 
         return $rapport;
@@ -526,6 +515,10 @@ class FusionService
      */
     public function fusionner($examenId, $force = false)
     {
+        // Augmenter temporairement les limites
+        set_time_limit(300); // 5 minutes
+        ini_set('memory_limit', '512M');
+        
         try {
             $examen = Examen::findOrFail($examenId);
 
@@ -636,7 +629,6 @@ class FusionService
      */
     private function executerEtape1($examenId, $sessionId = null)
     {
-        // Si pas de sessionId fourni, utiliser la session active
         if (!$sessionId) {
             $sessionActive = SessionExam::where('is_active', true)
                 ->where('is_current', true)
@@ -651,8 +643,9 @@ class FusionService
             $sessionId = $sessionActive->id;
         }
 
+        // OPTIMISATION 1: Récupérer toutes les données d'un coup avec les relations
         $manchettes = Manchette::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionId) // FILTRER PAR SESSION
+            ->where('session_exam_id', $sessionId)
             ->whereHas('codeAnonymat', function ($query) {
                 $query->whereNotNull('code_complet')->where('code_complet', '!=', '');
             })
@@ -660,10 +653,6 @@ class FusionService
             ->get();
 
         if ($manchettes->isEmpty()) {
-            \Log::warning('Aucune manchette valide pour la fusion', [
-                'examen_id' => $examenId,
-                'session_exam_id' => $sessionId,
-            ]);
             return [
                 'success' => false,
                 'message' => 'Aucune manchette valide trouvée pour cet examen dans cette session.',
@@ -671,7 +660,7 @@ class FusionService
         }
 
         $copies = Copie::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionId) // FILTRER PAR SESSION
+            ->where('session_exam_id', $sessionId)
             ->whereNotNull('code_anonymat_id')
             ->whereHas('codeAnonymat', function ($query) {
                 $query->whereNotNull('code_complet')->where('code_complet', '!=', '');
@@ -681,108 +670,163 @@ class FusionService
             ->get();
 
         if ($copies->isEmpty()) {
-            \Log::warning('Aucune copie valide pour la fusion', [
-                'examen_id' => $examenId,
-                'session_exam_id' => $sessionId,
-            ]);
             return [
                 'success' => false,
                 'message' => 'Aucune copie valide trouvée pour cet examen dans cette session.',
             ];
         }
 
+        // OPTIMISATION 2: Vérifier les résultats existants en une seule requête
+        $resultatsExistants = ResultatFusion::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->get()
+            ->groupBy(function($item) {
+                return $item->etudiant_id . '_' . $item->ec_id;
+            });
+
+        // OPTIMISATION 3: Indexer les copies par code d'anonymat
+        $copiesParCode = $copies->groupBy('codeAnonymat.code_complet');
+
+        // OPTIMISATION 4: Préparer les données pour insertion en masse
+        $resultatsAInserer = [];
+        $codesAnonymatACreer = [];
+        $batchSize = 500; // Traiter par lots de 500
         $resultatsGeneres = 0;
         $erreursIgnorees = 0;
-        $codesTraites = [];
 
-        foreach ($manchettes as $manchette) {
-            $codeAnonymat = $manchette->codeAnonymat->code_complet;
-            $cleUnique = $manchette->etudiant_id . '_' . $codeAnonymat;
-
-            if (isset($codesTraites[$cleUnique])) {
-                continue;
-            }
-            $codesTraites[$cleUnique] = true;
-
-            $copiesCorrespondantes = $copies->where('codeAnonymat.code_complet', $codeAnonymat);
-
-            if ($copiesCorrespondantes->isEmpty()) {
-                \Log::warning('Aucune copie pour le code d\'anonymat', [
-                    'examen_id' => $examenId,
-                    'session_exam_id' => $sessionId,
-                    'code_anonymat' => $codeAnonymat,
-                    'etudiant_id' => $manchette->etudiant_id,
-                ]);
-                $erreursIgnorees++;
-                continue;
-            }
-
-            foreach ($copiesCorrespondantes as $copie) {
-                // IMPORTANT : Vérifier l'existence pour cette session spécifique
-                $resultatExiste = ResultatFusion::where('examen_id', $examenId)
-                    ->where('etudiant_id', $manchette->etudiant_id)
-                    ->where('ec_id', $copie->ec_id)
-                    ->where('session_exam_id', $sessionId) // FILTRER PAR SESSION
-                    ->exists();
-
-                if ($resultatExiste) {
+        foreach ($manchettes->chunk($batchSize) as $manchettesChunk) {
+            foreach ($manchettesChunk as $manchette) {
+                $codeAnonymat = $manchette->codeAnonymat->code_complet;
+                
+                if (!isset($copiesParCode[$codeAnonymat])) {
+                    $erreursIgnorees++;
                     continue;
                 }
 
-                $codeAnonymatRecord = CodeAnonymat::firstOrCreate(
-                    [
-                        'code_complet' => $codeAnonymat,
+                foreach ($copiesParCode[$codeAnonymat] as $copie) {
+                    $cleUnique = $manchette->etudiant_id . '_' . $copie->ec_id;
+                    
+                    // Vérifier si le résultat existe déjà
+                    if ($resultatsExistants->has($cleUnique)) {
+                        continue;
+                    }
+
+                    // Préparer le code d'anonymat
+                    $codeKey = $codeAnonymat . '_' . $copie->ec_id;
+                    if (!isset($codesAnonymatACreer[$codeKey])) {
+                        $codesAnonymatACreer[$codeKey] = [
+                            'code_complet' => $codeAnonymat,
+                            'examen_id' => $examenId,
+                            'ec_id' => $copie->ec_id,
+                            'sequence' => $this->extraireSequence($codeAnonymat),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+
+                    // Préparer les données pour insertion
+                    $resultatsAInserer[] = [
+                        'etudiant_id' => $manchette->etudiant_id,
                         'examen_id' => $examenId,
+                        'code_anonymat_id' => null, // Sera mis à jour après insertion des codes
                         'ec_id' => $copie->ec_id,
-                    ],
-                    [
-                        'sequence' => $this->extraireSequence($codeAnonymat),
+                        'note' => $copie->note,
+                        'genere_par' => Auth::id(),
+                        'statut' => ResultatFusion::STATUT_VERIFY_1,
+                        'etape_fusion' => 1,
+                        'session_exam_id' => $sessionId,
                         'created_at' => now(),
                         'updated_at' => now(),
-                    ]
-                );
+                        '_code_key' => $codeKey, // Temporaire pour liaison
+                    ];
 
-                // IMPORTANT : Créer avec session_exam_id
-                ResultatFusion::create([
-                    'etudiant_id' => $manchette->etudiant_id,
-                    'examen_id' => $examenId,
-                    'code_anonymat_id' => $codeAnonymatRecord->id,
-                    'ec_id' => $copie->ec_id,
-                    'note' => $copie->note,
-                    'genere_par' => Auth::id(),
-                    'statut' => ResultatFusion::STATUT_VERIFY_1,
-                    'etape_fusion' => 1,
-                    'session_exam_id' => $sessionId, // IMPORTANT
-                ]);
+                    $resultatsGeneres++;
+                }
+            }
 
-                $resultatsGeneres++;
+            // OPTIMISATION 5: Traiter par batch pour éviter le timeout
+            if (count($resultatsAInserer) >= $batchSize) {
+                $this->insererResultatsBatch($resultatsAInserer, $codesAnonymatACreer, $examenId);
+                $resultatsAInserer = [];
+                $codesAnonymatACreer = [];
+                
+                // Petit délai pour éviter la surcharge
+                usleep(10000); // 10ms
             }
         }
 
+        // Insérer le dernier batch
+        if (!empty($resultatsAInserer)) {
+            $this->insererResultatsBatch($resultatsAInserer, $codesAnonymatACreer, $examenId);
+        }
+
         if ($resultatsGeneres === 0) {
-            \Log::warning('Aucun résultat généré lors de l\'étape 1', [
-                'examen_id' => $examenId,
-                'session_exam_id' => $sessionId,
-                'erreurs_ignorees' => $erreursIgnorees,
-            ]);
             return [
                 'success' => false,
                 'message' => "Aucune donnée fusionnée. Erreurs ignorées : $erreursIgnorees.",
             ];
         }
 
-        \Log::info('Étape 1 de fusion terminée pour session', [
-            'examen_id' => $examenId,
-            'session_exam_id' => $sessionId,
-            'resultats_generes' => $resultatsGeneres,
-            'erreurs_ignorees' => $erreursIgnorees,
-        ]);
-
         return [
             'success' => true,
             'resultats_generes' => $resultatsGeneres,
             'erreurs_ignorees' => $erreursIgnorees,
         ];
+    }
+
+
+    /**
+     * Insérer les résultats par batch
+     */
+    private function insererResultatsBatch(array $resultatsAInserer, array $codesAnonymatACreer, int $examenId)
+    {
+        // 1. Insérer/récupérer les codes d'anonymat
+        $codesExistants = CodeAnonymat::where('examen_id', $examenId)
+            ->whereIn('code_complet', array_column($codesAnonymatACreer, 'code_complet'))
+            ->get()
+            ->keyBy(function($item) {
+                return $item->code_complet . '_' . $item->ec_id;
+            });
+
+        // Insérer les nouveaux codes
+        $nouveauxCodes = [];
+        foreach ($codesAnonymatACreer as $key => $codeData) {
+            if (!$codesExistants->has($key)) {
+                $nouveauxCodes[] = $codeData;
+            }
+        }
+
+        if (!empty($nouveauxCodes)) {
+            CodeAnonymat::insert($nouveauxCodes);
+            
+            // Récupérer les codes nouvellement insérés
+            $codesInseres = CodeAnonymat::where('examen_id', $examenId)
+                ->whereIn('code_complet', array_column($nouveauxCodes, 'code_complet'))
+                ->get()
+                ->keyBy(function($item) {
+                    return $item->code_complet . '_' . $item->ec_id;
+                });
+            
+            $codesExistants = $codesExistants->merge($codesInseres);
+        }
+
+        // 2. Mettre à jour les IDs des codes d'anonymat dans les résultats
+        foreach ($resultatsAInserer as &$resultat) {
+            $codeKey = $resultat['_code_key'];
+            if ($codesExistants->has($codeKey)) {
+                $resultat['code_anonymat_id'] = $codesExistants[$codeKey]->id;
+            }
+            unset($resultat['_code_key']); // Supprimer la clé temporaire
+        }
+
+        // 3. Insérer les résultats en masse
+        $resultatsValides = array_filter($resultatsAInserer, function($r) {
+            return !is_null($r['code_anonymat_id']);
+        });
+
+        if (!empty($resultatsValides)) {
+            ResultatFusion::insert($resultatsValides);
+        }
     }
 
     /**
@@ -803,45 +847,63 @@ class FusionService
             $sessionId = $sessionActive ? $sessionActive->id : null;
         }
 
-        $resultats = ResultatFusion::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionId) // FILTRER PAR SESSION
-            ->where('statut', ResultatFusion::STATUT_VERIFY_1)
-            ->where('etape_fusion', 1)
-            ->get();
+        // OPTIMISATION: Traitement par batch pour éviter le timeout
+        $batchSize = 1000;
+        $resultatsValides = 0;
+        $offset = 0;
 
-        if ($resultats->isEmpty()) {
-            Log::warning('Aucun résultat à valider pour l\'étape 2', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionId,
-            ]);
+        do {
+            $resultats = ResultatFusion::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionId)
+                ->where('statut', ResultatFusion::STATUT_VERIFY_1)
+                ->where('etape_fusion', 1)
+                ->offset($offset)
+                ->limit($batchSize)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                break;
+            }
+
+            // Traitement par batch
+            $idsToUpdate = [];
+            foreach ($resultats as $resultat) {
+                if ($this->validerResultat($resultat)) {
+                    $idsToUpdate[] = $resultat->id;
+                    $resultatsValides++;
+                }
+            }
+
+            // Mise à jour en masse
+            if (!empty($idsToUpdate)) {
+                ResultatFusion::whereIn('id', $idsToUpdate)
+                    ->update([
+                        'statut' => ResultatFusion::STATUT_VERIFY_2,
+                        'etape_fusion' => 2,
+                        'modifie_par' => Auth::id(),
+                        'updated_at' => now()
+                    ]);
+            }
+
+            $offset += $batchSize;
+            
+            // Petit délai pour éviter la surcharge
+            usleep(5000); // 5ms
+
+        } while ($resultats->count() === $batchSize);
+
+        if ($resultatsValides === 0) {
             return [
                 'success' => false,
                 'message' => 'Aucun résultat à valider à l\'étape 1 pour cette session.',
             ];
         }
 
-        $resultatsValides = 0;
-        foreach ($resultats as $resultat) {
-            if ($this->validerResultat($resultat)) {
-                $resultat->changerStatut(ResultatFusion::STATUT_VERIFY_2, Auth::id());
-                $resultat->etape_fusion = 2;
-                $resultat->save();
-                $resultatsValides++;
-            }
-        }
-
-        Log::info('Étape 2 de fusion terminée pour session', [
-            'examen_id' => $examenId,
-            'session_id' => $sessionId,
-            'resultats_valides' => $resultatsValides,
-        ]);
-
         return [
             'success' => true,
             'resultats_valides' => $resultatsValides,
         ];
     }
-
 
     /**
      * Étape 3 : Troisième vérification avant finalisation
@@ -853,43 +915,84 @@ class FusionService
             $sessionId = $sessionActive ? $sessionActive->id : null;
         }
 
-        $resultats = ResultatFusion::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionId) // FILTRER PAR SESSION
-            ->where('statut', ResultatFusion::STATUT_VERIFY_2)
-            ->where('etape_fusion', 2)
-            ->get();
+        // OPTIMISATION: Traitement par batch
+        $batchSize = 1000;
+        $resultatsFinalises = 0;
+        $offset = 0;
 
-        if ($resultats->isEmpty()) {
-            Log::warning('Aucun résultat à traiter pour l\'étape 3', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionId,
-            ]);
+        // Pré-charger les étudiants actifs pour optimiser la validation
+        $etudiantsActifs = Etudiant::where('is_active', true)
+            ->pluck('id')
+            ->flip(); // Pour une recherche O(1)
+
+        do {
+            $resultats = ResultatFusion::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionId)
+                ->where('statut', ResultatFusion::STATUT_VERIFY_2)
+                ->where('etape_fusion', 2)
+                ->offset($offset)
+                ->limit($batchSize)
+                ->get();
+
+            if ($resultats->isEmpty()) {
+                break;
+            }
+
+            // Traitement par batch
+            $idsToUpdate = [];
+            foreach ($resultats as $resultat) {
+                if ($this->verifierResultatEtape3Optimise($resultat, $etudiantsActifs)) {
+                    $idsToUpdate[] = $resultat->id;
+                    $resultatsFinalises++;
+                }
+            }
+
+            // Mise à jour en masse
+            if (!empty($idsToUpdate)) {
+                ResultatFusion::whereIn('id', $idsToUpdate)
+                    ->update([
+                        'statut' => ResultatFusion::STATUT_VERIFY_3,
+                        'etape_fusion' => 3,
+                        'modifie_par' => Auth::id(),
+                        'updated_at' => now()
+                    ]);
+            }
+
+            $offset += $batchSize;
+            usleep(5000); // 5ms
+
+        } while ($resultats->count() === $batchSize);
+
+        if ($resultatsFinalises === 0) {
             return [
                 'success' => false,
                 'message' => 'Aucun résultat à traiter à l\'étape 2 pour cette session.',
             ];
         }
 
-        $resultatsFinalises = 0;
-        foreach ($resultats as $resultat) {
-            if ($this->verifierResultatEtape3($resultat)) {
-                $resultat->changerStatut(ResultatFusion::STATUT_VERIFY_3, Auth::id());
-                $resultat->etape_fusion = 3;
-                $resultat->save();
-                $resultatsFinalises++;
-            }
-        }
-
-        Log::info('Étape 3 de fusion terminée pour session', [
-            'examen_id' => $examenId,
-            'session_id' => $sessionId,
-            'resultats_traites' => $resultatsFinalises,
-        ]);
-
         return [
             'success' => true,
             'resultats_traites' => $resultatsFinalises,
         ];
+    }
+
+
+    /**
+     * Version optimisée de la vérification étape 3
+     */
+    private function verifierResultatEtape3Optimise(ResultatFusion $resultat, $etudiantsActifs)
+    {
+        // Vérifier que la note est valide
+        if ($resultat->note !== null && ($resultat->note < 0 || $resultat->note > 20)) {
+            return false;
+        }
+
+        // Vérifier que l'étudiant est actif (recherche O(1))
+        if (!isset($etudiantsActifs[$resultat->etudiant_id])) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

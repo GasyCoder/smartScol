@@ -13,13 +13,13 @@ use App\Models\SessionExam;
 use App\Models\PresenceExamen;
 use App\Models\ResultatFusion;
 use App\Services\FusionService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Services\CalculAcademiqueService;
 use App\Exports\ResultatsVerificationExport;
+use Livewire\WithPagination;
 
 /**
  * @property \Illuminate\Support\Collection $niveaux
@@ -27,8 +27,11 @@ use App\Exports\ResultatsVerificationExport;
  * @property \Illuminate\Support\Collection $salles
  * @property \Illuminate\Support\Collection $ecs
  */
+
 class ResultatVerification extends Component
 {
+    use WithPagination;
+
     public $examenId;
     public $etapeFusion = 0;
     public $resultats = [];
@@ -55,11 +58,19 @@ class ResultatVerification extends Component
     public $afficherMoyennesUE = false;
     protected $fusionService;
     protected $calculService;
-
-    
-
+    public $enseignant_id = '';
+    public $enseignants = [];
     public $statistiquesPresence = [];
-    public $afficherInfosPresence = true; 
+    public $afficherInfosPresence = true;
+
+    // Cache pour optimiser les performances
+    private $cacheEtudiants = [];
+    private $cacheMoyennesUE = [];
+    private $cacheMoyennesGenerales = [];
+    
+    // Pagination
+    public $perPage = 150;
+    public $page = 1;
 
     public function __construct()
     {
@@ -72,7 +83,6 @@ class ResultatVerification extends Component
         $this->examenId = $examenId;
         $this->afficherMoyennesUE = session('afficher_moyennes_ue', false);
 
-        // Code existant inchangé jusqu'à loadEcs()
         $this->examen = Examen::with(['niveau', 'parcours'])->find($this->examenId);
 
         if (!$this->examen) {
@@ -98,26 +108,16 @@ class ResultatVerification extends Component
         $this->loadParcours();
         $this->loadEcs();
         $this->checkEtapeFusion();
-        
-        // ✅ NOUVEAU : Charger les données de présence
         $this->chargerDonneesPresence();
-        
         $this->loadResultats();
     }
 
-
     public function updatedAfficherMoyennesUE($value)
     {
-        // Sauvegarder l'état dans la session
         session(['afficher_moyennes_ue' => $value]);
-        
-        // Recharger les résultats pour appliquer le changement
         $this->loadResultats();
-        
-        // Émettre un événement pour le JavaScript (optionnel)
         $this->dispatch('moyennesUEToggled', $value);
         
-        // Message de feedback
         if ($value) {
             toastr()->info('Mode moyennes UE activé - Les exports incluront les calculs UE');
         } else {
@@ -125,13 +125,11 @@ class ResultatVerification extends Component
         }
     }
 
-
     public function toggleMoyennesUE()
     {
         $this->afficherMoyennesUE = !$this->afficherMoyennesUE;
         $this->updatedAfficherMoyennesUE($this->afficherMoyennesUE);
     }
-
 
     public function loadParcours()
     {
@@ -159,6 +157,11 @@ class ResultatVerification extends Component
             })
             ->orderBy('id', 'asc')
             ->get();
+
+            $this->enseignants = $this->ecs->pluck('enseignant')->unique()->filter()->map(function ($enseignant) {
+                return ['id' => $enseignant, 'nom' => $enseignant];
+            })->values();
+
         } elseif ($this->niveau_id) {
             $this->ecs = EC::whereHas('ue', function($query) {
                 $query->where('niveau_id', $this->niveau_id);
@@ -169,6 +172,10 @@ class ResultatVerification extends Component
             $this->ecs = collect();
         }
 
+        $this->enseignants = $this->ecs->pluck('enseignant')->unique()->filter()->map(function ($enseignant) {
+            return ['id' => $enseignant, 'nom' => $enseignant];
+        })->values();
+
         if ($this->ec_id && !$this->ecs->pluck('id')->contains($this->ec_id)) {
             $this->ec_id = null;
         }
@@ -176,7 +183,6 @@ class ResultatVerification extends Component
 
     public function checkEtapeFusion()
     {
-        // CORRECTION : Filtrer par session active pour éviter les conflits entre sessions
         $this->etapeFusion = ResultatFusion::where('examen_id', $this->examenId)
             ->where('session_exam_id', $this->sessionActive->id)
             ->max('etape_fusion') ?? 0;
@@ -188,14 +194,148 @@ class ResultatVerification extends Component
         }
     }
 
-    /**
-     * Calcule les moyennes UE pour un étudiant
-     */
-    private function calculerMoyennesUEEtudiant($etudiantId)
+    // Pré-charger toutes les données nécessaires en une seule fois
+    private function preloadAllData()
     {
+        if (!$this->showVerification) return [collect(), collect()];
+
+        $resultatsQuery = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
+            ->where('etape_fusion', $this->etapeFusion)
+            ->with([
+                'etudiant:id,matricule,nom,prenom',
+                'ec:id,nom,enseignant,ue_id',
+                'ec.ue:id,nom,abr,credits'
+            ]);
+
+        if ($this->enseignant_id) {
+            $resultatsQuery->whereHas('ec', function ($q) {
+                $q->where('enseignant', $this->enseignant_id);
+            });
+        }
+
+        if ($this->ec_id) {
+            $resultatsQuery->where('ec_id', $this->ec_id);
+        }
+
+        if ($this->search) {
+            $resultatsQuery->whereHas('etudiant', function ($q) {
+                $q->where('matricule', 'like', '%' . $this->search . '%')
+                    ->orWhere('nom', 'like', '%' . $this->search . '%')
+                    ->orWhere('prenom', 'like', '%' . $this->search . '%');
+            });
+        }
+
+        $allResultats = $resultatsQuery->get();
+
+        $codesAnonymat = $allResultats->pluck('code_anonymat_id')->unique();
+        $ecIds = $allResultats->pluck('ec_id')->unique();
+        
+        $copies = Copie::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->whereIn('code_anonymat_id', $codesAnonymat)
+            ->whereIn('ec_id', $ecIds)
+            ->get()
+            ->keyBy(function($copie) {
+                return $copie->code_anonymat_id . '_' . $copie->ec_id;
+            });
+
+        return [$allResultats, $copies];
+    }
+
+    // Calcul des moyennes UE en lot
+    private function calculerMoyennesUEBatch($etudiantIds)
+    {
+        if (empty($etudiantIds)) return [];
+
+        $resultatsUE = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->whereIn('etudiant_id', $etudiantIds)
+            ->where('etape_fusion', $this->etapeFusion)
+            ->with(['ec:id,ue_id', 'ec.ue:id,nom,abr,credits,coefficient'])
+            ->get()
+            ->groupBy(['etudiant_id', 'ec.ue_id']);
+
         $moyennesUE = [];
 
-        // CORRECTION : Filtrer par session active
+        foreach ($resultatsUE as $etudiantId => $resultatsParUE) {
+            $moyennesUE[$etudiantId] = [];
+            
+            foreach ($resultatsParUE as $ueId => $resultatsUEEtudiant) {
+                if (!$ueId) continue;
+
+                $ue = $resultatsUEEtudiant->first()->ec->ue;
+                $noteEliminatoire = $resultatsUEEtudiant->where('note', 0)->isNotEmpty();
+                
+                $notesUE = $resultatsUEEtudiant->pluck('note')->filter(function($note) {
+                    return $note !== null && is_numeric($note);
+                });
+
+                if ($notesUE->isNotEmpty()) {
+                    $moyenneUE = $notesUE->avg();
+                    $ueValidee = $moyenneUE >= 10 && !$noteEliminatoire;
+                    $creditsObtenus = $ueValidee ? ($ue->credits ?? 0) : 0;
+
+                    $moyennesUE[$etudiantId][$ueId] = [
+                        'nom' => $ue->nom,
+                        'moyenne' => $moyenneUE,
+                        'coefficient' => $ue->coefficient ?? 1,
+                        'credits' => $ue->credits ?? 0,
+                        'credits_obtenus' => $creditsObtenus,
+                        'validee' => $ueValidee,
+                        'note_eliminatoire' => $noteEliminatoire,
+                        'nb_ec' => $notesUE->count()
+                    ];
+                }
+            }
+        }
+
+        return $moyennesUE;
+    }
+
+    // Calcul des moyennes générales en lot
+    private function calculerMoyennesGeneralesBatch($etudiantIds, $moyennesUEBatch)
+    {
+        $moyennesGenerales = [];
+
+        foreach ($etudiantIds as $etudiantId) {
+            if (!isset($moyennesUEBatch[$etudiantId])) {
+                $moyennesGenerales[$etudiantId] = null;
+                continue;
+            }
+
+            $moyennesUE = $moyennesUEBatch[$etudiantId];
+            if (empty($moyennesUE)) {
+                $moyennesGenerales[$etudiantId] = null;
+                continue;
+            }
+
+            $sommesMoyennesUE = 0;
+            $nombreUE = 0;
+
+            foreach ($moyennesUE as $donneesUE) {
+                if ($donneesUE['moyenne'] !== null && is_numeric($donneesUE['moyenne'])) {
+                    $sommesMoyennesUE += $donneesUE['moyenne'];
+                    $nombreUE++;
+                }
+            }
+
+            $moyennesGenerales[$etudiantId] = $nombreUE > 0 ? $sommesMoyennesUE / $nombreUE : null;
+        }
+
+        return $moyennesGenerales;
+    }
+
+    // Méthodes fallback pour calculs individuels
+    private function calculerMoyennesUEEtudiant($etudiantId)
+    {
+        if (isset($this->cacheMoyennesUE[$etudiantId])) {
+            return $this->cacheMoyennesUE[$etudiantId];
+        }
+
+        $moyennesUE = [];
+
         $resultatsEtudiant = ResultatFusion::where('examen_id', $this->examenId)
             ->where('etudiant_id', $etudiantId)
             ->where('etape_fusion', $this->etapeFusion)
@@ -203,7 +343,6 @@ class ResultatVerification extends Component
             ->with(['ec', 'ec.ue'])
             ->get();
 
-        // Grouper par UE
         $resultatsParUE = $resultatsEtudiant->groupBy(function($resultat) {
             return $resultat->ec->ue->id ?? null;
         });
@@ -212,27 +351,22 @@ class ResultatVerification extends Component
             if (!$ueId) continue;
 
             $ue = $resultatsUE->first()->ec->ue;
-
-            // Vérifier s'il y a une note éliminatoire (0)
             $noteEliminatoire = $resultatsUE->where('note', 0)->isNotEmpty();
 
-            // Calculer la moyenne UE : somme des notes EC / nombre d'EC
             $notesUE = $resultatsUE->pluck('note')->filter(function($note) {
                 return $note !== null && is_numeric($note);
             });
 
             if ($notesUE->isNotEmpty()) {
                 $moyenneUE = $notesUE->avg();
-
-                // Appliquer les règles métier
                 $ueValidee = $moyenneUE >= 10 && !$noteEliminatoire;
-                $creditsObtenus = $ueValidee ? ($ue->credit ?? 0) : 0;
+                $creditsObtenus = $ueValidee ? ($ue->credits ?? 0) : 0;
 
                 $moyennesUE[$ueId] = [
                     'nom' => $ue->nom,
                     'moyenne' => $moyenneUE,
                     'coefficient' => $ue->coefficient ?? 1,
-                    'credit' => $ue->credit ?? 0,
+                    'credits' => $ue->credits ?? 0,
                     'credits_obtenus' => $creditsObtenus,
                     'validee' => $ueValidee,
                     'note_eliminatoire' => $noteEliminatoire,
@@ -241,22 +375,22 @@ class ResultatVerification extends Component
             }
         }
 
+        $this->cacheMoyennesUE[$etudiantId] = $moyennesUE;
         return $moyennesUE;
     }
 
-    /**
-     * Calcule la moyenne générale d'un étudiant
-     */
     private function calculerMoyenneGeneraleEtudiant($etudiantId)
     {
-        // Récupérer les moyennes UE de l'étudiant
+        if (isset($this->cacheMoyennesGenerales[$etudiantId])) {
+            return $this->cacheMoyennesGenerales[$etudiantId];
+        }
+
         $moyennesUE = $this->calculerMoyennesUEEtudiant($etudiantId);
 
         if (empty($moyennesUE)) {
             return null;
         }
 
-        // Calculer selon votre logique : somme des moyennes UE / nombre d'UE
         $sommesMoyennesUE = 0;
         $nombreUE = 0;
 
@@ -267,16 +401,19 @@ class ResultatVerification extends Component
             }
         }
 
-        return $nombreUE > 0 ? $sommesMoyennesUE / $nombreUE : null;
+        $moyenneGenerale = $nombreUE > 0 ? $sommesMoyennesUE / $nombreUE : null;
+        $this->cacheMoyennesGenerales[$etudiantId] = $moyenneGenerale;
+        
+        return $moyenneGenerale;
     }
 
     public function loadResultats()
     {
+        $this->viderCaches();
         $this->noExamenFound = false;
         $this->resultats = [];
 
         if ($this->niveau_id && $this->parcours_id) {
-            // CORRECTION : Suppression de la condition sur session_id
             $examenExists = Examen::where('niveau_id', $this->niveau_id)
                 ->where('parcours_id', $this->parcours_id)
                 ->exists();
@@ -294,136 +431,297 @@ class ResultatVerification extends Component
             return;
         }
 
-        // CORRECTION : Ajout du filtre par session active
-        $query = ResultatFusion::where('examen_id', $this->examenId)
-            ->where('session_exam_id', $this->sessionActive->id)
-            ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
-            ->where('etape_fusion', $this->etapeFusion)
-            ->with(['etudiant', 'ec', 'ec.ue']);
+        try {
+            // Récupérer TOUS les ECs du niveau/parcours
+            $tousLesECs = $this->getAllECsForExamen();
+            
+            // Récupérer tous les étudiants qui ont au moins un résultat
+            $etudiantsAvecResultats = $this->getEtudiantsAvecResultats();
+            
+            if ($etudiantsAvecResultats->isEmpty()) {
+                $this->calculerStatistiques();
+                return;
+            }
 
-        if ($this->ec_id) {
-            $query->where('ec_id', $this->ec_id);
-        }
+            // Générer le dataset complet avec TOUS les ECs pour chaque étudiant
+            $datasetComplet = $this->genererDatasetComplet($etudiantsAvecResultats, $tousLesECs);
+            
+            // Appliquer la pagination sur le dataset complet
+            $resultatsLimites = $datasetComplet->forPage($this->page, $this->perPage);
+            
+            $etudiantIds = $resultatsLimites->pluck('etudiant_id')->filter()->unique();
 
-        if ($this->search) {
-            $query->whereHas('etudiant', function ($q) {
-                $q->where('matricule', 'like', '%' . $this->search . '%')
-                    ->orWhere('nom', 'like', '%' . $this->search . '%')
-                    ->orWhere('prenom', 'like', '%' . $this->search . '%');
-            });
-        }
+            $moyennesUEBatch = [];
+            if ($this->etapeFusion >= 2 && $etudiantIds->isNotEmpty()) {
+                $moyennesUEBatch = $this->calculerMoyennesUEBatch($etudiantIds->toArray());
+            }
 
-        $resultatsTransformes = $query->get()
-            ->map(function ($resultat, $index) {
-                $etudiant = $resultat->etudiant;
-                $ec = $resultat->ec;
-                $ue = $ec->ue;
-
-                // CORRECTION : Filtrer les copies par session active
-                $copie = Copie::where('examen_id', $resultat->examen_id)
-                    ->where('ec_id', $resultat->ec_id)
-                    ->where('code_anonymat_id', $resultat->code_anonymat_id)
-                    ->where('session_exam_id', $this->sessionActive->id)
-                    ->first();
-
-                $noteAffichee = $resultat->note;
-                $sourceNote = 'resultats_fusion';
-
-                if ($copie && $copie->is_checked) {
-                    $noteAffichee = $copie->note;
-                    $sourceNote = 'copies';
+            // Transformer les résultats pour l'affichage
+            $resultatsTransformes = $resultatsLimites->map(function ($item, $index) use ($moyennesUEBatch) {
+                // Si c'est un EC sans note
+                if (!isset($item['resultat_id'])) {
+                    return [
+                        'id' => null,
+                        'unique_key' => "empty_{$item['etudiant_id']}_{$item['ec_id']}",
+                        'numero_ordre' => ($this->page - 1) * $this->perPage + $index + 1,
+                        'matricule' => $item['matricule'],
+                        'nom' => $item['nom'],
+                        'prenom' => $item['prenom'],
+                        'matiere' => $item['matiere'],
+                        'enseignant' => $item['enseignant'],
+                        'note' => null,
+                        'note_source' => 'empty',
+                        'note_old' => null,
+                        'is_checked' => false,
+                        'commentaire' => '',
+                        'copie_id' => null,
+                        'etudiant_id' => $item['etudiant_id'],
+                        'ec_id' => $item['ec_id'],
+                        'code_anonymat_id' => null,
+                        'ue_id' => $item['ue_id'],
+                        'ue_nom' => $item['ue_nom'],
+                        'ue_abr' => $item['ue_abr'],
+                        'ue_credits' => $item['ue_credits'],
+                        'moyenne_ue' => isset($moyennesUEBatch[$item['etudiant_id']][$item['ue_id']]) 
+                            ? $moyennesUEBatch[$item['etudiant_id']][$item['ue_id']]['moyenne'] 
+                            : null,
+                        'created_at' => null,
+                        'updated_at' => null,
+                    ];
                 }
 
-                // Calcul de la moyenne UE
+                // Si c'est un EC avec note
                 $moyenneUE = null;
-                if ($this->etapeFusion >= 2 && $ue) {
-                    try {
-                        $resultatsUE = ResultatFusion::where('examen_id', $this->examenId)
-                            ->where('etudiant_id', $etudiant->id)
-                            ->where('session_exam_id', $this->sessionActive->id)
-                            ->whereHas('ec', function ($q) use ($ue) {
-                                $q->where('ue_id', $ue->id);
-                            })
-                            ->get();
-
-                        $calculResultat = $this->calculService->calculerResultatUE($ue, $resultatsUE);
-                        $moyenneUE = $calculResultat['moyenne'];
-                    } catch (\Exception $e) {
-                        Log::error('Erreur calcul moyenne UE', [
-                            'etudiant_id' => $etudiant->id,
-                            'ue_id' => $ue->id,
-                            'error' => $e->getMessage(),
-                        ]);
-                        $moyenneUE = null;
-                    }
+                if ($this->etapeFusion >= 2 && isset($moyennesUEBatch[$item['etudiant_id']][$item['ue_id']])) {
+                    $moyenneUE = $moyennesUEBatch[$item['etudiant_id']][$item['ue_id']]['moyenne'];
                 }
-
-                // Calcul de la moyenne générale pour cet étudiant
-                $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiant->id);
 
                 return [
-                    'id' => $resultat->id,
-                    'unique_key' => "rf_{$resultat->id}",
-                    'numero_ordre' => $index + 1,
-                    'matricule' => $etudiant->matricule ?? 'N/A',
-                    'nom' => $etudiant->nom ?? 'N/A',
-                    'prenom' => $etudiant->prenom ?? 'N/A',
-                    'matiere' => $ec->nom ?? 'N/A',
-                    'enseignant' => $ec->enseignant ?? 'Non défini',
-                    'note' => $noteAffichee,
-                    'note_source' => $sourceNote,
-                    'note_old' => $copie->note_old ?? null,
-                    'is_checked' => $copie->is_checked ?? false,
-                    'commentaire' => $copie->commentaire ?? '',
-                    'copie_id' => $copie->id ?? null,
-                    'etudiant_id' => $resultat->etudiant_id,
-                    'ec_id' => $resultat->ec_id,
-                    'code_anonymat_id' => $resultat->code_anonymat_id,
-                    'ue_id' => $ue->id ?? null,
-                    'ue_nom' => $ue->nom ?? 'N/A',
-                    'ue_abr' => $ue->abr ?? 'UE',
-                    'ue_credits' => $ue->credits ?? 0,
+                    'id' => $item['resultat_id'],
+                    'unique_key' => "rf_{$item['resultat_id']}",
+                    'numero_ordre' => ($this->page - 1) * $this->perPage + $index + 1,
+                    'matricule' => $item['matricule'],
+                    'nom' => $item['nom'],
+                    'prenom' => $item['prenom'],
+                    'matiere' => $item['matiere'],
+                    'enseignant' => $item['enseignant'],
+                    'note' => $item['note_affichee'],
+                    'note_source' => $item['note_source'],
+                    'note_old' => $item['note_old'],
+                    'is_checked' => $item['is_checked'],
+                    'commentaire' => $item['commentaire'],
+                    'copie_id' => $item['copie_id'],
+                    'etudiant_id' => $item['etudiant_id'],
+                    'ec_id' => $item['ec_id'],
+                    'code_anonymat_id' => $item['code_anonymat_id'],
+                    'ue_id' => $item['ue_id'],
+                    'ue_nom' => $item['ue_nom'],
+                    'ue_abr' => $item['ue_abr'],
+                    'ue_credits' => $item['ue_credits'],
                     'moyenne_ue' => $moyenneUE,
-                    'moyenne_generale' => $moyenneGenerale,
-                    'created_at' => $copie->created_at ?? null,
-                    'updated_at' => $copie->updated_at ?? null,
+                    'created_at' => $item['created_at'],
+                    'updated_at' => $item['updated_at'],
                 ];
             });
 
-        if ($this->orderBy && !$resultatsTransformes->isEmpty()) {
-            $champTri = $this->orderBy;
-            $ordreAscendant = $this->orderAsc;
+            if ($this->orderBy && !$resultatsTransformes->isEmpty()) {
+                $champTri = $this->orderBy;
+                $ordreAscendant = $this->orderAsc;
 
-            $resultatsTransformes = $resultatsTransformes->sort(function ($a, $b) use ($champTri, $ordreAscendant) {
-                $valeurA = $a[$champTri] ?? '';
-                $valeurB = $b[$champTri] ?? '';
+                $resultatsTransformes = $resultatsTransformes->sort(function ($a, $b) use ($champTri, $ordreAscendant) {
+                    $valeurA = $a[$champTri] ?? '';
+                    $valeurB = $b[$champTri] ?? '';
 
-                if (in_array($champTri, ['moyenne_ue', 'moyenne_generale']) && ($valeurA === null || $valeurB === null)) {
-                    if ($valeurA === null && $valeurB === null) {
-                        return 0;
+                    if (in_array($champTri, ['moyenne_ue']) && ($valeurA === null || $valeurB === null)) {
+                        if ($valeurA === null && $valeurB === null) {
+                            return 0;
+                        }
+                        return $valeurA === null ? 1 : -1;
                     }
-                    return $valeurA === null ? 1 : -1;
-                }
 
-                if (is_numeric($valeurA) && is_numeric($valeurB)) {
-                    $comparaison = $valeurA <=> $valeurB;
-                } else {
-                    $comparaison = strcasecmp($valeurA, $valeurB);
-                }
+                    if (is_numeric($valeurA) && is_numeric($valeurB)) {
+                        $comparaison = $valeurA <=> $valeurB;
+                    } else {
+                        $comparaison = strcasecmp($valeurA, $valeurB);
+                    }
 
-                return $ordreAscendant ? $comparaison : -$comparaison;
+                    return $ordreAscendant ? $comparaison : -$comparaison;
+                });
+            }
+
+            $this->resultats = $resultatsTransformes->values()->toArray();
+            $this->totalResultats = $datasetComplet->count();
+            
+            // Calculer les statistiques sur le dataset complet
+            $this->calculerStatistiquesAvecDatasetComplet($datasetComplet);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du chargement des résultats complets', [
+                'error' => $e->getMessage(),
+                'memory_usage' => memory_get_usage(true),
+                'memory_peak' => memory_get_peak_usage(true),
+                'examen_id' => $this->examenId,
+                'session_id' => $this->sessionActive->id
+            ]);
+            toastr()->error('Erreur lors du chargement des résultats : ' . $e->getMessage());
+        }
+    }
+
+    // Nouvelle méthode pour récupérer tous les ECs
+    private function getAllECsForExamen()
+    {
+        $query = EC::whereHas('ue', function($q) {
+            $q->where('niveau_id', $this->examen->niveau_id)
+              ->where('parcours_id', $this->examen->parcours_id);
+        })->with(['ue:id,nom,abr,credits']);
+
+        if ($this->ec_id) {
+            $query->where('id', $this->ec_id);
+        }
+
+        if ($this->enseignant_id) {
+            $query->where('enseignant', $this->enseignant_id);
+        }
+
+        return $query->orderBy('id', 'asc')->get();
+    }
+
+    // Nouvelle méthode pour récupérer les étudiants avec au moins un résultat
+    private function getEtudiantsAvecResultats()
+    {
+        $query = \App\Models\Etudiant::whereHas('resultatsFusion', function($q) {
+            $q->where('examen_id', $this->examenId)
+              ->where('session_exam_id', $this->sessionActive->id)
+              ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
+              ->where('etape_fusion', $this->etapeFusion);
+        });
+
+        if ($this->search) {
+            $query->where(function($q) {
+                $q->where('matricule', 'like', '%' . $this->search . '%')
+                  ->orWhere('nom', 'like', '%' . $this->search . '%')
+                  ->orWhere('prenom', 'like', '%' . $this->search . '%');
             });
         }
 
-        $this->resultats = $resultatsTransformes->values()->map(function ($resultat, $index) {
-            $resultat['numero_ordre'] = $index + 1;
-            return $resultat;
-        })->toArray();
-
-        $this->calculerStatistiques();
+        return $query->select('id', 'matricule', 'nom', 'prenom')
+                    ->orderBy('matricule')
+                    ->get();
     }
 
-    public function calculerStatistiques()
+    // Nouvelle méthode pour générer le dataset complet
+    private function genererDatasetComplet($etudiants, $ecs)
+    {
+        $datasetComplet = collect();
+
+        // Récupérer tous les résultats existants
+        $resultatsExistants = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
+            ->where('etape_fusion', $this->etapeFusion)
+            ->with(['etudiant:id,matricule,nom,prenom', 'ec:id,nom,enseignant,ue_id', 'ec.ue:id,nom,abr,credits'])
+            ->get()
+            ->keyBy(function($item) {
+                return $item->etudiant_id . '_' . $item->ec_id;
+            });
+
+        // Récupérer toutes les copies
+        $copies = Copie::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->get()
+            ->keyBy(function($copie) {
+                return $copie->code_anonymat_id . '_' . $copie->ec_id;
+            });
+
+        foreach ($etudiants as $etudiant) {
+            foreach ($ecs as $ec) {
+                $key = $etudiant->id . '_' . $ec->id;
+                $resultat = $resultatsExistants->get($key);
+
+                if ($resultat) {
+                    // EC avec résultat
+                    $copieKey = $resultat->code_anonymat_id . '_' . $resultat->ec_id;
+                    $copie = $copies->get($copieKey);
+
+                    $noteAffichee = $resultat->note;
+                    $sourceNote = 'resultats_fusion';
+
+                    if ($copie && $copie->is_checked) {
+                        $noteAffichee = $copie->note;
+                        $sourceNote = 'copies';
+                    }
+
+                    $datasetComplet->push([
+                        'resultat_id' => $resultat->id,
+                        'etudiant_id' => $etudiant->id,
+                        'matricule' => $etudiant->matricule,
+                        'nom' => $etudiant->nom,
+                        'prenom' => $etudiant->prenom,
+                        'ec_id' => $ec->id,
+                        'matiere' => $ec->nom,
+                        'enseignant' => $ec->enseignant ?? 'Non défini',
+                        'ue_id' => $ec->ue->id,
+                        'ue_nom' => $ec->ue->nom,
+                        'ue_abr' => $ec->ue->abr ?? 'UE',
+                        'ue_credits' => $ec->ue->credits ?? 0,
+                        'note_affichee' => $noteAffichee,
+                        'note_source' => $sourceNote,
+                        'note_old' => $copie->note_old ?? null,
+                        'is_checked' => $copie->is_checked ?? false,
+                        'commentaire' => $copie->commentaire ?? '',
+                        'copie_id' => $copie->id ?? null,
+                        'code_anonymat_id' => $resultat->code_anonymat_id,
+                        'created_at' => $copie->created_at ?? null,
+                        'updated_at' => $copie->updated_at ?? null,
+                    ]);
+                } else {
+                    // EC sans résultat - afficher vide
+                    $datasetComplet->push([
+                        'etudiant_id' => $etudiant->id,
+                        'matricule' => $etudiant->matricule,
+                        'nom' => $etudiant->nom,
+                        'prenom' => $etudiant->prenom,
+                        'ec_id' => $ec->id,
+                        'matiere' => $ec->nom,
+                        'enseignant' => $ec->enseignant ?? 'Non défini',
+                        'ue_id' => $ec->ue->id,
+                        'ue_nom' => $ec->ue->nom,
+                        'ue_abr' => $ec->ue->abr ?? 'UE',
+                        'ue_credits' => $ec->ue->credits ?? 0,
+                    ]);
+                }
+            }
+        }
+
+        return $datasetComplet;
+    }
+
+    // Nouvelle méthode pour calculer les statistiques avec dataset complet
+    private function calculerStatistiquesAvecDatasetComplet($datasetComplet)
+    {
+        $resultatsAvecNotes = $datasetComplet->filter(function($item) {
+            return isset($item['resultat_id']);
+        });
+
+        $this->resultatsVerifies = $resultatsAvecNotes->where('is_checked', true)->count();
+        $this->resultatsNonVerifies = $resultatsAvecNotes->where('is_checked', false)->count();
+        
+        $totalAvecNotes = $resultatsAvecNotes->count();
+        $this->pourcentageVerification = $totalAvecNotes === 0 ? 0 :
+            round(($this->resultatsVerifies / $totalAvecNotes) * 100, 1);
+
+        if (empty($this->statistiquesPresence)) {
+            $this->chargerDonneesPresence();
+        }
+    }
+
+    // Méthode spéciale pour les exports
+    private function loadResultatsForExport()
+    {
+        $this->loadResultats();
+    }
+
+    private function calculerStatistiquesOptimisees($allResultats = null)
     {
         if (!$this->showVerification) {
             $this->totalResultats = 0;
@@ -433,34 +731,63 @@ class ResultatVerification extends Component
             return;
         }
 
-        // Code existant pour le calcul de base...
-        $totalQuery = ResultatFusion::where('examen_id', $this->examenId)
-            ->where('session_exam_id', $this->sessionActive->id)
-            ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
-            ->where('etape_fusion', $this->etapeFusion);
+        try {
+            if ($allResultats) {
+                $this->totalResultats = $allResultats->count();
+                
+                $copiesVerifiees = Copie::where('examen_id', $this->examenId)
+                    ->where('session_exam_id', $this->sessionActive->id)
+                    ->where('is_checked', true)
+                    ->whereIn('code_anonymat_id', $allResultats->pluck('code_anonymat_id'))
+                    ->whereIn('ec_id', $allResultats->pluck('ec_id'))
+                    ->count();
+                
+                $this->resultatsVerifies = $copiesVerifiees;
+            } else {
+                $baseQuery = ResultatFusion::where('examen_id', $this->examenId)
+                    ->where('session_exam_id', $this->sessionActive->id)
+                    ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
+                    ->where('etape_fusion', $this->etapeFusion);
 
-        if ($this->ec_id) {
-            $totalQuery->where('ec_id', $this->ec_id);
+                if ($this->ec_id) {
+                    $baseQuery->where('ec_id', $this->ec_id);
+                }
+
+                if ($this->search) {
+                    $baseQuery->whereHas('etudiant', function ($q) {
+                        $q->where('matricule', 'like', '%' . $this->search . '%')
+                            ->orWhere('nom', 'like', '%' . $this->search . '%')
+                            ->orWhere('prenom', 'like', '%' . $this->search . '%');
+                    });
+                }
+
+                $this->totalResultats = $baseQuery->count();
+                
+                $this->resultatsVerifies = $baseQuery->whereHas('copie', function($q) {
+                    $q->where('is_checked', true);
+                })->count();
+            }
+
+            $this->resultatsNonVerifies = $this->totalResultats - $this->resultatsVerifies;
+            $this->pourcentageVerification = $this->totalResultats === 0 ? 0 :
+                round(($this->resultatsVerifies / $this->totalResultats) * 100, 1);
+
+            if (empty($this->statistiquesPresence)) {
+                $this->chargerDonneesPresence();
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du calcul des statistiques', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'session_id' => $this->sessionActive->id
+            ]);
         }
+    }
 
-        if ($this->search) {
-            $totalQuery->whereHas('etudiant', function ($q) {
-                $q->where('matricule', 'like', '%' . $this->search . '%')
-                    ->orWhere('nom', 'like', '%' . $this->search . '%')
-                    ->orWhere('prenom', 'like', '%' . $this->search . '%');
-            });
-        }
-
-        $this->totalResultats = $totalQuery->count();
-        $this->resultatsVerifies = collect($this->resultats)->where('is_checked', true)->count();
-        $this->resultatsNonVerifies = $this->totalResultats - $this->resultatsVerifies;
-        $this->pourcentageVerification = $this->totalResultats === 0 ? 0 :
-            round(($this->resultatsVerifies / $this->totalResultats) * 100, 1);
-
-        // ✅ NOUVEAU : Recharger les données de présence si nécessaire
-        if (empty($this->statistiquesPresence)) {
-            $this->chargerDonneesPresence();
-        }
+    public function calculerStatistiques()
+    {
+        $this->calculerStatistiquesOptimisees();
     }
 
     public function marquerTousVerifies()
@@ -490,7 +817,6 @@ class ResultatVerification extends Component
 
                 $copiesIds = $resultatsNonVerifies->pluck('copie_id')->unique();
 
-                // CORRECTION : Ajouter le filtre session_exam_id
                 Copie::whereIn('id', $copiesIds)
                     ->where('session_exam_id', $this->sessionActive->id)
                     ->update([
@@ -721,6 +1047,7 @@ class ResultatVerification extends Component
             $this->niveau_id = $this->examen->niveau_id;
             $this->parcours_id = $this->examen->parcours_id;
             $this->ec_id = null;
+            $this->enseignant_id = null;
             $this->search = '';
 
             $this->loadParcours();
@@ -743,10 +1070,44 @@ class ResultatVerification extends Component
         $this->loadResultats();
     }
 
+    // Méthodes de pagination
+    public function gotoPage($page)
+    {
+        $this->page = $page;
+        $this->loadResultats();
+    }
+
+    public function nextPage()
+    {
+        $maxPages = ceil($this->totalResultats / $this->perPage);
+        if ($this->page < $maxPages) {
+            $this->page++;
+            $this->loadResultats();
+        }
+    }
+
+    public function previousPage()
+    {
+        if ($this->page > 1) {
+            $this->page--;
+            $this->loadResultats();
+        }
+    }
+
+    public function updatedPerPage()
+    {
+        $this->page = 1;
+        $this->loadResultats();
+    }
+
+    // Méthodes de mise à jour des filtres
     public function updatedNiveauId()
     {
+        $this->viderCaches();
         $this->parcours_id = null;
         $this->ec_id = null;
+        $this->enseignant_id = null;
+        $this->page = 1;
         $this->loadParcours();
         $this->loadEcs();
         $this->loadResultats();
@@ -754,19 +1115,44 @@ class ResultatVerification extends Component
 
     public function updatedParcoursId()
     {
+        $this->viderCaches();
         $this->ec_id = null;
+        $this->enseignant_id = null;
+        $this->page = 1;
         $this->loadEcs();
         $this->loadResultats();
     }
 
     public function updatedEcId()
     {
+        $this->viderCaches();
+        $this->enseignant_id = null;
+        $this->page = 1;
         $this->loadResultats();
     }
 
     public function updatedSearch()
     {
+        $this->page = 1;
         $this->loadResultats();
+    }
+
+    public function updatedEnseignantId()
+    {
+        $this->page = 1;
+        $this->loadResultats();
+    }
+
+    // Vider les caches
+    private function viderCaches()
+    {
+        $this->cacheEtudiants = [];
+        $this->cacheMoyennesUE = [];
+        $this->cacheMoyennesGenerales = [];
+        
+        if (function_exists('gc_collect_cycles')) {
+            gc_collect_cycles();
+        }
     }
 
     public function getPourcentageVerificationProperty()
@@ -774,13 +1160,156 @@ class ResultatVerification extends Component
         return $this->pourcentageVerification;
     }
 
+
+    /**
+     * Prépare les données complètes pour l'export (tous les EC même sans notes)
+     */
+    private function prepareDataForExportComplet()
+    {
+        // Récupérer TOUS les EC du niveau/parcours
+        $tousLesECs = EC::whereHas('ue', function($query) {
+            $query->where('niveau_id', $this->examen->niveau_id)
+                ->where('parcours_id', $this->examen->parcours_id);
+        })->with(['ue:id,nom,abr,credits'])->orderBy('id')->get();
+
+        // Récupérer tous les étudiants qui ont au moins un résultat
+        $etudiantsAvecResultats = $this->getEtudiantsAvecResultats();
+        
+        if ($etudiantsAvecResultats->isEmpty()) {
+            return [];
+        }
+
+        // Récupérer tous les résultats existants
+        $resultatsExistants = ResultatFusion::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
+            ->where('etape_fusion', $this->etapeFusion)
+            ->with(['etudiant:id,matricule,nom,prenom'])
+            ->get()
+            ->keyBy(function($item) {
+                return $item->etudiant_id . '_' . $item->ec_id;
+            });
+
+        // Récupérer toutes les copies
+        $copies = Copie::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->get()
+            ->keyBy(function($copie) {
+                return $copie->code_anonymat_id . '_' . $copie->ec_id;
+            });
+
+        $datasetComplet = collect();
+
+        // Générer le dataset complet avec TOUS les EC pour chaque étudiant
+        foreach ($etudiantsAvecResultats as $etudiant) {
+            foreach ($tousLesECs as $ec) {
+                $key = $etudiant->id . '_' . $ec->id;
+                $resultat = $resultatsExistants->get($key);
+
+                if ($resultat) {
+                    // EC avec résultat existant
+                    $copieKey = $resultat->code_anonymat_id . '_' . $resultat->ec_id;
+                    $copie = $copies->get($copieKey);
+
+                    $noteAffichee = $resultat->note;
+                    $sourceNote = 'resultats_fusion';
+
+                    if ($copie && $copie->is_checked) {
+                        $noteAffichee = $copie->note;
+                        $sourceNote = 'copies';
+                    }
+
+                    $datasetComplet->push([
+                        'id' => $resultat->id,
+                        'unique_key' => "rf_{$resultat->id}",
+                        'matricule' => $etudiant->matricule,
+                        'nom' => $etudiant->nom,
+                        'prenom' => $etudiant->prenom,
+                        'matiere' => $ec->nom,
+                        'enseignant' => $ec->enseignant ?? 'Non défini',
+                        'note' => $noteAffichee,
+                        'note_source' => $sourceNote,
+                        'note_old' => $copie->note_old ?? null,
+                        'is_checked' => $copie->is_checked ?? false,
+                        'commentaire' => $copie->commentaire ?? '',
+                        'copie_id' => $copie->id ?? null,
+                        'etudiant_id' => $etudiant->id,
+                        'ec_id' => $ec->id,
+                        'code_anonymat_id' => $resultat->code_anonymat_id,
+                        'ue_id' => $ec->ue->id,
+                        'ue_nom' => $ec->ue->nom,
+                        'ue_abr' => $ec->ue->abr ?? 'UE',
+                        'ue_credits' => $ec->ue->credits ?? 0,
+                        'created_at' => $copie->created_at ?? null,
+                        'updated_at' => $copie->updated_at ?? null,
+                    ]);
+                } else {
+                    // EC sans résultat - créer une entrée vide
+                    $datasetComplet->push([
+                        'id' => null,
+                        'unique_key' => "empty_{$etudiant->id}_{$ec->id}",
+                        'matricule' => $etudiant->matricule,
+                        'nom' => $etudiant->nom,
+                        'prenom' => $etudiant->prenom,
+                        'matiere' => $ec->nom,
+                        'enseignant' => $ec->enseignant ?? 'Non défini',
+                        'note' => null,
+                        'note_source' => 'empty',
+                        'note_old' => null,
+                        'is_checked' => false,
+                        'commentaire' => '',
+                        'copie_id' => null,
+                        'etudiant_id' => $etudiant->id,
+                        'ec_id' => $ec->id,
+                        'code_anonymat_id' => null,
+                        'ue_id' => $ec->ue->id,
+                        'ue_nom' => $ec->ue->nom,
+                        'ue_abr' => $ec->ue->abr ?? 'UE',
+                        'ue_credits' => $ec->ue->credits ?? 0,
+                        'created_at' => null,
+                        'updated_at' => null,
+                    ]);
+                }
+            }
+        }
+
+        return $datasetComplet->toArray();
+    }
+
+
     public function exportExcel()
     {
         try {
-            // Préparer les données avec présence
-            $resultatsEnrichis = $this->prepareDataForExport();
+            // Calculer le nombre d'étudiants pour estimer la taille
+            $nombreEtudiants = $this->resultats ? collect($this->resultats)->groupBy('matricule')->count() : 0;
+            $nombreColonnes = 2 + ($this->afficherMoyennesUE ? 1 : 0) + ($nombreEtudiants * 2);
+            
+            // Protection contre les exports trop volumineux
+            if ($nombreEtudiants > 200) {
+                toastr()->error("Export trop volumineux : {$nombreEtudiants} étudiants généreraient {$nombreColonnes} colonnes. Veuillez filtrer les données.");
+                return;
+            }
+            
+            if ($this->totalResultats > 10000) {
+                toastr()->warning('Export volumineux détecté. Cela peut prendre du temps...');
+            }
 
-            // ✅ NOUVEAU : Ajouter les métadonnées de présence
+            ini_set('memory_limit', '2048M');
+            ini_set('max_execution_time', 300); // 5 minutes
+            
+            // Utiliser la nouvelle méthode pour récupérer TOUTES les données
+            $resultatsEnrichis = $this->prepareDataForExportComplet();
+
+            if (empty($resultatsEnrichis)) {
+                toastr()->error('Aucune donnée à exporter.');
+                return;
+            }
+
+            // Ajouter les moyennes UE si nécessaire
+            if ($this->afficherMoyennesUE) {
+                $resultatsEnrichis = $this->enrichirAvecMoyennesUE($resultatsEnrichis);
+            }
+
             $metadonneesPresence = [
                 'statistiques_presence' => $this->statistiquesPresence,
                 'statistiques_verification' => [
@@ -794,79 +1323,81 @@ class ResultatVerification extends Component
                     'type' => $this->sessionActive->type,
                     'annee_universitaire' => $this->sessionActive->anneeUniversitaire->nom ?? 'N/A',
                     'date_export' => now()->format('Y-m-d H:i:s')
+                ],
+                'export_info' => [
+                    'nombre_etudiants' => $nombreEtudiants,
+                    'nombre_colonnes' => $nombreColonnes,
+                    'format' => 'paysage'
                 ]
             ];
 
             $filename = $this->generateFilename('xlsx');
+
+            Log::info('Début export Excel format paysage', [
+                'examen_id' => $this->examenId,
+                'nombre_etudiants' => $nombreEtudiants,
+                'nombre_colonnes' => $nombreColonnes,
+                'total_resultats' => count($resultatsEnrichis),
+                'avec_moyennes_ue' => $this->afficherMoyennesUE
+            ]);
 
             return Excel::download(
                 new ResultatsVerificationExport(
                     $resultatsEnrichis, 
                     $this->examen, 
                     $this->afficherMoyennesUE,
-                    $metadonneesPresence // ✅ NOUVEAU paramètre
+                    $metadonneesPresence
                 ),
                 $filename
             );
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'export Excel avec présence', [
+            Log::error('Erreur lors de l\'export Excel', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'memory_usage' => memory_get_usage(true),
+                'memory_peak' => memory_get_peak_usage(true),
                 'examen_id' => $this->examenId,
                 'session_exam_id' => $this->sessionActive->id,
                 'user_id' => Auth::id(),
-                'statistiques_presence' => $this->statistiquesPresence
+                'nombre_etudiants' => $nombreEtudiants ?? 'inconnu'
             ]);
             toastr()->error('Erreur lors de l\'export Excel : ' . $e->getMessage());
+        } finally {
+            ini_set('memory_limit', '512M');
+            ini_set('max_execution_time', 30);
         }
     }
 
-    public function exportPdf($orientation = 'landscape')
+
+    /**
+     * Enrichit les données avec les moyennes UE pour l'export
+     */
+    private function enrichirAvecMoyennesUE($resultats)
     {
-        try {
-            // Préparer les données avec présence
-            $resultatsEnrichis = $this->prepareDataForExport();
+        $resultatsGroupes = collect($resultats)->groupBy('matricule');
+        $resultatsEnrichis = [];
 
-            $data = [
-                'resultats' => $resultatsEnrichis,
-                'examen' => $this->examen,
-                'sessionActive' => $this->sessionActive,
-                'afficherMoyennesUE' => $this->afficherMoyennesUE,
-                'statistiques' => [
-                    'total' => $this->totalResultats,
-                    'verifiees' => $this->resultatsVerifies,
-                    'non_verifiees' => $this->resultatsNonVerifies,
-                    'pourcentage_verification' => $this->pourcentageVerification,
-                    'avec_moyennes_ue' => $this->afficherMoyennesUE,
-                    'etape_fusion' => $this->etapeFusion
-                ],
-                // ✅ NOUVEAU : Données de présence
-                'statistiques_presence' => $this->statistiquesPresence,
-                'coherence_presence' => $this->calculerCoherencePresence(),
-                'dateExport' => now()->format('d/m/Y H:i:s')
-            ];
+        foreach ($resultatsGroupes as $matricule => $resultatsEtudiant) {
+            $premierResultat = $resultatsEtudiant->first();
+            $etudiantId = $premierResultat['etudiant_id'];
 
-            $pdf = Pdf::loadView('exports.resultats-verification-pdf', $data)
-                    ->setPaper('a4', $orientation);
+            // Calculer les moyennes UE pour cet étudiant
+            $moyennesUE = $this->calculerMoyennesUEEtudiant($etudiantId);
 
-            $filename = $this->generateFilename('pdf');
+            foreach ($resultatsEtudiant as $resultat) {
+                if (isset($resultat['ue_id']) && isset($moyennesUE[$resultat['ue_id']])) {
+                    $resultat['moyenne_ue'] = $moyennesUE[$resultat['ue_id']]['moyenne'];
+                } else {
+                    $resultat['moyenne_ue'] = null;
+                }
 
-            return response()->streamDownload(function() use ($pdf) {
-                echo $pdf->output();
-            }, $filename, ['Content-Type' => 'application/pdf']);
-
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'export PDF avec présence', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'examen_id' => $this->examenId,
-                'session_exam_id' => $this->sessionActive->id,
-                'user_id' => Auth::id(),
-                'statistiques_presence' => $this->statistiquesPresence
-            ]);
-            toastr()->error('Erreur lors de l\'export PDF : ' . $e->getMessage());
+                $resultatsEnrichis[] = $resultat;
+            }
         }
+
+        return $resultatsEnrichis;
     }
 
     private function generateFilename($extension)
@@ -878,7 +1409,6 @@ class ResultatVerification extends Component
 
         $suffixeMoyennes = $this->afficherMoyennesUE ? '-avec-moyennes-UE' : '-sans-moyennes';
         
-        // ✅ NOUVEAU : Ajouter info présence
         $suffixePresence = '';
         if ($this->statistiquesPresence) {
             $tauxPresence = $this->statistiquesPresence['taux_presence'];
@@ -888,15 +1418,49 @@ class ResultatVerification extends Component
         return "resultats-verification-{$niveau}-{$parcours}-{$sessionType}{$suffixeMoyennes}{$suffixePresence}-{$date}.{$extension}";
     }
 
+    private function prepareDataForExportOptimized()
+    {
+        if ($this->totalResultats <= $this->perPage) {
+            return $this->prepareDataForExport();
+        }
+
+        $resultatsEnrichis = [];
+        $chunkSize = 100;
+        
+        for ($page = 1; $page <= ceil($this->totalResultats / $chunkSize); $page++) {
+            $oldPage = $this->page;
+            $oldPerPage = $this->perPage;
+            
+            $this->page = $page;
+            $this->perPage = $chunkSize;
+            
+            $this->loadResultatsForExport();
+            
+            if ($this->afficherMoyennesUE) {
+                $chunk = $this->prepareDataWithMoyennesUE();
+            } else {
+                $chunk = $this->resultats;
+            }
+            
+            $resultatsEnrichis = array_merge($resultatsEnrichis, $chunk);
+            
+            $this->page = $oldPage;
+            $this->perPage = $oldPerPage;
+            
+            $this->viderCaches();
+        }
+
+        return $resultatsEnrichis;
+    }
+
     private function prepareDataForExport()
     {
         $resultatsBase = $this->afficherMoyennesUE ? $this->prepareDataWithMoyennesUE() : $this->resultats;
         
-        // ✅ NOUVEAU : Ajouter les infos de présence à chaque résultat
         if ($this->statistiquesPresence) {
             $resultatsBase = collect($resultatsBase)->map(function($resultat) {
                 $resultat['statistiques_presence'] = $this->statistiquesPresence;
-                $resultat['etudiant_est_present'] = true; // Puisqu'il a des résultats, il était présent
+                $resultat['etudiant_est_present'] = true;
                 return $resultat;
             })->toArray();
         }
@@ -904,131 +1468,100 @@ class ResultatVerification extends Component
         return $resultatsBase;
     }
 
-    /**
-     * CORRECTION : Méthode pour obtenir les statistiques détaillées par session
-     */
-    public function getStatistiquesDetaillees()
+    private function prepareDataWithMoyennesUE()
     {
-        if (!$this->sessionActive || !$this->examen) {
-            return [];
-        }
+        $resultatsGroupes = collect($this->resultats)->groupBy('matricule');
+        $resultatsEnrichis = [];
 
-        $stats = [
-            'session' => [
-                'type' => $this->sessionActive->type,
-                'annee_universitaire' => $this->sessionActive->anneeUniversitaire->nom ?? 'N/A',
-                'is_active' => $this->sessionActive->is_active,
-                'is_current' => $this->sessionActive->is_current
-            ],
-            'examen' => [
-                'nom' => $this->examen->nom,
-                'niveau' => $this->examen->niveau->nom ?? 'N/A',
-                'parcours' => $this->examen->parcours->nom ?? 'N/A'
-            ],
-            'fusion' => [
-                'etape_actuelle' => $this->etapeFusion,
-                'verification_possible' => $this->showVerification
-            ],
-            'resultats' => [
-                'total' => $this->totalResultats,
-                'verifies' => $this->resultatsVerifies,
-                'non_verifies' => $this->resultatsNonVerifies,
-                'pourcentage' => $this->pourcentageVerification
-            ]
-        ];
+        foreach ($resultatsGroupes as $matricule => $resultatsEtudiant) {
+            $premierResultat = $resultatsEtudiant->first();
+            $etudiantId = $premierResultat['etudiant_id'];
 
-        return $stats;
-    }
+            $moyennesUE = $this->calculerMoyennesUEEtudiant($etudiantId);
+            $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiantId);
 
-    /**
-     * CORRECTION : Méthode pour vérifier la cohérence des données par session
-     */
-    public function verifierCoherenceSession()
-    {
-        if (!$this->sessionActive || !$this->examen) {
-            return false;
-        }
-
-        try {
-            // Vérifier que les ResultatFusion correspondent à la session active
-            $resultatsIncorrects = ResultatFusion::where('examen_id', $this->examenId)
-                ->where('session_exam_id', '!=', $this->sessionActive->id)
-                ->count();
-
-            // Vérifier que les Copies correspondent à la session active
-            $copiesIncorrectes = Copie::where('examen_id', $this->examenId)
-                ->where('session_exam_id', '!=', $this->sessionActive->id)
-                ->count();
-
-            if ($resultatsIncorrects > 0 || $copiesIncorrectes > 0) {
-                Log::warning('Incohérence détectée dans les données de session', [
-                    'examen_id' => $this->examenId,
-                    'session_active_id' => $this->sessionActive->id,
-                    'resultats_incorrects' => $resultatsIncorrects,
-                    'copies_incorrectes' => $copiesIncorrectes
-                ]);
-                return false;
-            }
-
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de la vérification de cohérence', [
-                'error' => $e->getMessage(),
-                'examen_id' => $this->examenId,
-                'session_active_id' => $this->sessionActive->id
-            ]);
-            return false;
-        }
-    }
-
-    /**
-     * CORRECTION : Méthode pour nettoyer les données orphelines
-     */
-    public function nettoyerDonneesOrphelines()
-    {
-        if (!Auth::user()->hasPermissionTo('resultats.admin')) {
-            toastr()->error('Permission insuffisante pour cette action');
-            return;
-        }
-
-        try {
-            DB::transaction(function () {
-                // Supprimer les ResultatFusion sans session valide
-                $orphelinesResultats = ResultatFusion::where('examen_id', $this->examenId)
-                    ->whereDoesntHave('sessionExam')
-                    ->delete();
-
-                // Supprimer les Copies sans session valide
-                $orphelinesCopies = Copie::where('examen_id', $this->examenId)
-                    ->whereDoesntHave('sessionExam')
-                    ->delete();
-
-                Log::info('Nettoyage données orphelines effectué', [
-                    'examen_id' => $this->examenId,
-                    'resultats_supprimes' => $orphelinesResultats,
-                    'copies_supprimees' => $orphelinesCopies,
-                    'user_id' => Auth::id()
-                ]);
-
-                if ($orphelinesResultats > 0 || $orphelinesCopies > 0) {
-                    toastr()->success("Nettoyage effectué : {$orphelinesResultats} résultats et {$orphelinesCopies} copies orphelines supprimés.");
-                } else {
-                    toastr()->info('Aucune donnée orpheline trouvée.');
+            foreach ($resultatsEtudiant as $resultat) {
+                if (isset($resultat['ue_id']) && isset($moyennesUE[$resultat['ue_id']])) {
+                    $resultat['moyenne_ue'] = $moyennesUE[$resultat['ue_id']]['moyenne'];
                 }
-            });
 
-            $this->loadResultats();
-        } catch (\Exception $e) {
-            Log::error('Erreur lors du nettoyage', [
-                'error' => $e->getMessage(),
+                $resultat['moyennes_ue_etudiant'] = $moyennesUE;
+                $resultat['moyenne_generale'] = $moyenneGenerale;
+                $resultatsEnrichis[] = $resultat;
+            }
+        }
+
+        return $resultatsEnrichis;
+    }
+
+    private function chargerDonneesPresence()
+    {
+        $this->statistiquesPresence = $this->getStatistiquesAvecPresence();
+        
+        if ($this->statistiquesPresence) {
+            Log::info('Données de présence chargées pour verification', [
                 'examen_id' => $this->examenId,
-                'user_id' => Auth::id()
+                'session_id' => $this->sessionActive->id,
+                'session_type' => $this->sessionActive->type,
+                'total_inscrits' => $this->statistiquesPresence['total_inscrits'],
+                'etudiants_presents' => $this->statistiquesPresence['etudiants_presents'],
+                'taux_presence' => $this->statistiquesPresence['taux_presence'],
+                'source' => $this->statistiquesPresence['source']
             ]);
-            toastr()->error('Erreur lors du nettoyage : ' . $e->getMessage());
         }
     }
 
-    // ✅ Calculer la cohérence entre présence et résultats
+    public function getStatistiquesAvecPresence()
+    {
+        if (!$this->examenId || !$this->sessionActive) {
+            return null;
+        }
+
+        $sessionId = $this->sessionActive->id;
+
+        $presenceGlobale = PresenceExamen::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $sessionId)
+            ->whereNull('ec_id')
+            ->first();
+
+        if (!$presenceGlobale) {
+            $etudiantsPresents = ResultatFusion::where('examen_id', $this->examenId)
+                ->where('session_exam_id', $sessionId)
+                ->distinct('etudiant_id')
+                ->count();
+            
+            $totalInscrits = $this->getTotalEtudiantsInscrits();
+            
+            return [
+                'total_inscrits' => $totalInscrits,
+                'etudiants_presents' => $etudiantsPresents,
+                'etudiants_absents' => $totalInscrits - $etudiantsPresents,
+                'taux_presence' => $totalInscrits > 0 ? round(($etudiantsPresents / $totalInscrits) * 100, 2) : 0,
+                'source' => 'resultats_fusion'
+            ];
+        }
+
+        return [
+            'total_inscrits' => $presenceGlobale->total_attendu ?: $presenceGlobale->total_etudiants,
+            'etudiants_presents' => $presenceGlobale->etudiants_presents,
+            'etudiants_absents' => $presenceGlobale->etudiants_absents,
+            'taux_presence' => $presenceGlobale->taux_presence,
+            'source' => 'presence_enregistree'
+        ];
+    }
+
+    private function getTotalEtudiantsInscrits()
+    {
+        if (!$this->examen) {
+            return 0;
+        }
+
+        return \App\Models\Etudiant::where('niveau_id', $this->examen->niveau_id)
+            ->where('parcours_id', $this->examen->parcours_id)
+            ->where('is_active', true)
+            ->count();
+    }
+
     private function calculerCoherencePresence()
     {
         if (!$this->statistiquesPresence) {
@@ -1048,8 +1581,6 @@ class ResultatVerification extends Component
         ];
     }
 
-
-    // Export spécial "Rapport de présence"
     public function exportRapportPresence()
     {
         if (!$this->statistiquesPresence) {
@@ -1058,7 +1589,6 @@ class ResultatVerification extends Component
         }
 
         try {
-            // Préparer un rapport détaillé de présence
             $rapportPresence = [
                 'examen' => [
                     'id' => $this->examen->id,
@@ -1097,9 +1627,6 @@ class ResultatVerification extends Component
         }
     }
 
-
-
-    // Obtenir les détails des étudiants avec présence
     private function getDetailsEtudiantsPresence()
     {
         $etudiantsAvecResultats = collect($this->resultats)
@@ -1125,139 +1652,11 @@ class ResultatVerification extends Component
         ];
     }
 
-    // Récupérer les statistiques de présence (similaire à FusionIndex)
-    public function getStatistiquesAvecPresence()
-    {
-        if (!$this->examenId || !$this->sessionActive) {
-            return null;
-        }
-
-        $sessionId = $this->sessionActive->id;
-
-        // Récupérer les données de présence
-        $presenceGlobale = PresenceExamen::where('examen_id', $this->examenId)
-            ->where('session_exam_id', $sessionId)
-            ->whereNull('ec_id') // Présence globale
-            ->first();
-
-        if (!$presenceGlobale) {
-            // Fallback : calculer depuis les ResultatFusion
-            $etudiantsPresents = ResultatFusion::where('examen_id', $this->examenId)
-                ->where('session_exam_id', $sessionId)
-                ->distinct('etudiant_id')
-                ->count();
-            
-            $totalInscrits = $this->getTotalEtudiantsInscrits();
-            
-            return [
-                'total_inscrits' => $totalInscrits,
-                'etudiants_presents' => $etudiantsPresents,
-                'etudiants_absents' => $totalInscrits - $etudiantsPresents,
-                'taux_presence' => $totalInscrits > 0 ? round(($etudiantsPresents / $totalInscrits) * 100, 2) : 0,
-                'source' => 'resultats_fusion'
-            ];
-        }
-
-        return [
-            'total_inscrits' => $presenceGlobale->total_attendu ?: $presenceGlobale->total_etudiants,
-            'etudiants_presents' => $presenceGlobale->etudiants_presents,
-            'etudiants_absents' => $presenceGlobale->etudiants_absents,
-            'taux_presence' => $presenceGlobale->taux_presence,
-            'source' => 'presence_enregistree'
-        ];
-    }
-
-
-    // Obtenir le total d'étudiants inscrits
-    private function getTotalEtudiantsInscrits()
-    {
-        if (!$this->examen) {
-            return 0;
-        }
-
-        return \App\Models\Etudiant::where('niveau_id', $this->examen->niveau_id)
-            ->where('parcours_id', $this->examen->parcours_id)
-            ->where('is_active', true)
-            ->count();
-    }
-
-
-    // Charger les données de présence
-    private function chargerDonneesPresence()
-    {
-        $this->statistiquesPresence = $this->getStatistiquesAvecPresence();
-        
-        if ($this->statistiquesPresence) {
-            Log::info('Données de présence chargées pour verification', [
-                'examen_id' => $this->examenId,
-                'session_id' => $this->sessionActive->id,
-                'session_type' => $this->sessionActive->type,
-                'total_inscrits' => $this->statistiquesPresence['total_inscrits'],
-                'etudiants_presents' => $this->statistiquesPresence['etudiants_presents'],
-                'taux_presence' => $this->statistiquesPresence['taux_presence'],
-                'source' => $this->statistiquesPresence['source']
-            ]);
-        }
-    }
-
-    //  Obtenir les statistiques détaillées avec présence
-    public function getStatistiquesDetailleesAvecPresence()
-    {
-        $statsBase = $this->getStatistiquesDetaillees();
-        
-        if ($this->statistiquesPresence) {
-            $statsBase['presence'] = $this->statistiquesPresence;
-            
-            // Calculer des ratios utiles
-            if ($this->statistiquesPresence['etudiants_presents'] > 0) {
-                $statsBase['ratios'] = [
-                    'resultats_par_present' => round($this->totalResultats / $this->statistiquesPresence['etudiants_presents'], 2),
-                    'verification_vs_presents' => round(($this->resultatsVerifies / $this->statistiquesPresence['etudiants_presents']) * 100, 1),
-                    'couverture_fusion' => round(($this->totalResultats / ($this->statistiquesPresence['etudiants_presents'] * count($this->ecs))) * 100, 1)
-                ];
-            }
-        }
-        
-        return $statsBase;
-    }
-
-
-    //  Préparation des données avec moyennes UE (séparée pour clarté)
-    private function prepareDataWithMoyennesUE()
-    {
-        $resultatsGroupes = collect($this->resultats)->groupBy('matricule');
-        $resultatsEnrichis = [];
-
-        foreach ($resultatsGroupes as $matricule => $resultatsEtudiant) {
-            $premierResultat = $resultatsEtudiant->first();
-            $etudiantId = $premierResultat['etudiant_id'];
-
-            // Calculer les moyennes UE pour cet étudiant
-            $moyennesUE = $this->calculerMoyennesUEEtudiant($etudiantId);
-            $moyenneGenerale = $this->calculerMoyenneGeneraleEtudiant($etudiantId);
-
-            foreach ($resultatsEtudiant as $resultat) {
-                // Ajouter la moyenne UE pour ce résultat
-                if (isset($resultat['ue_id']) && isset($moyennesUE[$resultat['ue_id']])) {
-                    $resultat['moyenne_ue'] = $moyennesUE[$resultat['ue_id']]['moyenne'];
-                }
-
-                $resultat['moyennes_ue_etudiant'] = $moyennesUE;
-                $resultat['moyenne_generale'] = $moyenneGenerale;
-                $resultatsEnrichis[] = $resultat;
-            }
-        }
-
-        return $resultatsEnrichis;
-    }
-
-    //  Toggle affichage des infos de présence
     public function toggleInfosPresence()
     {
         $this->afficherInfosPresence = !$this->afficherInfosPresence;
     }
 
-    //  Diagnostiquer les écarts de présence
     public function diagnostiquerEcartsPresence()
     {
         if (!$this->statistiquesPresence) {
@@ -1299,13 +1698,154 @@ class ResultatVerification extends Component
         }
     }
 
+    public function getStatistiquesDetailleesAvecPresence()
+    {
+        $statsBase = $this->getStatistiquesDetaillees();
+        
+        if ($this->statistiquesPresence) {
+            $statsBase['presence'] = $this->statistiquesPresence;
+            
+            if ($this->statistiquesPresence['etudiants_presents'] > 0) {
+                $statsBase['ratios'] = [
+                    'resultats_par_present' => round($this->totalResultats / $this->statistiquesPresence['etudiants_presents'], 2),
+                    'verification_vs_presents' => round(($this->resultatsVerifies / $this->statistiquesPresence['etudiants_presents']) * 100, 1),
+                    'couverture_fusion' => round(($this->totalResultats / ($this->statistiquesPresence['etudiants_presents'] * count($this->ecs))) * 100, 1)
+                ];
+            }
+        }
+        
+        return $statsBase;
+    }
+
+    public function getStatistiquesDetaillees()
+    {
+        if (!$this->sessionActive || !$this->examen) {
+            return [];
+        }
+
+        $stats = [
+            'session' => [
+                'type' => $this->sessionActive->type,
+                'annee_universitaire' => $this->sessionActive->anneeUniversitaire->nom ?? 'N/A',
+                'is_active' => $this->sessionActive->is_active,
+                'is_current' => $this->sessionActive->is_current
+            ],
+            'examen' => [
+                'nom' => $this->examen->nom,
+                'niveau' => $this->examen->niveau->nom ?? 'N/A',
+                'parcours' => $this->examen->parcours->nom ?? 'N/A'
+            ],
+            'fusion' => [
+                'etape_actuelle' => $this->etapeFusion,
+                'verification_possible' => $this->showVerification
+            ],
+            'resultats' => [
+                'total' => $this->totalResultats,
+                'verifies' => $this->resultatsVerifies,
+                'non_verifies' => $this->resultatsNonVerifies,
+                'pourcentage' => $this->pourcentageVerification
+            ]
+        ];
+
+        return $stats;
+    }
+
+    public function verifierCoherenceSession()
+    {
+        if (!$this->sessionActive || !$this->examen) {
+            return false;
+        }
+
+        try {
+            $resultatsIncorrects = ResultatFusion::where('examen_id', $this->examenId)
+                ->where('session_exam_id', '!=', $this->sessionActive->id)
+                ->count();
+
+            $copiesIncorrectes = Copie::where('examen_id', $this->examenId)
+                ->where('session_exam_id', '!=', $this->sessionActive->id)
+                ->count();
+
+            if ($resultatsIncorrects > 0 || $copiesIncorrectes > 0) {
+                Log::warning('Incohérence détectée dans les données de session', [
+                    'examen_id' => $this->examenId,
+                    'session_active_id' => $this->sessionActive->id,
+                    'resultats_incorrects' => $resultatsIncorrects,
+                    'copies_incorrectes' => $copiesIncorrectes
+                ]);
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification de cohérence', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'session_active_id' => $this->sessionActive->id
+            ]);
+            return false;
+        }
+    }
+
+    public function nettoyerDonneesOrphelines()
+    {
+        if (!Auth::user()->hasPermissionTo('resultats.admin')) {
+            toastr()->error('Permission insuffisante pour cette action');
+            return;
+        }
+
+        try {
+            DB::transaction(function () {
+                $orphelinesResultats = ResultatFusion::where('examen_id', $this->examenId)
+                    ->whereDoesntHave('sessionExam')
+                    ->delete();
+
+                $orphelinesCopies = Copie::where('examen_id', $this->examenId)
+                    ->whereDoesntHave('sessionExam')
+                    ->delete();
+
+                Log::info('Nettoyage données orphelines effectué', [
+                    'examen_id' => $this->examenId,
+                    'resultats_supprimes' => $orphelinesResultats,
+                    'copies_supprimees' => $orphelinesCopies,
+                    'user_id' => Auth::id()
+                ]);
+
+                if ($orphelinesResultats > 0 || $orphelinesCopies > 0) {
+                    toastr()->success("Nettoyage effectué : {$orphelinesResultats} résultats et {$orphelinesCopies} copies orphelines supprimés.");
+                } else {
+                    toastr()->info('Aucune donnée orpheline trouvée.');
+                }
+            });
+
+            $this->loadResultats();
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du nettoyage', [
+                'error' => $e->getMessage(),
+                'examen_id' => $this->examenId,
+                'user_id' => Auth::id()
+            ]);
+            toastr()->error('Erreur lors du nettoyage : ' . $e->getMessage());
+        }
+    }
+
     public function render()
     {
-        // ✅ NOUVEAU : Calculer les statistiques détaillées avec présence
+        $maxPages = ceil($this->totalResultats / $this->perPage);
+        $hasPagination = $this->totalResultats > $this->perPage;
+        
+        $paginationInfo = [
+            'current_page' => $this->page,
+            'per_page' => $this->perPage,
+            'total' => $this->totalResultats,
+            'max_pages' => $maxPages,
+            'has_pagination' => $hasPagination,
+            'from' => (($this->page - 1) * $this->perPage) + 1,
+            'to' => min($this->page * $this->perPage, $this->totalResultats)
+        ];
+
         $statistiquesDetailleesAvecPresence = $this->getStatistiquesDetailleesAvecPresence();
         
         return view('livewire.resultats.resultats-verification', [
-            // Données existantes
             'examen' => $this->examen,
             'sessionActive' => $this->sessionActive,
             'resultats' => $this->resultats,
@@ -1320,21 +1860,16 @@ class ResultatVerification extends Component
             'pourcentageVerification' => $this->pourcentageVerification,
             'noExamenFound' => $this->noExamenFound,
             'afficherMoyennesUE' => $this->afficherMoyennesUE,
-            
-            // ✅ NOUVELLES DONNÉES DE PRÉSENCE
             'statistiquesPresence' => $this->statistiquesPresence,
             'afficherInfosPresence' => $this->afficherInfosPresence,
             'statistiquesDetailleesAvecPresence' => $statistiquesDetailleesAvecPresence,
-            
-            // ✅ NOUVEAU : Indicateurs de qualité des données
+            'paginationInfo' => $paginationInfo,
             'qualitesDonnees' => [
                 'coherence_presence' => $this->calculerCoherencePresence(),
                 'source_donnees_fiable' => $this->statistiquesPresence && $this->statistiquesPresence['source'] === 'presence_enregistree',
                 'couverture_complete' => $this->totalResultats > 0 && $this->statistiquesPresence && 
-                                    ($this->totalResultats >= $this->statistiquesPresence['etudiants_presents'] * count($this->ecs) * 0.8) // 80% de couverture minimum
+                                    ($this->totalResultats >= $this->statistiquesPresence['etudiants_presents'] * count($this->ecs) * 0.8)
             ],
-            
-            // ✅ NOUVEAU : Actions disponibles selon les données de présence
             'actionsDisponibles' => [
                 'peut_exporter_rapport_presence' => !empty($this->statistiquesPresence),
                 'peut_diagnostiquer_ecarts' => !empty($this->statistiquesPresence) && $this->totalResultats > 0,
