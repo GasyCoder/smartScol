@@ -27,7 +27,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50">
                 Vérifier
-                <span wire:loading wire:target="verifierCoherence" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="verifierCoherence" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -61,7 +61,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:bg-yellow-700 dark:hover:bg-yellow-600 disabled:opacity-50">
                 Lancer la fusion
-                <span wire:loading wire:target="lancerFusion" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="lancerFusion" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -94,8 +94,8 @@
             <button wire:click="passerAVerify2"
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:bg-yellow-700 dark:hover:bg-yellow-600 disabled:opacity-50">
-                Avancer à VERIFY_2
-                <span wire:loading wire:target="passerAVerify2" class="ml-2 animate-spin">⟳</span>
+                Avancer à la 2e Vérification
+                <span wire:loading wire:target="passerAVerify2" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -107,15 +107,15 @@
 <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black bg-opacity-50">
     <div class="relative w-full max-w-md p-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
         <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">
-            Confirmer l'avancement à VERIFICATION 3
+            Confirmer l'avancement à la Validation
         </h3>
         <div class="mb-6">
             <p class="text-sm text-gray-600 dark:text-gray-300">
-                Voulez-vous avancer la fusion à l'étape VERIFICATION 3 ? Cette action prépare les résultats pour la vérification finale avant validation.
+                Voulez-vous avancer la fusion à l'étape Validation ? Cette action prépare la validation avant résultats finale.
             </p>
             <div class="p-3 mt-3 border border-yellow-200 rounded-md bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700">
                 <p class="text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>Étape 3 (Vérification finale) :</strong> Assurez-vous que toutes les données de la seconde vérification sont correctes.
+                    <strong>Étape 3 :</strong> Assurez-vous que toutes les données de la seconde vérification sont correctes.
                 </p>
             </div>
         </div>
@@ -128,8 +128,8 @@
             <button wire:click="passerAVerify3"
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:bg-yellow-700 dark:hover:bg-yellow-600 disabled:opacity-50">
-                Avancer à VERIFICATION 3
-                <span wire:loading wire:target="passerAVerify3" class="ml-2 animate-spin">⟳</span>
+                Avancer à la Validation
+                <span wire:loading wire:target="passerAVerify3" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -174,7 +174,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-purple-700 dark:hover:bg-purple-600 disabled:opacity-50">
                 Valider
-                <span wire:loading wire:target="validerResultats" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="validerResultats" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -247,7 +247,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 {{ $estReactivation ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500 dark:bg-green-700 dark:hover:bg-green-600' }}">
                 {{ $estReactivation ? 'Republier les résultats' : 'Publier' }}
-                <span wire:loading wire:target="publierResultats" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="publierResultats" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -289,7 +289,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-600 disabled:opacity-50">
                 Réinitialiser
-                <span wire:loading wire:target="resetFusion" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="resetFusion" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -323,7 +323,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50">
                 Réactiver
-                <span wire:loading wire:target="revenirValidation" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="revenirValidation" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>
@@ -392,7 +392,7 @@
                     wire:loading.attr="disabled"
                     class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:bg-red-700 dark:hover:bg-red-600 disabled:opacity-50">
                 Confirmer l'annulation
-                <span wire:loading wire:target="annulerResultats" class="ml-2 animate-spin">⟳</span>
+                <span wire:loading wire:target="annulerResultats" class="ml-2 animate-spin"><em class="text-xl ni ni-loader"></em></span>
             </button>
         </div>
     </div>

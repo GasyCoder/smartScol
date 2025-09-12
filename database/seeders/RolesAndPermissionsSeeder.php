@@ -78,6 +78,11 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Permissions pour les copies (notes)
             [
+                'name' => 'copies.create',
+                'label' => 'Créer des copies',
+                'description' => 'Permet de saisir de nouvelles copies'
+            ],
+            [
                 'name' => 'copies.view',
                 'label' => 'Voir les notes',
                 'description' => 'Permet de consulter les notes saisies'
@@ -94,6 +99,11 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
 
             // Permissions pour les manchettes
+            [
+                'name' => 'manchettes.create',
+                'label' => 'Créer des manchettes',
+                'description' => 'Permet de créer de nouvelles manchettes'
+            ],
             [
                 'name' => 'manchettes.view',
                 'label' => 'Voir les manchettes',

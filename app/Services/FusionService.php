@@ -1281,13 +1281,6 @@ class FusionService
 
             DB::commit();
 
-            Log::info('Résultats annulés pour session', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionId,
-                'resultats_annules' => $updatedCount,
-                'motif' => $motifAnnulation,
-            ]);
-
             return [
                 'success' => true,
                 'message' => "Résultats annulés avec succès. $updatedCount résultats mis à jour.",
