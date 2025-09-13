@@ -272,13 +272,6 @@ class ResultatsFinale extends Component
         try {
             $filename = $this->genererNomFichier('xlsx', $session, $niveau, $parcours, $anneeUniv);
 
-            Log::info('Export Excel avec config généré', [
-                'filename' => $filename,
-                'nb_resultats' => count($donnees),
-                'source' => $this->exportData,
-                'colonnes' => array_keys(array_filter($this->exportConfig['colonnes']))
-            ]);
-
             $this->showExportModal = false;
             toastr()->success("Export Excel généré avec succès ! (" . count($donnees) . " résultats)");
 
@@ -472,26 +465,32 @@ class ResultatsFinale extends Component
         }
 
         try {
-            $this->uesStructure = UE::where('niveau_id', $this->selectedNiveau)
+            $ues = UE::where('niveau_id', $this->selectedNiveau)
+                ->where('is_active', true)
                 ->with(['ecs' => function($query) {
-                    $query->orderBy('id', 'asc');
+                    $query->where('is_active', true)->orderBy('id');
                 }])
-                ->orderBy('id', 'asc')
-                ->get()
-                ->map(function($ue) {
-                    return [
-                        'ue' => $ue,
-                        'ecs' => $ue->ecs->map(function($ec, $index) {
-                            return [
-                                'ec' => $ec,
-                                'display_name' => 'EC' . ($index + 1) . '. ' . $ec->nom
-                            ];
-                        })
-                    ];
-                });
+                ->orderBy('id')
+                ->get();
+
+            if ($ues->isEmpty()) {
+                $this->uesStructure = [];
+                return;
+            }
+
+            $this->uesStructure = $ues->map(function($ue, $index) {
+                return [
+                    'ue' => $ue,
+                    'ecs' => $ue->ecs->map(function($ec) {
+                        return [
+                            'ec' => $ec
+                        ];
+                    })
+                ];
+            });
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors du chargement de la structure UE: ' . $e->getMessage());
+            Log::error('Erreur loadUEStructure: ' . $e->getMessage());
             $this->uesStructure = collect();
         }
     }
@@ -567,16 +566,7 @@ class ResultatsFinale extends Component
             ];
 
             foreach ($patterns as $pattern) {
-                // Note: Cette méthode dépend du driver de cache utilisé
-                // Pour Redis: cache()->getRedis()->del(cache()->getRedis()->keys($pattern))
-                // Pour file: plus complexe, nécessite d'itérer sur les fichiers
             }
-
-            Log::info('Cache délibération vidé', [
-                'cache_key' => $cacheKey,
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours
-            ]);
 
         } catch (\Exception $e) {
             Log::error('Erreur vidage cache délibération: ' . $e->getMessage());
@@ -628,13 +618,6 @@ class ResultatsFinale extends Component
         }
 
         try {
-            // ✅ AJOUT : Log pour debugging
-            Log::info('Rechargement des résultats', [
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'annee_id' => $this->selectedAnneeUniversitaire
-            ]);
-
             $this->resultatsSession1 = $this->loadResultatsForSession($this->sessionNormale);
 
             if ($this->showSession2 && $this->sessionRattrapage) {
@@ -642,12 +625,6 @@ class ResultatsFinale extends Component
             } else {
                 $this->resultatsSession2 = [];
             }
-
-            // ✅ AJOUT : Log après chargement
-            Log::info('Résultats rechargés', [
-                'session1_count' => count($this->resultatsSession1),
-                'session2_count' => count($this->resultatsSession2)
-            ]);
 
             if (empty($this->resultatsSession1) && !empty($this->resultatsSession2)) {
                 $this->simulationParams['session_type'] = 'session2';
@@ -672,17 +649,10 @@ class ResultatsFinale extends Component
     private function loadResultatsForSession($session)
     {
         if (!$session) {
-            Log::info('Session non fournie pour loadResultatsForSession');
             return [];
         }
 
         try {
-            Log::info('🔄 Chargement résultats session', [
-                'session_id' => $session->id,
-                'session_type' => $session->type,
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours
-            ]);
 
             $calculService = new CalculAcademiqueService();
 
@@ -704,36 +674,18 @@ class ResultatsFinale extends Component
             // ✅ ÉTAPE 2 : Exécuter la requête avec fresh() pour éviter le cache
             $resultats = $query->get()->fresh();
 
-            Log::info('📊 Requête résultats exécutée', [
-                'session_id' => $session->id,
-                'resultats_count' => $resultats->count(),
-                'sample_decisions' => $resultats->take(3)->pluck('decision', 'etudiant_id')->toArray(),
-                'sample_jury_validated' => $resultats->take(3)->pluck('jury_validated', 'etudiant_id')->toArray()
-            ]);
-
             if ($resultats->isEmpty()) {
-                Log::warning('⚠️ Aucun résultat trouvé pour la session', [
-                    'session_id' => $session->id,
-                    'niveau_id' => $this->selectedNiveau,
-                    'parcours_id' => $this->selectedParcours
-                ]);
                 return [];
             }
 
             // ✅ ÉTAPE 3 : Grouper par étudiant
             $resultatsGroupes = $resultats->groupBy('etudiant_id');
 
-            Log::info('👥 Résultats groupés', [
-                'nb_etudiants' => $resultatsGroupes->count(),
-                'etudiants_ids' => $resultatsGroupes->keys()->toArray()
-            ]);
-
             // ✅ ÉTAPE 4 : Traiter chaque étudiant
             $resultatsFinaux = $resultatsGroupes->map(function($resultatsEtudiant, $etudiantId) use ($session, $calculService) {
                 $etudiant = $resultatsEtudiant->first()->etudiant;
 
                 if (!$etudiant) {
-                    Log::warning('Étudiant non trouvé', ['etudiant_id' => $etudiantId]);
                     return null;
                 }
 
@@ -747,16 +699,6 @@ class ResultatsFinale extends Component
                     $juryValidatedDB = $premierResultat->jury_validated ?? false;
                     $createdAt = $premierResultat->created_at;
                     $updatedAt = $premierResultat->updated_at;
-
-                    Log::info('👤 Étudiant traité', [
-                        'etudiant_id' => $etudiantId,
-                        'nom' => $etudiant->nom,
-                        'decision_db' => $decisionDB,
-                        'jury_validated' => $juryValidatedDB,
-                        'moyenne' => $calculComplet['synthese']['moyenne_generale'],
-                        'credits' => $calculComplet['synthese']['credits_valides'],
-                        'updated_at' => $updatedAt
-                    ]);
 
                     // ✅ CONSTRUCTION DU RÉSULTAT ENRICHI
                     return [
@@ -805,16 +747,6 @@ class ResultatsFinale extends Component
                 ])
                 ->values()
                 ->toArray();
-
-            Log::info('✅ Résultats session traités avec succès', [
-                'session_id' => $session->id,
-                'session_type' => $session->type,
-                'nb_etudiants' => count($resultatsTriés),
-                'decisions_repartition' => collect($resultatsTriés)->pluck('decision')->countBy()->toArray(),
-                'nb_deliberes' => collect($resultatsTriés)->where('jury_validated', true)->count(),
-                'nb_changements' => collect($resultatsTriés)->where('a_change', true)->count() ?? 0
-            ]);
-
             return $resultatsTriés;
 
         } catch (\Exception $e) {
@@ -1183,13 +1115,6 @@ class ResultatsFinale extends Component
                 "{$statistiques['redoublant']} redoublant, {$statistiques['exclus']} exclus"
             );
 
-            Log::info('Simulation délibération réussie', [
-                'session_id' => $this->deliberationParams['session_id'],
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'statistiques' => $statistiques
-            ]);
-
         } catch (\Exception $e) {
             Log::error('Erreur simulation délibération Livewire: ' . $e->getMessage());
             $this->addError('deliberation', 'Erreur lors de la simulation: ' . $e->getMessage());
@@ -1317,15 +1242,6 @@ class ResultatsFinale extends Component
             $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
             throw new \Exception("Aucun étudiant trouvé pour la session {$sessionType} (ID: {$session->id}). Vérifiez que les résultats sont publiés.");
         }
-
-        Log::info('🎯 Délibération - Vérifications OK', [
-            'session_type' => $this->deliberationParams['session_type'] ?? 'session1',
-            'session_id' => $session->id,
-            'session_nom' => $session->nom ?? 'N/A',
-            'nb_etudiants' => $countEtudiants,
-            'niveau_id' => $this->selectedNiveau,
-            'parcours_id' => $this->selectedParcours
-        ]);
     }
 
     /**
@@ -1355,16 +1271,6 @@ class ResultatsFinale extends Component
 
         toastr()->success('Délibération appliquée avec succès. Statistiques: ' . $statsMessage);
 
-        // Log de succès
-        Log::info('Délibération appliquée', [
-            'session_id' => $session->id,
-            'session_type' => $sessionType,
-            'niveau_id' => $this->selectedNiveau,
-            'parcours_id' => $this->selectedParcours,
-            'statistiques' => $result['statistiques'],
-            'user_id' => Auth::id()
-        ]);
-
         // Mise à jour du statut
         $this->updateDeliberationStatus();
 
@@ -1381,13 +1287,6 @@ class ResultatsFinale extends Component
 
         $this->addError('deliberation', $result['message']);
         toastr()->error($result['message']);
-
-        Log::error('Échec application délibération', [
-            'message' => $result['message'],
-            'session_id' => $session->id,
-            'session_type' => $sessionType,
-            'params' => $this->deliberationParams
-        ]);
     }
 
     /**
@@ -1395,13 +1294,6 @@ class ResultatsFinale extends Component
      */
     private function handleDeliberationError(\Exception $e): void
     {
-        Log::error('Erreur application délibération Livewire: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString(),
-            'params' => $this->deliberationParams,
-            'session_type' => $this->deliberationParams['session_type'] ?? 'non_defini',
-            'niveau_id' => $this->selectedNiveau,
-            'parcours_id' => $this->selectedParcours
-        ]);
 
         $this->addError('deliberation', 'Erreur lors de l\'application: ' . $e->getMessage());
         toastr()->error('Erreur lors de l\'application de la délibération: ' . $e->getMessage());
@@ -1428,7 +1320,6 @@ class ResultatsFinale extends Component
     public function forceReloadData()
     {
         try {
-            Log::info('🔄 FORCE RELOAD DATA - Début');
 
             // ✅ ÉTAPE 1 : Vider complètement le cache
             $this->resultatsSession1 = [];
@@ -1457,13 +1348,6 @@ class ResultatsFinale extends Component
             // ✅ ÉTAPE 6 : Message de succès
             toastr()->success('✅ Données rechargées avec succès');
 
-            Log::info('✅ FORCE RELOAD DATA - Terminé', [
-                'session1_count' => count($this->resultatsSession1),
-                'session2_count' => count($this->resultatsSession2),
-                'stats_s1_admis' => $this->statistiquesSession1['admis'] ?? 0,
-                'stats_s1_rattrapage' => $this->statistiquesSession1['rattrapage'] ?? 0
-            ]);
-
         } catch (\Exception $e) {
             Log::error('❌ Erreur force reload: ' . $e->getMessage());
             toastr()->error('Erreur lors du rechargement des données');
@@ -1475,7 +1359,6 @@ class ResultatsFinale extends Component
     private function resetAfterDeliberation(string $sessionType): void
     {
         try {
-            Log::info('🔄 Reset après délibération - Début', ['session_type' => $sessionType]);
 
             // ✅ ÉTAPE 1 : Fermer les modals
             $this->showDeliberationModal = false;
@@ -1495,11 +1378,6 @@ class ResultatsFinale extends Component
             // ✅ ÉTAPE 4 : Vider le cache Eloquent
             \Illuminate\Database\Eloquent\Model::clearBootedModels();
 
-            // ✅ ÉTAPE 5 : Force refresh avec méthode publique
-            Log::info('🔄 Avant refreshResultats');
-            $this->refreshResultats(); // Utiliser la méthode publique au lieu de forceReloadData
-            Log::info('✅ Après refreshResultats');
-
             // ✅ ÉTAPE 6 : Vérifier que les données ont bien changé
             $this->verifierChangementsApresDeliberation($sessionType);
 
@@ -1508,11 +1386,6 @@ class ResultatsFinale extends Component
             $this->dispatch('resultatsActualises', [
                 'session' => $sessionType,
                 'timestamp' => now()->timestamp,
-                'nouvelles_stats' => $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2
-            ]);
-
-            Log::info('✅ Reset après délibération - Terminé', [
-                'session_type' => $sessionType,
                 'nouvelles_stats' => $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2
             ]);
 
@@ -1556,15 +1429,7 @@ class ResultatsFinale extends Component
                 ])
                 ->get();
 
-            Log::info('📊 Requête SQL FRESH exécutée', [
-                'session_id' => $session->id,
-                'session_type' => $session->type,
-                'resultats_count' => $resultats->count(),
-                'sample_decisions' => $resultats->take(3)->pluck('decision', 'etudiant_id')->toArray()
-            ]);
-
             if ($resultats->isEmpty()) {
-                Log::warning('⚠️ Aucun résultat FRESH trouvé');
                 return [];
             }
 
@@ -1577,7 +1442,6 @@ class ResultatsFinale extends Component
                 $etudiant = Etudiant::find($etudiantId);
 
                 if (!$etudiant) {
-                    Log::warning('Étudiant non trouvé', ['etudiant_id' => $etudiantId]);
                     return null;
                 }
 
@@ -1588,14 +1452,6 @@ class ResultatsFinale extends Component
                     // ✅ VÉRIFIER LA DÉCISION DEPUIS LA DB (pas le calcul)
                     $decisionDB = $resultatsEtudiant->first()->decision;
                     $juryValidatedDB = $resultatsEtudiant->first()->jury_validated;
-
-                    Log::info('👤 Étudiant traité FRESH', [
-                        'etudiant_id' => $etudiantId,
-                        'nom' => $etudiant->nom,
-                        'decision_db' => $decisionDB,
-                        'jury_validated' => $juryValidatedDB,
-                        'moyenne' => $calculComplet['synthese']['moyenne_generale']
-                    ]);
 
                     return [
                         'etudiant' => $etudiant,
@@ -1628,12 +1484,6 @@ class ResultatsFinale extends Component
             ->values()
             ->toArray();
 
-            Log::info('✅ Résultats FRESH traités', [
-                'session_type' => $session->type,
-                'nb_etudiants' => count($resultatsFinaux),
-                'decisions_repartition' => collect($resultatsFinaux)->pluck('decision')->countBy()->toArray()
-            ]);
-
             return $resultatsFinaux;
 
         } catch (\Exception $e) {
@@ -1652,13 +1502,6 @@ class ResultatsFinale extends Component
             $resultats = $sessionType === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
             $stats = $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2;
 
-            Log::info('🔍 Vérification changements après délibération', [
-                'session_type' => $sessionType,
-                'nb_resultats_charges' => count($resultats),
-                'stats_admis' => $stats['admis'] ?? 0,
-                'stats_rattrapage' => $stats['rattrapage'] ?? 0,
-                'sample_decisions' => collect($resultats)->take(3)->pluck('decision', 'etudiant.nom')->toArray()
-            ]);
 
             // Vérifier en base directement
             $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
@@ -1680,11 +1523,6 @@ class ResultatsFinale extends Component
                     ->groupBy('rf.decision')
                     ->get()
                     ->keyBy('decision');
-
-                Log::info('📊 Vérification base de données', [
-                    'session_id' => $session->id,
-                    'stats_db' => $statsDB->toArray()
-                ]);
             }
 
         } catch (\Exception $e) {
@@ -1716,12 +1554,6 @@ class ResultatsFinale extends Component
             $this->dispatch('donneesDeliberationMisesAJour', [
                 'session' => $this->deliberationParams['session_type'],
                 'statistiques' => $this->activeTab === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2
-            ]);
-
-            Log::info('Données actualisées après délibération', [
-                'session_type' => $this->deliberationParams['session_type'],
-                'resultats_session1' => count($this->resultatsSession1),
-                'resultats_session2' => count($this->resultatsSession2)
             ]);
 
         } catch (\Exception $e) {
@@ -1808,11 +1640,6 @@ class ResultatsFinale extends Component
                 // ✅ AJOUT : Actualiser les données après annulation
                 $this->actualiserDonneesApresDeliberation();
 
-                Log::info('Délibération annulée', [
-                    'session_id' => $session->id,
-                    'niveau_id' => $this->selectedNiveau,
-                    'parcours_id' => $this->selectedParcours
-                ]);
 
             } else {
                 $this->addError('deliberation', $result['message']);
@@ -1956,12 +1783,6 @@ class ResultatsFinale extends Component
                 $anneeUniv->libelle
             );
 
-            Log::info('Export PDF généré', [
-                'filename' => $filename,
-                'nb_resultats' => count($resultats),
-                'session_type' => $session->type
-            ]);
-
             return response()->streamDownload(function() use ($pdf) {
                 echo $pdf->output();
             }, $filename);
@@ -1996,12 +1817,6 @@ class ResultatsFinale extends Component
                 $session->type,
                 $anneeUniv->libelle
             );
-
-            Log::info('Export Excel généré', [
-                'filename' => $filename,
-                'nb_resultats' => count($resultats),
-                'session_type' => $session->type
-            ]);
 
             return Excel::download(
                 new ResultatsExport($resultats, $this->uesStructure, $session, $niveau, $parcours, $anneeUniv),
@@ -2142,12 +1957,6 @@ class ResultatsFinale extends Component
                 "{$stats['redoublant']} redoublant, {$stats['exclus']} exclus"
             );
 
-            Log::info('Simulation de décisions terminée', [
-                'session_type' => $this->simulationParams['session_type'],
-                'niveau_id' => $this->selectedNiveau,
-                'statistiques' => $stats
-            ]);
-
         } catch (\Exception $e) {
             Log::error('Erreur lors de la simulation: ' . $e->getMessage());
             toastr()->error('Erreur lors de la simulation: ' . $e->getMessage());
@@ -2231,11 +2040,6 @@ class ResultatsFinale extends Component
             $this->simulationResults = [];
             $this->loadResultats();
 
-            Log::info('Simulation appliquée avec succès', [
-                'session_id' => $sessionId,
-                'changements_appliques' => $changementsAppliques
-            ]);
-
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Erreur lors de l\'application de la simulation: ' . $e->getMessage());
@@ -2304,14 +2108,6 @@ class ResultatsFinale extends Component
 
                 $this->loadResultats(); // Recharger les résultats
 
-                Log::info('Logique médecine standard appliquée', [
-                    'session_id' => $session->id,
-                    'session_type' => $sessionType,
-                    'niveau_id' => $this->selectedNiveau,
-                    'parcours_id' => $this->selectedParcours,
-                    'statistiques' => $stats
-                ]);
-
             } else {
                 toastr()->error('Erreur lors de l\'application: ' . $result['message']);
             }
@@ -2375,14 +2171,6 @@ class ResultatsFinale extends Component
             // 6. Message de confirmation
             toastr()->info('✅ Données actualisées avec succès');
 
-            Log::info('Données rafraîchies avec succès', [
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'annee_id' => $this->selectedAnneeUniversitaire,
-                'session1_count' => count($this->resultatsSession1),
-                'session2_count' => count($this->resultatsSession2)
-            ]);
-
         } catch (\Exception $e) {
             Log::error('Erreur lors du rafraîchissement des données: ' . $e->getMessage());
             toastr()->error('Erreur lors du rafraîchissement: ' . $e->getMessage());
@@ -2399,8 +2187,6 @@ class ResultatsFinale extends Component
                 return;
             }
 
-            Log::info('🔄 Refresh manuel demandé');
-
             // ✅ VIDER COMPLÈTEMENT LE CACHE
             $this->resultatsSession1 = [];
             $this->resultatsSession2 = [];
@@ -2411,14 +2197,6 @@ class ResultatsFinale extends Component
             $this->forceReloadData();
 
             toastr()->success('✅ Résultats actualisés avec succès');
-
-            Log::info('✅ Refresh manuel terminé', [
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'nouveaux_resultats_s1' => count($this->resultatsSession1),
-                'nouveaux_resultats_s2' => count($this->resultatsSession2)
-            ]);
-
         } catch (\Exception $e) {
             Log::error('❌ Erreur rafraîchissement résultats: ' . $e->getMessage());
             toastr()->error('Erreur lors du rafraîchissement des résultats.');
@@ -2470,8 +2248,6 @@ class ResultatsFinale extends Component
             $this->setDefaultValues();
 
             toastr()->success('✅ Composant réinitialisé');
-
-            Log::info('Composant reset complet effectué');
 
         } catch (\Exception $e) {
             Log::error('Erreur reset composant: ' . $e->getMessage());
@@ -2546,13 +2322,6 @@ class ResultatsFinale extends Component
     {
         try {
             $filename = $this->genererNomFichier('pdf', $session, $niveau, $parcours, $anneeUniv);
-
-            Log::info('Export PDF avec config généré', [
-                'filename' => $filename,
-                'nb_resultats' => count($donnees),
-                'source' => $this->exportData,
-                'colonnes' => array_keys(array_filter($this->exportConfig['colonnes']))
-            ]);
 
             $this->showExportModal = false;
             toastr()->success("Export PDF généré avec succès ! (" . count($donnees) . " résultats)");
@@ -2907,13 +2676,6 @@ class ResultatsFinale extends Component
                 }
             }
 
-            Log::info('Résultats enrichis avec changements', [
-                'session_id' => $sessionId,
-                'nb_etudiants' => count($resultats),
-                'nb_avec_changements' => collect($resultats)->where('a_change', true)->count(),
-                'nb_promotions_exceptionnelles' => collect($resultats)->where('promotion_exceptionnelle', true)->count()
-            ]);
-
             return $resultats;
 
         } catch (\Exception $e) {
@@ -3177,13 +2939,6 @@ class ResultatsFinale extends Component
                 toastr()->warning('Aucune configuration précédente trouvée pour cette session');
             }
 
-            Log::info('Dernières valeurs restaurées', [
-                'session_type' => $sessionType,
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'user_id' => Auth::id()
-            ]);
-
         } catch (\Exception $e) {
             Log::error('Erreur restauration dernières valeurs: ' . $e->getMessage());
             toastr()->error('Erreur lors de la restauration des dernières valeurs');
@@ -3197,11 +2952,6 @@ class ResultatsFinale extends Component
     {
         $this->deliberationParams['credits_admission_s1'] = 
             $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s1']);
-        
-        Log::info('Pourcentage S1 mis à jour', [
-            'pourcentage' => $this->deliberationParams['pourcentage_admission_s1'],
-            'credits' => $this->deliberationParams['credits_admission_s1']
-        ]);
     }
 
     public function updatedDeliberationParamsPourcentageAdmissionS2()
@@ -3230,12 +2980,6 @@ class ResultatsFinale extends Component
             
             $totalCredits = $query->where('is_active', true)
                 ->sum('credits');
-                
-            Log::info('✅ Crédits totaux calculés', [
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'total_credits' => $totalCredits
-            ]);
             
             return $totalCredits ?: 60; // Fallback to 60 if no UE found
             
@@ -3291,14 +3035,6 @@ class ResultatsFinale extends Component
                     $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_redoublement_s2']);
             }
             
-            Log::info('🔄 Paramètres mis à jour avec pourcentages', [
-                'credits_totaux' => $creditsTotaux,
-                'parametres_finaux' => [
-                    'credits_admission_s1' => $this->deliberationParams['credits_admission_s1'] ?? null,
-                    'credits_admission_s2' => $this->deliberationParams['credits_admission_s2'] ?? null,
-                    'credits_redoublement_s2' => $this->deliberationParams['credits_redoublement_s2'] ?? null
-                ]
-            ]);
             
         } catch (\Exception $e) {
             Log::error('❌ Erreur mise à jour paramètres pourcentages', [
@@ -3325,14 +3061,6 @@ class ResultatsFinale extends Component
         $this->deliberationParams['pourcentage_redoublement_s2'] = 
             $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_redoublement_s2'] ?? 20);
             
-        Log::info('🎯 Paramètres initialisés avec pourcentages', [
-            'credits_totaux' => $creditsTotaux,
-            'pourcentages' => [
-                'admission_s1' => $this->deliberationParams['pourcentage_admission_s1'],
-                'admission_s2' => $this->deliberationParams['pourcentage_admission_s2'],
-                'redoublement_s2' => $this->deliberationParams['pourcentage_redoublement_s2']
-            ]
-        ]);
     }
 
     // ✅ MÉTHODE 6 : Simulation délibération mise à jour avec logique dynamique
@@ -3440,14 +3168,6 @@ class ResultatsFinale extends Component
                 "{$statistiques['redoublant']} redoublant, {$statistiques['exclus']} exclus"
             );
 
-            Log::info('Simulation délibération réussie avec pourcentages', [
-                'session_id' => $this->deliberationParams['session_id'],
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'credits_totaux' => $creditsTotaux,
-                'statistiques' => $statistiques
-            ]);
-
         } catch (\Exception $e) {
             Log::error('Erreur simulation délibération avec pourcentages: ' . $e->getMessage());
             $this->addError('deliberation', 'Erreur lors de la simulation: ' . $e->getMessage());
@@ -3498,32 +3218,6 @@ class ResultatsFinale extends Component
         }
     }
 
-
-        /**
-     * Export PDF simple
-     */
-    public function exporterPDF()
-    {
-        try {
-            $exportService = new ExportService();
-            
-            $pdf = $exportService->exporterPDF(
-                $this->resultatsSession1,
-                $this->selectedNiveau,
-                $this->selectedAnneeUniversitaire,
-                $this->selectedParcours,
-                $this->uesStructure
-            );
-            
-            session()->flash('export_success', 'Export PDF généré avec succès (' . count($this->resultatsSession1) . ' étudiants)');
-            return $pdf;
-            
-        } catch (\Exception $e) {
-            session()->flash('export_error', 'Erreur lors de la génération du PDF: ' . $e->getMessage());
-        }
-    }
-
-
         /**
      * Export Excel simple
      */
@@ -3542,32 +3236,6 @@ class ResultatsFinale extends Component
             
         } catch (\Exception $e) {
             session()->flash('export_error', 'Erreur lors de la génération d\'Excel: ' . $e->getMessage());
-        }
-    }
-
-
-        /**
-     * Export PDF admis seulement
-     */
-    public function exporterAdmisPDF()
-    {
-        try {
-            $exportService = new ExportService();
-            
-            $pdf = $exportService->exporterAdmisPDF(
-                $this->resultatsSession1,
-                $this->selectedNiveau,
-                $this->selectedAnneeUniversitaire,
-                $this->selectedParcours,
-                $this->uesStructure
-            );
-            
-            $nbAdmis = collect($this->resultatsSession1)->where('decision', 'admis')->count();
-            session()->flash('export_success', "Export PDF des admis généré avec succès ({$nbAdmis} étudiants)");
-            return $pdf;
-            
-        } catch (\Exception $e) {
-            session()->flash('export_error', 'Erreur lors de la génération du PDF: ' . $e->getMessage());
         }
     }
 

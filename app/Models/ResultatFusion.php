@@ -205,13 +205,6 @@ class ResultatFusion extends Model
 
         $this->save();
 
-        Log::info('Changement de statut résultat fusion', [
-            'resultat_id' => $this->id,
-            'de' => $ancienStatut,
-            'vers' => $nouveauStatut,
-            'user_id' => $userId,
-        ]);
-
         return $this;
     }
 
@@ -243,13 +236,6 @@ class ResultatFusion extends Model
 
         $this->save();
 
-        Log::info('ResultatFusion marqué comme vérifié', [
-            'resultat_id' => $this->id,
-            'etape' => $etape,
-            'statut' => $nouveauStatut,
-            'user_id' => $userId
-        ]);
-
         return $this;
     }
 
@@ -275,13 +261,6 @@ class ResultatFusion extends Model
         $this->status_history = $historique;
 
         $this->save();
-
-        Log::info('Note ResultatFusion mise à jour', [
-            'resultat_id' => $this->id,
-            'ancienne_note' => $ancienneNote,
-            'nouvelle_note' => $nouvelleNote,
-            'user_id' => $userId
-        ]);
 
         return $this;
     }
@@ -311,11 +290,6 @@ class ResultatFusion extends Model
                 'statut' => ResultatFinal::STATUT_EN_ATTENTE,
             ]
         );
-
-        Log::info('Transfert vers résultat final', [
-            'fusion_id' => $this->id,
-            'final_id' => $resultatFinal->id,
-        ]);
 
         return $resultatFinal;
     }
@@ -397,10 +371,6 @@ class ResultatFusion extends Model
             // Trouver l'étudiant via la manchette
             $manchette = $copie->findCorrespondingManchette();
             if (!$manchette || !$manchette->etudiant_id) {
-                Log::warning('Impossible de trouver l\'étudiant pour la copie', [
-                    'copie_id' => $copie->id,
-                    'code_anonymat_id' => $copie->code_anonymat_id
-                ]);
                 continue;
             }
 
@@ -426,10 +396,6 @@ class ResultatFusion extends Model
             }
         }
 
-        Log::info('Résultats vérifiés synchronisés', [
-            'examen_id' => $this->examen_id,
-            'copies_synchronisees' => $copies->count()
-        ]);
     }
 
     /**
@@ -451,13 +417,6 @@ class ResultatFusion extends Model
                 ]);
             }
         }
-
-        Log::info('Marquage en lot terminé', [
-            'nb_resultats_traites' => $count,
-            'nb_resultats_demandes' => count($ids),
-            'etape' => $etape,
-            'user_id' => $userId
-        ]);
 
         return $count;
     }
@@ -551,23 +510,13 @@ class ResultatFusion extends Model
             }
 
             DB::commit();
-
-            Log::info('Retour à l\'état en attente effectué', [
-                'examen_id' => $examenId,
-                'resultats_restaures' => $updatedCount,
-            ]);
-
             return [
                 'success' => true,
                 'message' => "Retour à l'état en attente effectué. $updatedCount résultats restaurés.",
             ];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erreur lors du retour à l\'état en attente', [
-                'examen_id' => $examenId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+
             return [
                 'success' => false,
                 'message' => 'Erreur lors du retour : ' . $e->getMessage(),

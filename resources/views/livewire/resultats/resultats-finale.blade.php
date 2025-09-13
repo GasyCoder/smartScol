@@ -21,7 +21,7 @@
 
                 <div class="relative flex items-center">
                     <div class="mr-3 p-1.5 rounded-lg {{ $activeTab === 'session1' ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-gray-100 dark:bg-gray-600 group-hover:bg-gray-200 dark:group-hover:bg-gray-500' }} transition-colors">
-                        <em class="text-lg ni ni-graduation"></em>
+                        <em class="text-lg ni ni-check-round"></em>
                     </div>
                     <div class="flex flex-col items-start">
                         <span class="font-semibold">Session 1</span>
@@ -87,7 +87,7 @@
                             <em class="text-lg ni ni-setting"></em>
                         </div>
                         <div class="flex flex-col items-start">
-                            <span class="font-semibold">Simulation</span>
+                            <span class="font-semibold">Paramètres</span>
                             <span class="text-xs opacity-75">Délibération</span>
                         </div>
 

@@ -154,7 +154,7 @@
                             <button wire:click="$set('confirmingFusion', true)"
                                     wire:loading.attr="disabled"
                                     class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-yellow-500 border border-transparent rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50">
-                                🔄 {{ $sessionActive && $sessionActive->type === 'Rattrapage' ? 'Fusion rattrapage' : 'Commencer fusion' }}
+                                <em class="text-xl ni ni-repeat mr-2"></em> {{ $sessionActive && $sessionActive->type === 'Rattrapage' ? 'Fusion rattrapage' : 'Commencer fusion' }}
                                 <span wire:loading wire:target="$set('confirmingFusion', true)" class="ml-2 animate-spin">⟳</span>
                             </button>
                         @elseif($statut === 'fusion')
@@ -162,13 +162,13 @@
                                 <button wire:click="confirmVerify2"
                                         wire:loading.attr="disabled"
                                         class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-yellow-500 border border-transparent rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50">
-                                    🔄 Étape 2
+                                     <em class="text-xl ni ni-repeat mr-2"></em> Étape 2
                                     <span wire:loading wire:target="confirmVerify2" class="ml-2 animate-spin">⟳</span>
                                 </button>
                             @elseif($etapeFusion === 2)
                                 <button wire:click="confirmVerify3"
                                         class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-yellow-500 border border-transparent rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50">
-                                    🔄 Étape finale
+                                     <em class="text-xl ni ni-repeat mr-2"></em> Étape finale
                                     <span wire:loading wire:target="confirmVerify3" class="ml-2 animate-spin">⟳</span>
                                 </button>
                             @endif
@@ -178,7 +178,7 @@
                                     <button wire:click="confirmResetFusion"
                                             wire:loading.attr="disabled"
                                             class="inline-flex items-center px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 transition-colors disabled:opacity-50">
-                                        🗑️ Réinitialiser
+                                        <em class="text-xl ni ni-trash-alt mr-2"></em> Réinitialiser
                                         <span wire:loading wire:target="confirmResetFusion" class="ml-2 animate-spin">⟳</span>
                                     </button>
                                 @endcan
@@ -297,11 +297,6 @@
                                 📤 Publier les résultats
                                 <span wire:loading wire:target="confirmPublication" class="ml-2 animate-spin">⟳</span>
                             </button>
-
-                            <a href="{{ route('resultats.finale') }}"
-                               class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                                👁️ Aperçu
-                            </a>
                         </div>
                     @endif
 

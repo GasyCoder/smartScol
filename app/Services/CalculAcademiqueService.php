@@ -64,11 +64,6 @@ class CalculAcademiqueService
             });
 
             if ($invalidResults->isNotEmpty()) {
-                Log::warning('Résultats avec codes d\'anonymat de sessions différentes détectés', [
-                    'etudiant_id' => $etudiantId,
-                    'session_attendue' => $sessionId,
-                    'resultats_invalides' => $invalidResults->pluck('id')->toArray()
-                ]);
             }
 
             // ✅ LE RESTE DE VOTRE CODE RESTE IDENTIQUE
@@ -130,11 +125,6 @@ class CalculAcademiqueService
         // Grouper par UE
         $resultatsParUE = $resultats->groupBy('ec.ue_id');
 
-        Log::info('🔢 Début calcul UE médecine', [
-            'nb_ue_detectees' => $resultatsParUE->count(),
-            'ue_ids' => $resultatsParUE->keys()->toArray()
-        ]);
-
         foreach ($resultatsParUE as $ueId => $notesUE) {
             $ue = $notesUE->first()->ec->ue;
 
@@ -177,20 +167,6 @@ class CalculAcademiqueService
             $creditsUE = $ue->credits ?? 0;
             $creditsValides = $ueValidee ? $creditsUE : 0;
 
-            // 🔍 LOG DÉTAILLÉ POUR CHAQUE UE
-            Log::info("📚 UE analysée", [
-                'ue_id' => $ueId,
-                'ue_nom' => $ue->nom,
-                'ue_credits' => $creditsUE,
-                'moyenne_ue' => $moyenneUE,
-                'validee' => $ueValidee,
-                'credits_valides' => $creditsValides,
-                'has_note_eliminatoire' => $hasNoteEliminatoire,
-                'nb_notes' => count($notes),
-                'notes_detail' => $notes,
-                'seuil_validation' => self::SEUIL_VALIDATION_UE
-            ]);
-
             $resultatsUE[] = [
                 'ue_id' => $ueId,
                 'ue_nom' => $ue->nom,
@@ -208,12 +184,6 @@ class CalculAcademiqueService
 
         // 🔍 LOG RÉCAPITULATIF
         $totalCreditsCalculés = array_sum(array_column($resultatsUE, 'credits_valides'));
-        Log::info('✅ Calcul UE terminé', [
-            'nb_ue_traitees' => count($resultatsUE),
-            'total_credits_valides' => $totalCreditsCalculés,
-            'ue_validees' => array_sum(array_column($resultatsUE, 'validee')),
-            'ue_eliminees' => collect($resultatsUE)->where('has_note_eliminatoire', true)->count()
-        ]);
 
         return $resultatsUE;
     }
@@ -266,28 +236,11 @@ class CalculAcademiqueService
         $hasNoteEliminatoire = $synthese['a_note_eliminatoire'];
         $moyenneGenerale = $synthese['moyenne_generale'];
 
-        // 🔍 AJOUT DE LOGS POUR DEBUG
-        Log::info('🎯 Détermination décision médecine DYNAMIQUE', [
-            'session_type' => $session['type'],
-            'credits_valides' => $creditsValides,
-            'total_credits_disponibles' => $totalCreditsDisponibles, // ✅ NOUVEAU
-            'has_note_eliminatoire' => $hasNoteEliminatoire,
-            'moyenne_generale' => $moyenneGenerale,
-            'pourcentage_credits' => $totalCreditsDisponibles > 0 ? 
-                round(($creditsValides / $totalCreditsDisponibles) * 100, 2) : 0
-        ]);
-
         if ($session['type'] === 'Normale') {
             // ✅ SESSION NORMALE : Logique dynamique
 
             // 1. Si TOUS les crédits disponibles sont validés ET pas de note éliminatoire → ADMIS
             if ($creditsValides >= $totalCreditsDisponibles && $totalCreditsDisponibles > 0 && !$hasNoteEliminatoire) {
-                Log::info('✅ Décision: ADMIS (tous crédits validés)', [
-                    'motif' => 'Tous les crédits disponibles validés sans note eliminatoire',
-                    'credits_valides' => $creditsValides,
-                    'credits_disponibles' => $totalCreditsDisponibles
-                ]);
-
                 return [
                     'code' => 'admis',
                     'libelle' => 'Admis(e)',
@@ -299,12 +252,6 @@ class CalculAcademiqueService
 
             // 2. Si note éliminatoire → RATTRAPAGE (même avec tous les crédits)
             if ($hasNoteEliminatoire) {
-                Log::info('⚠️ Décision: RATTRAPAGE (note éliminatoire)', [
-                    'motif' => 'Note eliminatoire presente',
-                    'credits_valides' => $creditsValides,
-                    'credits_disponibles' => $totalCreditsDisponibles
-                ]);
-
                 return [
                     'code' => 'rattrapage',
                     'libelle' => 'Autorisé(e) au rattrapage',
@@ -315,13 +262,6 @@ class CalculAcademiqueService
             }
 
             // 3. Si crédits insuffisants → RATTRAPAGE
-            Log::info('📝 Décision: RATTRAPAGE (crédits insuffisants)', [
-                'motif' => 'Credits insuffisants',
-                'credits_valides' => $creditsValides,
-                'credits_disponibles' => $totalCreditsDisponibles,
-                'pourcentage' => $totalCreditsDisponibles > 0 ? 
-                    round(($creditsValides / $totalCreditsDisponibles) * 100, 2) : 0
-            ]);
 
             return [
                 'code' => 'rattrapage',
@@ -438,15 +378,6 @@ class CalculAcademiqueService
             $verificationCount = ResultatFinal::where('session_exam_id', $sessionId)
                 ->where('jury_validated', true)
                 ->count();
-
-            Log::info('✅ Délibération appliquée avec configuration - Vérification', [
-                'config_id' => $config->id,
-                'session_id' => $sessionId,
-                'niveau_id' => $niveauId,
-                'parcours_id' => $parcoursId,
-                'statistiques' => $statistiques,
-                'verification_jury_validated_count' => $verificationCount
-            ]);
 
             return [
                 'success' => true,
@@ -614,13 +545,6 @@ class CalculAcademiqueService
 
             DB::commit();
 
-            Log::info('Délibération annulée', [
-                'config_id' => $config->id,
-                'session_id' => $sessionId,
-                'niveau_id' => $niveauId,
-                'parcours_id' => $parcoursId
-            ]);
-
             return [
                 'success' => true,
                 'message' => 'Délibération annulée avec succès'
@@ -690,15 +614,6 @@ class CalculAcademiqueService
 
                     if ($success) {
                         $stats['decisions'][$decision]++;
-
-                        Log::info('Décision médecine appliquée', [
-                            'etudiant_id' => $etudiantId,
-                            'session_id' => $sessionId,
-                            'decision' => $decision,
-                            'credits_valides' => $resultat['synthese']['credits_valides'],
-                            'moyenne_generale' => $resultat['synthese']['moyenne_generale'],
-                            'has_eliminatoire' => $resultat['synthese']['a_note_eliminatoire']
-                        ]);
                     } else {
                         $stats['erreurs'][] = "Échec application décision pour étudiant $etudiantId";
                     }
@@ -713,12 +628,6 @@ class CalculAcademiqueService
             }
 
             DB::commit();
-
-            // Logger les résultats
-            Log::info('Application des décisions médecine terminée', [
-                'session_id' => $sessionId,
-                'stats' => $stats
-            ]);
 
             return [
                 'success' => empty($stats['erreurs']),
@@ -810,16 +719,6 @@ class CalculAcademiqueService
             }
 
             DB::commit();
-
-            Log::info('Décision appliquée avec succès', [
-                'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId,
-                'decision' => $decision,
-                'resultats_maj' => $resultats->count(),
-                'table' => $useResultatFinal ? 'resultats_finaux' : 'resultats_fusion',
-                'avec_deliberation' => $avecDeliberation,
-                'jury_validated' => $avecDeliberation
-            ]);
 
             return true;
 
@@ -995,15 +894,6 @@ class CalculAcademiqueService
                     'changement' => $changement
                 ];
             }
-
-            Log::info('Simulation délibération terminée', [
-                'niveau_id' => $niveauId,
-                'parcours_id' => $parcoursId,
-                'session_id' => $sessionId,
-                'total_etudiants' => $etudiantsIds->count(),
-                'changements' => $statistiques['changements'],
-                'parametres' => $parametresSimulation
-            ]);
 
             return [
                 'success' => true,

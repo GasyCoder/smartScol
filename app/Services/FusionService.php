@@ -1148,14 +1148,6 @@ class FusionService
                 if ($resultatFusion->statut !== ResultatFusion::STATUT_VALIDE) {
                     $resultatFusion->changerStatut(ResultatFusion::STATUT_VALIDE, $generePar);
                 }
-
-                Log::info('Résultat transféré avec succès', [
-                    'fusion_id' => $resultatFusion->id,
-                    'final_id' => $resultatFinal->id,
-                    'etudiant_id' => $resultatFusion->etudiant_id,
-                    'session_id' => $sessionActive->id,
-                    'session_type' => $sessionActive->type
-                ]);
             }
 
             // CORRECTION 5: Calcul des décisions selon le type de session
@@ -1178,24 +1170,9 @@ class FusionService
                     $resultat->save();
                 }
 
-                Log::info("Décision calculée pour session", [
-                    'etudiant_id' => $etudiantId,
-                    'session_id' => $sessionActive->id,
-                    'session_type' => $sessionActive->type,
-                    'decision' => $decision,
-                    'nb_resultats_mis_a_jour' => $resultatsEtudiantFinaux->count()
-                ]);
             }
 
             DB::commit();
-
-            Log::info('Transfert terminé avec succès', [
-                'session_id' => $sessionActive->id,
-                'session_type' => $sessionActive->type,
-                'examen_id' => $examenId,
-                'resultats_transferes' => $resultatsTransférés,
-                'etudiants_traites' => count($etudiantsTraites)
-            ]);
 
             return [
                 'success' => true,

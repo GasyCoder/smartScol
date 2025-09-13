@@ -4,105 +4,33 @@ namespace App\Services;
 
 use App\Models\Niveau;
 use App\Models\Parcour;
+use Barryvdh\DomPDF\Facade\Pdf;
+use App\Exports\ResultatsExport;
 use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class ExportService
 {
     /**
-     * Export PDF simple
+     * ✅ Export Excel avec le nouveau format de l'image
      */
-    public function exporterPDF($resultats, $selectedNiveau, $selectedAnneeUniversitaire, $selectedParcours = null, $uesStructure = [])
+    public function exporterExcel($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null)
     {
         try {
             if (empty($resultats)) {
                 throw new \Exception('Aucun résultat disponible pour l\'export.');
             }
 
-            $niveau = is_object($selectedNiveau) ? $selectedNiveau : Niveau::find($selectedNiveau);
-            $anneeUniv = is_object($selectedAnneeUniversitaire) ? $selectedAnneeUniversitaire : AnneeUniversitaire::find($selectedAnneeUniversitaire);
-            $parcours = $selectedParcours ? (is_object($selectedParcours) ? $selectedParcours : Parcour::find($selectedParcours)) : null;
-
-            // Protection si pas trouvé
-            if (!$niveau) {
-                $niveau = (object) ['nom' => 'Niveau non spécifié'];
-            }
-            if (!$anneeUniv) {
-                $anneeUniv = (object) ['libelle' => date('Y') . '-' . (date('Y') + 1)];
-            }
-
-            $donneesVue = [
-                'session' => (object) ['type' => 'Normale'],
-                'niveau' => $niveau,
-                'parcours' => $parcours,
-                'anneeUniversitaire' => $anneeUniv,
-                'dateGeneration' => now(),
-                'resultats' => $resultats,
-                'statistics' => $this->calculerStats($resultats),
-                'uesStructure' => $uesStructure
-            ];
-
-            $nomFichier = 'resultats_session1_' . now()->format('Y-m-d_H-i') . '.pdf';
+            // ✅ Générer nom de fichier descriptif
+            $nomFichier = $this->genererNomFichierExcel($niveau, $parcours, $session, $anneeUniv);
             
-            $pdf = Pdf::loadView('exports.resultats-pdf', $donneesVue)
-                ->setPaper('A4', 'landscape')
-                ->setOptions([
-                    'defaultFont' => 'DejaVu Sans',
-                    'isHtml5ParserEnabled' => true,
-                    'isRemoteEnabled' => true,
-                ]);
-            
-            return response()->streamDownload(function() use ($pdf) {
-                echo $pdf->output();
-            }, $nomFichier, [
-                'Content-Type' => 'application/pdf',
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Erreur export PDF: ' . $e->getMessage());
-            throw $e;
-        }
-    }
-
-    /**
-     * Export Excel simple
-     */
-    public function exporterExcel($resultats, $uesStructure = [])
-    {
-        try {
-            if (empty($resultats)) {
-                throw new \Exception('Aucun résultat disponible pour l\'export.');
-            }
-
-            $donnees = $this->preparerDonneesExcel($resultats, $uesStructure);
-            $nomFichier = 'resultats_session1_' . now()->format('Y-m-d_H-i') . '.xlsx';
-            
-            return Excel::download(new class($donnees) implements 
-                \Maatwebsite\Excel\Concerns\FromArray, 
-                \Maatwebsite\Excel\Concerns\WithHeadings, 
-                \Maatwebsite\Excel\Concerns\WithTitle 
-            {
-                private $donnees;
-                
-                public function __construct($donnees) {
-                    $this->donnees = $donnees;
-                }
-                
-                public function array(): array {
-                    return $this->donnees;
-                }
-                
-                public function headings(): array {
-                    return !empty($this->donnees) ? array_keys($this->donnees[0]) : [];
-                }
-                
-                public function title(): string {
-                    return 'Résultats Session 1';
-                }
-                
-            }, $nomFichier);
+            // ✅ Utiliser la nouvelle classe d'export avec tous les paramètres
+            return Excel::download(
+                new ResultatsExport($resultats, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
+                $nomFichier
+            );
             
         } catch (\Exception $e) {
             Log::error('Erreur export Excel: ' . $e->getMessage());
@@ -111,21 +39,109 @@ class ExportService
     }
 
     /**
-     * Export PDF admis seulement
+     * ✅ Export Excel admis uniquement
      */
-    public function exporterAdmisPDF($resultats, $selectedNiveau, $selectedAnneeUniversitaire, $selectedParcours = null, $uesStructure = [])
+    public function exporterExcelAdmis($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null)
     {
         try {
-            // Filtrer seulement les admis
-            $admis = collect($resultats)->filter(function($resultat) {
+            // Filtrer pour ne garder que les admis
+            $resultatsAdmis = collect($resultats)->filter(function($resultat) {
                 return ($resultat['decision'] ?? '') === 'admis';
-            })->values()->all();
+            })->values()->toArray();
 
-            if (empty($admis)) {
-                throw new \Exception('Aucun étudiant admis trouvé.');
+            if (empty($resultatsAdmis)) {
+                throw new \Exception('Aucun étudiant admis à exporter.');
             }
 
-            return $this->exporterPDF($admis, $selectedNiveau, $selectedAnneeUniversitaire, $selectedParcours, $uesStructure);
+            $nomFichier = $this->genererNomFichierExcel($niveau, $parcours, $session, $anneeUniv, 'Admis');
+            
+            return Excel::download(
+                new ResultatsExport($resultatsAdmis, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
+                $nomFichier
+            );
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export Excel admis: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ Export PDF simple (garder l'existant)
+     */
+    public function exporterPDF($resultats, $niveau = null, $anneeUniv = null, $parcours = null, $uesStructure = [])
+    {
+        try {
+            if (empty($resultats)) {
+                throw new \Exception('Aucun résultat disponible pour l\'export PDF.');
+            }
+
+            $donnees = [
+                'resultats' => $resultats,
+                'niveau' => $niveau,
+                'parcours' => $parcours,
+                'annee_universitaire' => $anneeUniv,
+                'ues_structure' => $uesStructure,
+                'statistiques' => $this->calculerStats($resultats),
+                'date_export' => now()->format('d/m/Y H:i'),
+                'export_par' => Auth::user()->name ?? 'Système'
+            ];
+
+            $nomFichier = $this->genererNomFichierPDF($niveau, $parcours, $anneeUniv);
+
+            $pdf = Pdf::loadView('exports.resultats-pdf', $donnees)
+                ->setPaper('a4', 'landscape')
+                ->setOptions([
+                    'defaultFont' => 'Arial',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                ]);
+
+            return response()->streamDownload(function() use ($pdf) {
+                echo $pdf->output();
+            }, $nomFichier);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export PDF: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ Export PDF admis uniquement
+     */
+    public function exporterAdmisPDF($resultats, $niveau = null, $anneeUniv = null, $parcours = null, $uesStructure = [])
+    {
+        try {
+            // Filtrer pour ne garder que les admis
+            $resultatsAdmis = collect($resultats)->filter(function($resultat) {
+                return ($resultat['decision'] ?? '') === 'admis';
+            })->values()->toArray();
+
+            if (empty($resultatsAdmis)) {
+                throw new \Exception('Aucun étudiant admis à exporter.');
+            }
+
+            $donnees = [
+                'resultats' => $resultatsAdmis,
+                'niveau' => $niveau,
+                'parcours' => $parcours,
+                'annee_universitaire' => $anneeUniv,
+                'ues_structure' => $uesStructure,
+                'statistiques' => $this->calculerStats($resultatsAdmis),
+                'date_export' => now()->format('d/m/Y H:i'),
+                'export_par' => Auth::user()->name ?? 'Système',
+                'titre_special' => 'LISTE DES ADMIS'
+            ];
+
+            $nomFichier = $this->genererNomFichierPDF($niveau, $parcours, $anneeUniv, 'Admis');
+
+            $pdf = Pdf::loadView('exports.resultats-pdf', $donnees)
+                ->setPaper('a4', 'landscape');
+
+            return response()->streamDownload(function() use ($pdf) {
+                echo $pdf->output();
+            }, $nomFichier);
             
         } catch (\Exception $e) {
             Log::error('Erreur export PDF admis: ' . $e->getMessage());
@@ -134,92 +150,154 @@ class ExportService
     }
 
     /**
-     * Préparer données Excel
+     * ✅ Générer nom de fichier Excel descriptif
      */
-    private function preparerDonneesExcel($resultats, $uesStructure)
+    private function genererNomFichierExcel($niveau = null, $parcours = null, $session = null, $anneeUniv = null, $suffix = null)
     {
-        $donnees = [];
+        $parts = ['Resultats'];
         
-        foreach ($resultats as $index => $resultat) {
-            $etudiant = $resultat['etudiant'] ?? null;
-            if (!$etudiant) continue;
-
-            $ligne = [
-                'N°' => $index + 1,
-                'Matricule' => $etudiant->matricule ?? '',
-                'Nom' => $etudiant->nom ?? '',
-                'Prénom' => $etudiant->prenom ?? '',
-            ];
-            
-            // Ajouter UE si disponibles
-            if (!empty($uesStructure)) {
-                foreach ($uesStructure as $ueStructure) {
-                    $moyenneUE = $this->calculerMoyenneUE($resultat, $ueStructure);
-                    $ligne[$ueStructure['ue']->abr ?? 'UE'] = $moyenneUE;
-                }
-            }
-            
-            $ligne = array_merge($ligne, [
-                'Moyenne Générale' => number_format($resultat['moyenne_generale'] ?? 0, 2),
-                'Crédits Validés' => $resultat['credits_valides'] ?? 0,
-                'Total Crédits' => $resultat['total_credits'] ?? 60,
-                'Décision' => ucfirst($resultat['decision'] ?? 'Non définie'),
-                'Note Éliminatoire' => ($resultat['has_note_eliminatoire'] ?? false) ? 'Oui' : 'Non',
-                'Validé par Jury' => ($resultat['jury_validated'] ?? false) ? 'Oui' : 'Non',
-            ]);
-            
-            $donnees[] = $ligne;
+        if ($session) {
+            $parts[] = $session->type === 'Normale' ? 'Session1' : 'Session2';
         }
         
-        return $donnees;
+        if ($niveau) {
+            $parts[] = str_replace(' ', '_', $niveau->nom);
+        }
+        
+        if ($parcours) {
+            $parts[] = str_replace(' ', '_', $parcours->nom);
+        }
+        
+        if ($anneeUniv) {
+            $parts[] = str_replace(['/', ' '], ['_', '_'], $anneeUniv->libelle);
+        }
+        
+        if ($suffix) {
+            $parts[] = $suffix;
+        }
+        
+        $parts[] = now()->format('Y-m-d_H-i');
+        
+        return implode('_', $parts) . '.xlsx';
     }
 
     /**
-     * Calculer moyenne UE
+     * ✅ Générer nom de fichier PDF descriptif
      */
-    private function calculerMoyenneUE($resultat, $ueStructure)
+    private function genererNomFichierPDF($niveau = null, $parcours = null, $anneeUniv = null, $suffix = null)
     {
-        $notesUE = [];
-        $hasNoteZero = false;
+        $parts = ['Resultats'];
         
-        foreach ($ueStructure['ecs'] as $ecData) {
-            if (isset($resultat['notes'][$ecData['ec']->id])) {
-                $note = $resultat['notes'][$ecData['ec']->id]->note;
-                $notesUE[] = $note;
-                if ($note == 0) $hasNoteZero = true;
-            }
+        if ($niveau) {
+            $parts[] = str_replace(' ', '_', $niveau->nom);
         }
         
-        if ($hasNoteZero) {
-            return '0.00 (Élim)';
-        } elseif (!empty($notesUE)) {
-            return number_format(array_sum($notesUE) / count($notesUE), 2);
+        if ($parcours) {
+            $parts[] = str_replace(' ', '_', $parcours->nom);
         }
         
-        return '-';
+        if ($anneeUniv) {
+            $parts[] = str_replace(['/', ' '], ['_', '_'], $anneeUniv->libelle);
+        }
+        
+        if ($suffix) {
+            $parts[] = $suffix;
+        }
+        
+        $parts[] = now()->format('Y-m-d_H-i');
+        
+        return implode('_', $parts) . '.pdf';
     }
 
     /**
-     * Calculer statistiques
+     * ✅ Calculer statistiques complètes
      */
     private function calculerStats($resultats)
     {
         $total = count($resultats);
         $decisions = collect($resultats)->pluck('decision');
-        $moyennes = collect($resultats)->pluck('moyenne_generale');
+        $moyennes = collect($resultats)->pluck('moyenne_generale')->filter();
         $creditsTotal = collect($resultats)->sum('credits_valides');
         
         $admis = $decisions->filter(fn($d) => $d === 'admis')->count();
+        $rattrapage = $decisions->filter(fn($d) => $d === 'rattrapage')->count();
+        $redoublant = $decisions->filter(fn($d) => $d === 'redoublant')->count();
+        $exclus = $decisions->filter(fn($d) => $d === 'exclus')->count();
         
         return [
             'total_etudiants' => $total,
             'admis' => $admis,
-            'rattrapage' => $decisions->filter(fn($d) => $d === 'rattrapage')->count(),
-            'redoublant' => $decisions->filter(fn($d) => $d === 'redoublant')->count(),
-            'exclus' => $decisions->filter(fn($d) => $d === 'exclus')->count(),
+            'rattrapage' => $rattrapage,
+            'redoublant' => $redoublant,
+            'exclus' => $exclus,
             'taux_reussite' => $total > 0 ? round(($admis / $total) * 100, 1) : 0,
-            'moyenne_promo' => $moyennes->count() > 0 ? number_format($moyennes->avg(), 2) : 0,
-            'credits_moyen' => $total > 0 ? round($creditsTotal / $total, 1) : 0
+            'moyenne_promo' => $moyennes->count() > 0 ? round($moyennes->avg(), 2) : 0,
+            'credits_moyen' => $total > 0 ? round($creditsTotal / $total, 1) : 0,
+            'etudiants_avec_note_eliminatoire' => collect($resultats)->where('has_note_eliminatoire', true)->count(),
+            'etudiants_jury_validated' => collect($resultats)->where('jury_validated', true)->count(),
+        ];
+    }
+
+    /**
+     * ✅ Export rapide depuis le composant Livewire
+     */
+    public function exportRapideExcel($resultats, $uesStructure, $sessionType = 'Session1')
+    {
+        try {
+            $nomFichier = "Export_Rapide_{$sessionType}_" . now()->format('Y-m-d_H-i') . '.xlsx';
+            
+            // Session mock pour l'export rapide
+            $sessionMock = (object) [
+                'type' => $sessionType === 'Session1' ? 'Normale' : 'Rattrapage',
+                'id' => null
+            ];
+            
+            return Excel::download(
+                new ResultatsExport($resultats, $uesStructure, $sessionMock), 
+                $nomFichier
+            );
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export rapide Excel: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ Valider les données avant export
+     */
+    public function validerDonneesExport($resultats, $uesStructure = [])
+    {
+        $erreurs = [];
+        
+        if (empty($resultats)) {
+            $erreurs[] = 'Aucun résultat fourni pour l\'export';
+        }
+        
+        if (empty($uesStructure)) {
+            $erreurs[] = 'Structure UE manquante - l\'export pourrait être incomplet';
+        }
+        
+        // Vérifier la cohérence des données
+        foreach ($resultats as $index => $resultat) {
+            if (!isset($resultat['etudiant'])) {
+                $erreurs[] = "Ligne " . ($index + 1) . ": Informations étudiant manquantes";
+            }
+            
+            if (!isset($resultat['moyenne_generale'])) {
+                $erreurs[] = "Ligne " . ($index + 1) . ": Moyenne générale manquante";
+            }
+            
+            if (!isset($resultat['decision'])) {
+                $erreurs[] = "Ligne " . ($index + 1) . ": Décision manquante";
+            }
+        }
+        
+        return [
+            'valid' => empty($erreurs),
+            'erreurs' => $erreurs,
+            'total_resultats' => count($resultats),
+            'total_ues' => count($uesStructure)
         ];
     }
 }

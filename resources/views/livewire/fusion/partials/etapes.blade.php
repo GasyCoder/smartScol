@@ -1,8 +1,8 @@
-{{-- livewire.fusion.partials.etapes--}}
+{{-- livewire.fusion.partials.etapes --}}
 <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
     
     {{-- 1. Vérification de cohérence --}}
-    <div class="p-5 border rounded-lg {{ $statut === 'verification' && !$showFusionButton ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
+    {{-- <div class="p-5 border rounded-lg {{ $statut === 'verification' && !$showFusionButton ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
                 @if($statut === 'initial' || ($statut === 'verification' && !$showFusionButton))
@@ -65,10 +65,10 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div> --}}
 
     {{-- 2. Fusion des données --}}
-    <div class="p-5 border rounded-lg {{ $statut === 'fusion' ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
+    {{-- <div class="p-5 border rounded-lg {{ $statut === 'fusion' ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
                 @if($statut === 'initial' || ($statut === 'verification' && !$showFusionButton))
@@ -171,10 +171,10 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div> --}}
 
     {{-- 3. Vérification et Validation --}}
-    <div class="p-5 border rounded-lg {{ $statut === 'valide' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
+    {{-- <div class="p-5 border rounded-lg {{ $statut === 'valide' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700' }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
                 @if($statut === 'initial' || $statut === 'verification' || ($statut === 'fusion' && $etapeFusion < 1))
@@ -268,10 +268,10 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div> --}}
 
     {{-- 4. Publication des résultats --}}
-    <div class="p-5 border rounded-lg {{ $statut === 'publie' ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800' : ($statut === 'annule' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700') }}">
+    {{-- <div class="p-5 border rounded-lg {{ $statut === 'publie' ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800' : ($statut === 'annule' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700') }}">
         <div class="flex items-start">
             <div class="flex-shrink-0">
                 @if($statut === 'initial' || $statut === 'verification' || $statut === 'fusion' || $statut === 'valide')
@@ -405,5 +405,5 @@
                 @endif
             </div>
         </div>
-    </div>
+    </div> --}}
 </div>

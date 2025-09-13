@@ -462,13 +462,31 @@ class FusionIndex extends Component
                     return;
                 }
 
+                // 1. Transférer les résultats (crée avec STATUT_EN_ATTENTE)
                 $result = (new FusionService())->transfererResultats($resultatsIds, Auth::id());
 
                 if ($result['success']) {
+                    // 2. NOUVEAU : Publier immédiatement les résultats créés
+                    $resultatsNouveaux = ResultatFinal::where('examen_id', $this->examen_id)
+                        ->where('session_exam_id', $this->sessionActive->id)
+                        ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+                        ->get();
+
+                    foreach ($resultatsNouveaux->groupBy('etudiant_id') as $etudiantId => $resultatsEtudiant) {
+                        $decision = $this->sessionActive->type === 'Rattrapage'
+                            ? ResultatFinal::determinerDecisionRattrapage($etudiantId, $this->sessionActive->id)
+                            : ResultatFinal::determinerDecisionPremiereSession($etudiantId, $this->sessionActive->id);
+
+                        foreach ($resultatsEtudiant as $resultat) {
+                            $resultat->changerStatut(ResultatFinal::STATUT_PUBLIE, Auth::id(), false, $decision);
+                        }
+                    }
+
                     $this->setEtat('publie', 100, 4);
                     toastr()->success($result['message']);
                 } else {
                     toastr()->error($result['message']);
+                    return; // Sortir si erreur
                 }
             }
 

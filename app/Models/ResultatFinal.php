@@ -330,25 +330,11 @@ class ResultatFinal extends Model
 
             DB::commit();
 
-            Log::info('Changement de statut résultat final', [
-                'resultat_id' => $this->id,
-                'de' => $ancienStatut,
-                'vers' => $nouveauStatut,
-                'user_id' => $userId,
-                'avec_deliberation' => $avecDeliberation,
-                'decision' => $decision
-            ]);
-
             return $this;
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Erreur lors du changement de statut', [
-                'resultat_id' => $this->id,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
+
             throw $e;
         }
     }
@@ -389,12 +375,6 @@ class ResultatFinal extends Model
             $this->save();
 
             DB::commit();
-
-            Log::info('Résultat final annulé', [
-                'resultat_id' => $this->id,
-                'user_id' => $userId,
-                'motif' => $motif
-            ]);
 
             return $this;
 
@@ -442,11 +422,6 @@ class ResultatFinal extends Model
             $this->save();
 
             DB::commit();
-
-            Log::info('Résultat final réactivé', [
-                'resultat_id' => $this->id,
-                'user_id' => $userId
-            ]);
 
             return $this;
 
@@ -510,11 +485,6 @@ class ResultatFinal extends Model
 
         $this->deliberation_id = $deliberationId;
         $this->save();
-
-        Log::info('Assignation délibération', [
-            'resultat_id' => $this->id,
-            'deliberation_id' => $deliberationId
-        ]);
 
         return true;
     }
@@ -601,17 +571,6 @@ class ResultatFinal extends Model
             
             $decision = $resultats['decision']['code'];
             
-            \Log::info('✅ Décision calculée via CalculAcademiqueService (S1)', [
-                'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId,
-                'decision' => $decision,
-                'credits_valides' => $resultats['synthese']['credits_valides'],
-                'total_credits' => $resultats['synthese']['total_credits'],
-                'moyenne_generale' => $resultats['synthese']['moyenne_generale'],
-                'a_note_eliminatoire' => $resultats['synthese']['a_note_eliminatoire'],
-                'service_utilise' => 'CalculAcademiqueService'
-            ]);
-            
             return $decision;
             
         } catch (\Exception $e) {
@@ -640,16 +599,6 @@ class ResultatFinal extends Model
             
             $decision = $resultats['decision']['code'];
             
-            \Log::info('✅ Décision calculée via CalculAcademiqueService (S2)', [
-                'etudiant_id' => $etudiantId,
-                'session_id' => $sessionId,
-                'decision' => $decision,
-                'credits_valides' => $resultats['synthese']['credits_valides'],
-                'total_credits' => $resultats['synthese']['total_credits'],
-                'moyenne_generale' => $resultats['synthese']['moyenne_generale'],
-                'a_note_eliminatoire' => $resultats['synthese']['a_note_eliminatoire'],
-                'service_utilise' => 'CalculAcademiqueService'
-            ]);
             
             return $decision;
             
@@ -674,10 +623,6 @@ class ResultatFinal extends Model
         try {
             $session = $this->sessionExam;
             if (!$session) {
-                \Log::warning('Session non trouvée pour recalcul décision', [
-                    'resultat_final_id' => $this->id,
-                    'session_exam_id' => $this->session_exam_id
-                ]);
                 return false;
             }
 
@@ -695,17 +640,6 @@ class ResultatFinal extends Model
                     ->where('examen_id', $this->examen_id)
                     ->where('session_exam_id', $this->session_exam_id)
                     ->update(['decision' => $nouvelleDecision]);
-
-                \Log::info('✅ Décision recalculée avec service complet', [
-                    'etudiant_id' => $this->etudiant_id,
-                    'examen_id' => $this->examen_id,
-                    'session_id' => $this->session_exam_id,
-                    'ancienne_decision' => $ancienneDecision,
-                    'nouvelle_decision' => $nouvelleDecision,
-                    'resultats_mis_a_jour' => $updated,
-                    'credits_valides' => $resultats['synthese']['credits_valides'],
-                    'total_credits' => $resultats['synthese']['total_credits']
-                ]);
 
                 // Recharger le modèle actuel
                 $this->refresh();
@@ -925,13 +859,6 @@ class ResultatFinal extends Model
                 $statistiques[$decision]++;
                 $count++;
             }
-
-            Log::info('Décisions académiques appliquées selon votre logique', [
-                'session_id' => $sessionId,
-                'type_session' => $session->type,
-                'etudiants_traites' => $count,
-                'statistiques' => $statistiques
-            ]);
 
             return [
                 'success' => true,
@@ -1364,13 +1291,6 @@ class ResultatFinal extends Model
 
             DB::commit();
 
-            Log::info('Publication en masse des résultats', [
-                'session_id' => $sessionId,
-                'resultats_publies' => $count,
-                'avec_decisions' => $avecDecisions,
-                'user_id' => $userId
-            ]);
-
             return [
                 'success' => true,
                 'resultats_publies' => $count,
@@ -1415,13 +1335,6 @@ class ResultatFinal extends Model
             }
 
             DB::commit();
-
-            Log::info('Annulation en masse des résultats', [
-                'session_id' => $sessionId,
-                'resultats_annules' => $count,
-                'motif' => $motif,
-                'user_id' => $userId
-            ]);
 
             return [
                 'success' => true,
@@ -1677,15 +1590,6 @@ class ResultatFinal extends Model
 
             DB::commit();
 
-            Log::info('Meilleures notes appliquées', [
-                'etudiant_id' => $etudiantId,
-                'examen_id' => $examenId,
-                'notes_modifiees' => $notesModifiees,
-                'nouvelle_moyenne' => $nouvelleMoyenne,
-                'nouvelle_decision' => $nouvelleDecision,
-                'meilleures_notes' => $meilleuresNotes
-            ]);
-
             return [
                 'success' => true,
                 'notes_modifiees' => $notesModifiees,
@@ -1751,13 +1655,6 @@ class ResultatFinal extends Model
             usort($etudiantsEligibles, function($a, $b) {
                 return $a['moyenne_normale'] <=> $b['moyenne_normale'];
             });
-
-            Log::info('Étudiants éligibles au rattrapage calculés', [
-                'examen_id' => $examenId,
-                'session_normale_id' => $sessionNormaleId,
-                'total_eligibles' => count($etudiantsEligibles),
-                'moyennes' => array_column($etudiantsEligibles, 'moyenne_normale')
-            ]);
 
             return $etudiantsEligibles;
 
