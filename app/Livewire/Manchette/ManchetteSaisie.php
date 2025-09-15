@@ -3,6 +3,7 @@
 namespace App\Livewire\Manchette;
 
 use App\Models\EC;
+use App\Models\UE;
 use App\Models\Salle;
 use App\Models\Examen;
 use App\Models\Niveau;
@@ -10,6 +11,7 @@ use App\Models\Parcour;
 use Livewire\Component;
 use App\Models\Etudiant;
 use App\Models\Manchette;
+use App\Models\SessionExam;
 use App\Models\CodeAnonymat;
 use Livewire\WithPagination;
 use App\Models\PresenceExamen;
@@ -23,7 +25,10 @@ class ManchetteSaisie extends Component
 {
     use WithPagination;
 
-    protected $paginationTheme = 'tailwind';
+    public $ecsDisponibles = []; // ECs filtrés selon la session
+    public $ecsNonValides = []; // Pour session rattrapage
+    public $statistiquesRattrapage = [];
+    public $sessionNormaleId = null;
 
     // NAVIGATION
     public $step = 'niveau';
@@ -101,6 +106,12 @@ class ManchetteSaisie extends Component
     public function updatedExamenId()
     {
         $this->examenSelected = $this->examen_id ? Examen::find($this->examen_id) : null;
+        
+        // ✅ AJOUT : Recalculer les données de rattrapage
+        if ($this->examenSelected && $this->sessionType === 'rattrapage') {
+            $this->filterECsSelonSession();
+        }
+        
         $this->resetPage();
     }
 
@@ -222,6 +233,12 @@ class ManchetteSaisie extends Component
         }
 
         $this->examenSelected = $this->examen_id ? Examen::find($this->examen_id) : null;
+        
+        // ✅ AJOUT : Calculer les données de rattrapage dès que l'examen est sélectionné
+        if ($this->examenSelected && $this->sessionType === 'rattrapage') {
+            $this->filterECsSelonSession();
+        }
+        
         $this->resetPage();
     }
 
@@ -328,7 +345,13 @@ class ManchetteSaisie extends Component
     {
         $this->resetPresenceData();
         $this->loadCodeSalleFromExamen();
-        $this->calculateTotalEtudiants(); // ← Cette ligne doit être présente
+        
+        // Filtrer les ECs selon la session (calcule les statistiques de rattrapage)
+        $this->filterECsSelonSession();
+        
+        // ✅ IMPORTANT : Recalculer APRÈS l'analyse de rattrapage
+        $this->calculateTotalEtudiants(); 
+        
         $this->loadPresenceData();
         
         if ($this->step === 'saisie') {
@@ -336,6 +359,7 @@ class ManchetteSaisie extends Component
             $this->calculateNextSequence();
         }
     }
+
 
     // GESTION PRÉSENCES - LOGIQUE SIMPLIFIÉE
     public function loadPresenceData()
@@ -390,6 +414,10 @@ class ManchetteSaisie extends Component
 
     public function startEditingPresence()
     {
+        if ($this->sessionType === 'rattrapage' && empty($this->statistiquesRattrapage)) {
+            $this->filterECsSelonSession();
+        }
+        
         $this->calculateTotalEtudiants(); // ← Ajoutez cette ligne
         $this->isEditingPresence = true;
         $this->show_envelope_calculator = false;
@@ -603,28 +631,40 @@ class ManchetteSaisie extends Component
         }
     }
 
+
     public function calculateTotalEtudiants()
     {
         if (!$this->niveauSelected) {
             $this->totalEtudiantsTheorique = 0;
-            logger("calculateTotalEtudiants: Pas de niveau sélectionné");
             return;
         }
 
-        $query = Etudiant::where('niveau_id', $this->niveauSelected->id)
-            ->where('is_active', true);
+        if ($this->sessionType === 'rattrapage' && $this->ecSelected) {
+            // Session rattrapage : seulement les étudiants éligibles pour cette EC spécifique
+            $etudiantsEligibles = $this->getEtudiantsEligiblesPourEC($this->ecSelected->id);
+            $this->totalEtudiantsTheorique = $etudiantsEligibles->count();
+            
+            \Log::info('Total étudiants calculé pour EC rattrapage', [
+                'ec_id' => $this->ecSelected->id,
+                'ec_nom' => $this->ecSelected->nom,
+                'etudiants_eligibles' => $this->totalEtudiantsTheorique
+            ]);
+        } else {
+            // Session normale : tous les étudiants du niveau/parcours
+            $query = Etudiant::where('niveau_id', $this->niveauSelected->id)
+                ->where('is_active', true);
 
-        if ($this->parcoursSelected) {
-            $query->where('parcours_id', $this->parcoursSelected->id);
+            if ($this->parcoursSelected) {
+                $query->where('parcours_id', $this->parcoursSelected->id);
+            }
+
+            $this->totalEtudiantsTheorique = $query->count();
         }
-
-        $this->totalEtudiantsTheorique = $query->count();
     }
 
     // SAISIE MANCHETTES
     public function updatedMatricule()
     {
-        // ❌ NE PAS sauvegarder en session automatiquement
         $this->etudiantTrouve = null;
         $this->matriculeExisteDeja = false;
         
@@ -636,20 +676,180 @@ class ManchetteSaisie extends Component
                 $query->where('parcours_id', $this->parcoursSelected->id);
             }
             
-            $this->etudiantTrouve = $query->first();
+            $etudiantCandidat = $query->first();
             
-            if ($this->etudiantTrouve && $this->examenSelected && $this->ecSelected) {
-                $sessionId = Manchette::getCurrentSessionId();
-                
-                $this->matriculeExisteDeja = Manchette::where('etudiant_id', $this->etudiantTrouve->id)
-                    ->where('examen_id', $this->examenSelected->id)
-                    ->where('session_exam_id', $sessionId)
-                    ->whereHas('codeAnonymat', function($q) {
-                        $q->where('ec_id', $this->ecSelected->id);
-                    })
-                    ->exists();
+            if ($etudiantCandidat) {
+                // ✅ NOUVELLE LOGIQUE : Vérification selon le type de session
+                if ($this->sessionType === 'rattrapage') {
+                    $this->verifierEligibiliteRattrapage($etudiantCandidat);
+                } else {
+                    // Session normale : validation standard
+                    $this->etudiantTrouve = $etudiantCandidat;
+                    $this->verifierDoublonSessionNormale();
+                }
+            } else {
+                // Étudiant non trouvé dans le niveau/parcours
+                $this->etudiantTrouve = null;
             }
         }
+    }
+
+
+    /**
+     * 🔍 NOUVELLE MÉTHODE : Vérifie si l'étudiant est éligible au rattrapage
+     */
+    private function verifierEligibiliteRattrapage($etudiantCandidat)
+    {
+        if (!$this->ecSelected) {
+            $this->showMessage('EC non sélectionnée pour la vérification.', 'error');
+            $this->etudiantTrouve = null;
+            return;
+        }
+
+        // Vérifier si cet étudiant est éligible pour cette EC spécifique
+        $etudiantsEligibles = $this->getEtudiantsEligiblesPourEC($this->ecSelected->id);
+        $estEligible = $etudiantsEligibles->contains('etudiant_id', $etudiantCandidat->id);
+
+        if (!$estEligible) {
+            $this->verifierRaisonNonEligibiliteSpecifique($etudiantCandidat);
+            return;
+        }
+
+        // Étudiant éligible - vérifier les doublons
+        $this->etudiantTrouve = $etudiantCandidat;
+        $this->verifierDoublonSessionRattrapage();
+    }
+
+
+    /**
+     * 📋 MÉTHODE CORRIGÉE : Raison spécifique par EC/UE
+     */
+    private function verifierRaisonNonEligibiliteSpecifique($etudiantCandidat)
+    {
+        try {
+            if (!$this->ecSelected) {
+                $this->showMessage('EC non sélectionnée.', 'error');
+                $this->etudiantTrouve = null;
+                return;
+            }
+
+            // Récupérer l'UE de cette EC
+            $ue = UE::find($this->ecSelected->ue_id);
+            if (!$ue) {
+                $this->showMessage('UE introuvable pour cette EC.', 'error');
+                $this->etudiantTrouve = null;
+                return;
+            }
+
+            // Vérifier la moyenne de l'UE en session normale
+            $notesUe = DB::table('resultats_finaux')
+                ->join('ecs', 'resultats_finaux.ec_id', '=', 'ecs.id')
+                ->where('ecs.ue_id', $ue->id)
+                ->where('resultats_finaux.etudiant_id', $etudiantCandidat->id)
+                ->where('resultats_finaux.session_exam_id', $this->sessionNormaleId)
+                ->where('resultats_finaux.statut', 'publie')
+                ->pluck('resultats_finaux.note');
+
+            if ($notesUe->isEmpty()) {
+                $this->showMessage("Cet étudiant n'a pas de résultats pour l'UE \"{$ue->nom}\" en session normale.", 'error');
+                toastr()->error("Aucun résultat en session normale pour l'UE \"{$ue->nom}\".");
+            } else {
+                $moyenneUe = $notesUe->avg();
+                if ($moyenneUe >= 10) {
+                    $this->showMessage("Cet étudiant a déjà VALIDÉ en session normale.", 'error');
+                    toastr()->warning("UE \"{$ue->nom}\" déjà validée, rattrapage non autorisé.");
+                } else {
+                    $this->showMessage("Problème technique : UE non validée mais étudiant non trouvé dans les éligibles.", 'error');
+                    toastr()->error("Erreur de cohérence des données de rattrapage.");
+                }
+            }
+
+            $this->etudiantTrouve = null;
+
+        } catch (\Exception $e) {
+            $this->showMessage('Erreur lors de la vérification spécifique: ' . $e->getMessage(), 'error');
+            toastr()->error('Erreur lors de la vérification d\'éligibilité.');
+            $this->etudiantTrouve = null;
+        }
+    }
+
+    /**
+     * 📋 NOUVELLE MÉTHODE : Détermine pourquoi l'étudiant n'est pas éligible
+     */
+    private function verifierRaisonNonEligibilite($etudiantCandidat)
+    {
+        try {
+            // Récupérer la session normale correspondante
+            $sessionRattrapage = SessionExam::find(Manchette::getCurrentSessionId());
+            $sessionNormaleId = SessionExam::where('annee_universitaire_id', $sessionRattrapage->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->value('id');
+
+            if (!$sessionNormaleId) {
+                $this->showMessage('Impossible de vérifier l\'éligibilité - Session normale non trouvée.', 'error');
+                toastr()->error('Session normale non trouvée.');
+                $this->etudiantTrouve = null;
+                return;
+            }
+
+            // Vérifier le statut de l'étudiant en session normale
+            $decisionEtudiant = $etudiantCandidat->getDecisionPourSession($sessionNormaleId);
+            
+            if ($decisionEtudiant === 'admis') {
+                $this->showMessage('Cet étudiant a été ADMIS en session normale et ne peut pas passer le rattrapage.', 'error');
+                toastr()->error('Étudiant ADMIS en session normale, non éligible au rattrapage.');
+            } elseif ($decisionEtudiant === 'exclus' || $decisionEtudiant === 'redoublant') {
+                $this->showMessage("Cet étudiant a une décision '$decisionEtudiant' en session normale et ne peut pas passer le rattrapage.", 'error');
+                toastr()->error("Étudiant avec décision '$decisionEtudiant', non éligible au rattrapage.");
+            } elseif (empty($decisionEtudiant)) {
+                $this->showMessage('Cet étudiant n\'a pas de résultats en session normale.', 'error');
+                toastr()->error('Aucun résultat en session normale pour cet étudiant.');
+            } else {
+                $this->showMessage('Cet étudiant n\'a pas d\'ECs à rattraper pour cette matière.', 'error');
+                toastr()->error('Aucune EC à rattraper pour cet étudiant.');
+            }
+
+            // Set to null to prevent invalid saves
+            $this->etudiantTrouve = null;
+
+        } catch (\Exception $e) {
+            $this->showMessage('Erreur lors de la vérification d\'éligibilité: ' . $e->getMessage(), 'error');
+            toastr()->error('Erreur lors de la vérification d\'éligibilité.');
+            $this->etudiantTrouve = null;
+        }
+    }
+
+    /**
+     * 🔍 Vérification des doublons pour session normale
+     */
+    private function verifierDoublonSessionNormale()
+    {
+        $sessionId = Manchette::getCurrentSessionId();
+        
+        $this->matriculeExisteDeja = Manchette::where('etudiant_id', $this->etudiantTrouve->id)
+            ->where('examen_id', $this->examenSelected->id)
+            ->where('session_exam_id', $sessionId)
+            ->whereHas('codeAnonymat', function($q) {
+                $q->where('ec_id', $this->ecSelected->id);
+            })
+            ->exists();
+    }
+
+
+    /**
+     * 🔍 Vérification des doublons pour session rattrapage
+     */
+    private function verifierDoublonSessionRattrapage()
+    {
+        $sessionId = Manchette::getCurrentSessionId();
+        
+        $this->matriculeExisteDeja = Manchette::where('etudiant_id', $this->etudiantTrouve->id)
+            ->where('examen_id', $this->examenSelected->id)
+            ->where('session_exam_id', $sessionId)
+            ->whereHas('codeAnonymat', function($q) {
+                $q->where('ec_id', $this->ecSelected->id);
+            })
+            ->exists();
     }
 
     private function resetMatriculeCompletement()
@@ -675,6 +875,7 @@ class ManchetteSaisie extends Component
     {
         $this->validate(['matricule' => 'required|string']);
 
+        
         if (!$this->etudiantTrouve || !is_object($this->etudiantTrouve)) {
             $this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
             return;
@@ -725,6 +926,21 @@ class ManchetteSaisie extends Component
                 throw new \Exception("Cet étudiant a déjà une manchette pour cette matière en session {$sessionLibelle} (Code: {$codeExistant}).");
             }
 
+            if ($sessionType === 'rattrapage') {
+                // Vérifier que cet étudiant est éligible au rattrapage pour cette EC
+                if (!in_array($this->ecSelected->id, $this->ecsDisponibles ?? [])) {
+                    throw new \Exception("Cette matière n'est pas disponible en rattrapage.");
+                }
+                
+                // Optionnel : vérifier que l'étudiant fait partie de ceux identifiés comme éligibles
+                $etudiantsEligibles = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
+                    ->pluck('etudiant_id')->toArray();
+                
+                if (!in_array($etudiantId, $etudiantsEligibles)) {
+                    throw new \Exception("Cet étudiant n'est pas éligible au rattrapage pour cette matière.");
+                }
+            }
+
             // Vérifier code pas déjà utilisé
             $existingCode = CodeAnonymat::where('examen_id', $this->examenSelected->id)
                 ->where('session_exam_id', $sessionId)
@@ -769,10 +985,10 @@ class ManchetteSaisie extends Component
                 // Créer nouvelle manchette
                 $codeAnonymat = CodeAnonymat::create([
                     'examen_id' => $this->examenSelected->id,
-                    'session_exam_id' => $sessionId,
+                    'session_exam_id' => $sessionId, // ← Seule différence entre sessions
                     'ec_id' => $this->ecSelected->id,
-                    'code_base' => $this->codeSalle,
-                    'code_complet' => $this->prochainCodeAnonymat,
+                    'code_base' => $this->codeSalle, // ← Identique (TA, TB, etc.)
+                    'code_complet' => $this->prochainCodeAnonymat, // ← Identique (TA1, TA2, etc.)
                     'sequence' => $this->prochaineSequence,
                     'saisie_par' => Auth::id(),
                 ]);
@@ -946,8 +1162,13 @@ class ManchetteSaisie extends Component
             ])
             ->join('examen_ec', 'examen_ec.ec_id', '=', 'ecs.id')
             ->where('examen_ec.examen_id', $this->examen_id)
-            ->where('ecs.is_active', true)  // Add this line to filter active ECs
+            ->where('ecs.is_active', true)
             ->with(['ue:id,nom,niveau_id,parcours_id']);
+
+        // ✅ NOUVEAU : Filtrage selon la session
+        if ($this->sessionType === 'rattrapage' && !empty($this->ecsDisponibles)) {
+            $q->whereIn('ecs.id', $this->ecsDisponibles);
+        }
 
         // Filtrage par niveau via l'UE
         if ($this->niveauSelected) {
@@ -1214,4 +1435,223 @@ class ManchetteSaisie extends Component
             'examensList' => $this->examens,
         ]);
     }
+
+
+
+    /**
+     * 🎯 MÉTHODE CLÉ : Filtre les ECs selon le type de session
+     */
+    public function filterECsSelonSession()
+    {
+        if (!$this->examenSelected) {
+            return;
+        }
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            $sessionType = Manchette::getCurrentSessionType();
+            
+            if ($sessionType === 'rattrapage') {
+                // 🚀 LOGIQUE RATTRAPAGE : Récupérer la session normale correspondante
+                $sessionRattrapage = SessionExam::find($sessionId);
+                $this->sessionNormaleId = SessionExam::where('annee_universitaire_id', $sessionRattrapage->annee_universitaire_id)
+                    ->where('type', 'Normale')
+                    ->value('id');
+
+                if (!$this->sessionNormaleId) {
+                    $this->showMessage('Session normale non trouvée pour ce rattrapage.', 'error');
+                    return;
+                }
+
+                // 📊 Analyser TOUS les étudiants éligibles au rattrapage
+                $this->analyserEtudiantsRattrapage();
+            } else {
+                // Session normale : tous les ECs sont disponibles
+                $this->ecsDisponibles = $this->examenSelected->ecs->pluck('id')->toArray();
+                $this->ecsNonValides = [];
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('Erreur filterECsSelonSession', [
+                'examen_id' => $this->examenSelected->id,
+                'error' => $e->getMessage()
+            ]);
+            $this->showMessage('Erreur lors du filtrage des ECs: ' . $e->getMessage(), 'error');
+        }
+    }
+
+
+    /**
+     * 📊 MÉTHODE : Analyse tous les étudiants éligibles pour déterminer les ECs à rattraper
+     */
+    private function analyserEtudiantsRattrapage()
+    {
+        if (!$this->sessionNormaleId || !$this->examenSelected) {
+            return;
+        }
+
+        try {
+            // Récupérer TOUTES les UE de l'examen avec leurs ECs
+            $uesAvecEcs = DB::table('ues')
+                ->join('ecs', 'ues.id', '=', 'ecs.ue_id')
+                ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+                ->where('examen_ec.examen_id', $this->examenSelected->id)
+                ->where('ues.niveau_id', $this->examenSelected->niveau_id)
+                ->when($this->examenSelected->parcours_id, function($q) {
+                    $q->where('ues.parcours_id', $this->examenSelected->parcours_id);
+                })
+                ->select('ues.id as ue_id', 'ues.nom as ue_nom', 'ecs.id as ec_id', 'ecs.nom as ec_nom')
+                ->get()
+                ->groupBy('ue_id');
+
+            if ($uesAvecEcs->isEmpty()) {
+                $this->resetStatistiquesRattrapage();
+                return;
+            }
+
+            // Analyser chaque étudiant du niveau/parcours
+            $etudiants = Etudiant::where('niveau_id', $this->examenSelected->niveau_id)
+                ->when($this->examenSelected->parcours_id, function($q) {
+                    $q->where('parcours_id', $this->examenSelected->parcours_id);
+                })
+                ->where('is_active', true)
+                ->get();
+
+            $ecsDisponiblesGlobal = collect();
+            $statistiquesDetaillees = [];
+
+            foreach ($etudiants as $etudiant) {
+                $analyse = $this->analyserEtudiantSpecifique($etudiant, $uesAvecEcs);
+                
+                if (!empty($analyse['ecs_a_rattraper'])) {
+                    $ecsDisponiblesGlobal = $ecsDisponiblesGlobal->merge($analyse['ecs_a_rattraper']);
+                    $statistiquesDetaillees[] = $analyse['statistiques'];
+                }
+            }
+
+            // Résultats globaux
+            $this->ecsDisponibles = $ecsDisponiblesGlobal->unique()->values()->toArray();
+            $this->statistiquesRattrapage = [
+                'etudiants_eligibles' => $etudiants->count(),
+                'etudiants_avec_ecs_rattrapage' => count($statistiquesDetaillees),
+                'ecs_concernees' => count($this->ecsDisponibles),
+                'detail_etudiants' => $statistiquesDetaillees,
+                'session_normale_id' => $this->sessionNormaleId,
+                'ues_analysees' => $uesAvecEcs->keys()->toArray()
+            ];
+
+            \Log::info('Analyse rattrapage granulaire terminée', [
+                'examen_id' => $this->examenSelected->id,
+                'etudiants_eligibles' => count($statistiquesDetaillees),
+                'ecs_disponibles' => count($this->ecsDisponibles),
+                'ues_analysees' => $uesAvecEcs->count()
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Erreur analyse rattrapage granulaire', [
+                'examen_id' => $this->examenSelected->id,
+                'error' => $e->getMessage()
+            ]);
+            $this->resetStatistiquesRattrapage();
+        }
+    }
+
+
+    /**
+     * 🔄 MÉTHODE UTILITAIRE : Reset des statistiques
+     */
+    private function resetStatistiquesRattrapage()
+    {
+        $this->ecsDisponibles = [];
+        $this->statistiquesRattrapage = [
+            'etudiants_eligibles' => 0,
+            'etudiants_avec_ecs_rattrapage' => 0,
+            'ecs_concernees' => 0,
+            'detail_etudiants' => [],
+            'message' => 'Aucune donnée de rattrapage disponible'
+        ];
+    }
+
+    /**
+     * 🔍 NOUVELLE MÉTHODE : Analyse spécifique d'un étudiant UE par UE
+     */
+    private function analyserEtudiantSpecifique($etudiant, $uesAvecEcs)
+    {
+        $ecsARattraper = collect();
+        $uesNonValidees = [];
+
+        foreach ($uesAvecEcs as $ueId => $ecsUe) {
+            // Calculer la moyenne de l'UE en session normale
+            $notesUe = DB::table('resultats_finaux')
+                ->whereIn('ec_id', $ecsUe->pluck('ec_id'))
+                ->where('etudiant_id', $etudiant->id)
+                ->where('session_exam_id', $this->sessionNormaleId)
+                ->where('statut', 'publie')
+                ->pluck('note');
+
+            if ($notesUe->isEmpty()) {
+                continue; // Étudiant n'a pas de notes pour cette UE
+            }
+
+            $moyenneUe = $notesUe->avg();
+
+            // Si UE < 10, TOUTES les ECs de cette UE doivent être rattrapées
+            if ($moyenneUe < 10) {
+                $uesNonValidees[] = [
+                    'ue_id' => $ueId,
+                    'ue_nom' => $ecsUe->first()->ue_nom,
+                    'moyenne' => round($moyenneUe, 2),
+                    'nb_ecs' => $ecsUe->count()
+                ];
+                
+                $ecsARattraper = $ecsARattraper->merge($ecsUe->pluck('ec_id'));
+            }
+        }
+
+        return [
+            'ecs_a_rattraper' => $ecsARattraper->toArray(),
+            'statistiques' => [
+                'etudiant_id' => $etudiant->id,
+                'matricule' => $etudiant->matricule,
+                'nom' => $etudiant->nom . ' ' . ($etudiant->prenom ?? ''),
+                'ues_non_validees' => $uesNonValidees,
+                'nb_ecs_a_rattraper' => $ecsARattraper->count()
+            ]
+        ];
+    }
+
+    /**
+     * 🎯 NOUVELLE MÉTHODE : Calcule les étudiants éligibles pour une EC spécifique
+     */
+    public function getEtudiantsEligiblesPourEC($ecId)
+    {
+        if ($this->sessionType !== 'rattrapage' || empty($this->statistiquesRattrapage)) {
+            return collect();
+        }
+
+        // Récupérer l'UE de cette EC
+        $ueId = EC::where('id', $ecId)->value('ue_id');
+        if (!$ueId) {
+            return collect();
+        }
+
+        $etudiantsEligibles = collect();
+
+        foreach ($this->statistiquesRattrapage['detail_etudiants'] as $etudiantStats) {
+            // Vérifier si cet étudiant a cette UE dans ses UE non validées
+            $aUeNonValidee = collect($etudiantStats['ues_non_validees'])
+                ->contains('ue_id', $ueId);
+
+            if ($aUeNonValidee) {
+                $etudiantsEligibles->push([
+                    'etudiant_id' => $etudiantStats['etudiant_id'],
+                    'matricule' => $etudiantStats['matricule'],
+                    'nom' => $etudiantStats['nom']
+                ]);
+            }
+        }
+
+        return $etudiantsEligibles;
+    }
+
 }

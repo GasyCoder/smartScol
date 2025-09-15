@@ -65,10 +65,10 @@
                     
                     <!-- Affichage des informations de l'étudiant -->
                     @if($etudiantTrouve)
-                        <div class="mt-3 p-4 {{ $matriculeExisteDeja ? 'bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-700' : 'bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700' }} border rounded-lg">
+                        <div class="mt-3 p-4 {{ $matriculeExisteDeja || (isset($etudiantTrouve->message_erreur)) ? 'bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-700' : 'bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700' }} border rounded-lg">
                             <div class="flex items-start">
                                 <div class="flex-shrink-0">
-                                    @if($matriculeExisteDeja)
+                                    @if($matriculeExisteDeja || (isset($etudiantTrouve->message_erreur)))
                                         <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                                         </svg>
@@ -79,14 +79,21 @@
                                     @endif
                                 </div>
                                 <div class="ml-3">
-                                    <h4 class="text-sm font-medium {{ $matriculeExisteDeja ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300' }}">
+                                    <h4 class="text-sm font-medium {{ ($matriculeExisteDeja || isset($etudiantTrouve->message_erreur)) ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300' }}">
                                         {{ $etudiantTrouve->nom }} {{ $etudiantTrouve->prenoms }}
                                     </h4>
-                                    <p class="text-xs {{ $matriculeExisteDeja ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }} mt-1">
-                                        @if($matriculeExisteDeja)
+                                    <p class="text-xs {{ ($matriculeExisteDeja || isset($etudiantTrouve->message_erreur)) ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }} mt-1">
+                                        @if(isset($etudiantTrouve->message_erreur))
+                                            ⚠️ {{ $etudiantTrouve->message_erreur }}
+                                        @elseif($matriculeExisteDeja)
                                             ⚠️ Cet étudiant a déjà une manchette pour cette matière
                                         @else
                                             ✓ Étudiant trouvé - Prêt pour l'enregistrement
+                                            @if($sessionType === 'rattrapage')
+                                                <span class="block text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                                    📋 Éligible au rattrapage pour cette matière
+                                                </span>
+                                            @endif
                                         @endif
                                     </p>
                                 </div>
@@ -95,7 +102,7 @@
                     @elseif(!empty($matricule) && strlen($matricule) >= 3)
                         <div class="mt-3 p-3 bg-red-50 border border-red-200 dark:bg-red-900/30 dark:border-red-700 rounded-lg">
                             <p class="text-sm text-red-700 dark:text-red-300">
-                                ❌ Aucun étudiant trouvé avec ce matricule
+                                ❌ Aucun étudiant trouvé avec ce matricule dans ce niveau{{ $parcoursSelected ? '/parcours' : '' }}
                             </p>
                         </div>
                     @endif
@@ -106,16 +113,18 @@
                         wire:loading.attr="disabled"
                         wire:target="sauvegarderManchette"
                         class="w-full px-6 py-4 text-lg font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed {{ !$etudiantTrouve || $matriculeExisteDeja ? 'bg-gray-300 text-gray-500 dark:bg-gray-600 dark:text-gray-400' : 'bg-green-600 hover:bg-green-700 text-white focus:ring-2 focus:ring-green-500 focus:ring-offset-2' }}"
-                        {{ !$etudiantTrouve || $matriculeExisteDeja ? 'disabled' : '' }}>
-                    
+                         {{ !$etudiantTrouve || $matriculeExisteDeja || isset($etudiantTrouve->message_erreur) ? 'disabled' : '' }}>
+
                     <span wire:loading.remove wire:target="sauvegarderManchette">
                         @if(!$etudiantTrouve)
                             Saisir un matricule valide
+                        @elseif(isset($etudiantTrouve->message_erreur))
+                            Étudiant non éligible
                         @elseif($matriculeExisteDeja)
                             Étudiant déjà enregistré
                         @else
                             🏷️ Enregistrer la manchette {{ $prochainCodeAnonymat }}
-                        @endif
+                        @endif  
                     </span>
                     
                     <span wire:loading wire:target="sauvegarderManchette" class="flex items-center justify-center">

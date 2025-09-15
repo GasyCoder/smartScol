@@ -59,3 +59,12 @@ ON copies (examen_id, session_exam_id, is_checked, ec_id, code_anonymat_id);
 -- Index composite pour les manchettes
 CREATE INDEX idx_manchettes_fusion_optimized 
 ON manchettes (examen_id, session_exam_id, etudiant_id, code_anonymat_id);
+
+
+-- Index composé pour les requêtes de rattrapage
+ALTER TABLE resultats_finaux 
+ADD INDEX idx_etudiant_session_statut (etudiant_id, session_exam_id, statut);
+
+-- Index pour les codes anonymat par session
+ALTER TABLE codes_anonymat 
+ADD INDEX idx_examen_session_ec (examen_id, session_exam_id, ec_id);

@@ -2,114 +2,103 @@
 
 namespace App\Livewire\Copie;
 
-use App\Models\Copie;
+use App\Models\EC;
+use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\EC;
-use App\Models\SessionExam;
-use App\Models\AnneeUniversitaire;
-use App\Models\User;
 use Livewire\Component;
+use App\Models\Copie;
+use App\Models\SessionExam;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Auth;
+use App\Models\AnneeUniversitaire;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class CopiesIndex extends Component
 {
     use WithPagination;
 
-    // Propriétés de filtrage
-    public $niveau_id = null;
-    public $parcours_id = null;
-    public $ec_id = null;
-    public $secretaire_id = null;
-    public $search = '';
+    // Propriétés de filtrage essentielles
+    public $niveau_id;
+    public $parcours_id;
+    public $ec_id;
+    public $session_exam_id;
+    public $saisie_par;
 
-    // Propriétés de tri
-    public $sortField = 'created_at';
-    public $sortDirection = 'desc';
-    public $perPage = 25;
-
-    // Données pour les sélecteurs
+    // Collections pour les sélecteurs
     public $niveaux = [];
     public $parcours = [];
     public $ecs = [];
     public $secretaires = [];
 
-    // Modal états
-    public $showEditModal = false;
-    public $showDeleteModal = false;
-    public $editingCopy = null;
-    public $copyToDelete = null;
+    // Propriétés d'affichage et tri
+    public $sortField = 'created_at';
+    public $sortDirection = 'desc';
+    public $perPage = 25;
+    public $search = '';
 
-    // Champs d'édition
-    public $edit_code_copie = '';
-    public $edit_note = null;
-
-    // Session active - AJOUT DES PROPRIÉTÉS MANQUANTES
+    // Session avec logique de rattrapage - TOUTES LES PROPRIÉTÉS DÉFINIES
     public $sessionActive = null;
-    public $session_exam_id = null;
     public $currentSessionType = '';
-    public $sessionInfo = '';
+    public $sessionNormaleId = null;
+    public $showBothSessions = false;
+    public $sessionFilter = 'all';
 
-    protected function rules()
-    {
-        return [
-            'edit_note' => 'nullable|numeric|min:0|max:20',
-        ];
-    }
+    // Modal de modification
+    public $showEditModal = false;
+    public $editingCopieId = null;
+    public $code_anonymat = '';
+    public $note = null;
 
-    protected function messages()
-    {
-        return [
-            'edit_note.numeric' => 'La note doit être un nombre.',
-            'edit_note.min' => 'La note ne peut pas être inférieure à 0.',
-            'edit_note.max' => 'La note ne peut pas être supérieure à 20.',
-        ];
-    }
+    // Modal de suppression
+    public $showDeleteModal = false;
+    public $copieToDelete = null;
+
+    protected $rules = [
+        'note' => 'nullable|numeric|min:0|max:20',
+    ];
+
+    protected $messages = [
+        'note.numeric' => 'La note doit être un nombre.',
+        'note.min' => 'La note ne peut pas être inférieure à 0.',
+        'note.max' => 'La note ne peut pas être supérieure à 20.',
+    ];
 
     public function mount()
     {
-        $this->loadInitialData();
-        $this->updateSessionInfo();
-    }
-
-    private function loadInitialData()
-    {
+        // Charger les niveaux
         $this->niveaux = Niveau::where('is_active', true)->orderBy('nom')->get();
-        $this->secretaires = User::role('secretaire')->orderBy('name')->get();
-    }
+        
+        // Charger les secrétaires
+        $this->secretaires = DB::table('users')
+            ->join('copies', 'users.id', '=', 'copies.saisie_par')
+            ->select('users.id', 'users.name')
+            ->distinct()
+            ->orderBy('users.name')
+            ->get();
 
-    private function updateSessionInfo()
-    {
-        try {
-            // Récupérer la session active - CORRECTION COMPLÈTE
-            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
-            if ($anneeActive) {
-                $this->sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
-                    ->where('is_active', true)
-                    ->where('is_current', true)
-                    ->first();
+        // Session active ET logique de rattrapage
+        $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+        if ($anneeActive) {
+            $this->sessionActive = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                ->where('is_active', true)
+                ->where('is_current', true)
+                ->first();
 
-                if ($this->sessionActive) {
-                    $this->session_exam_id = $this->sessionActive->id;
-                    $this->currentSessionType = $this->sessionActive->type;
-                    $this->sessionInfo = "Session {$this->sessionActive->type} active";
-                } else {
-                    $this->session_exam_id = null;
-                    $this->currentSessionType = '';
-                    $this->sessionInfo = 'Aucune session active';
+            if ($this->sessionActive) {
+                $this->session_exam_id = $this->sessionActive->id;
+                $this->currentSessionType = $this->sessionActive->type;
+                
+                // Si session de rattrapage, récupérer aussi la session normale
+                if ($this->sessionActive->type === 'Rattrapage') {
+                    $sessionNormale = $this->sessionActive->getSessionNormaleCorrespondante();
+                    if ($sessionNormale) {
+                        $this->sessionNormaleId = $sessionNormale->id;
+                        $this->showBothSessions = true;
+                    }
                 }
-            } else {
-                $this->session_exam_id = null;
-                $this->currentSessionType = '';
-                $this->sessionInfo = 'Aucune année universitaire active';
             }
-        } catch (\Exception $e) {
-            $this->session_exam_id = null;
-            $this->currentSessionType = '';
-            $this->sessionInfo = 'Erreur session : ' . $e->getMessage();
-            Log::error('Erreur récupération session active', ['error' => $e->getMessage()]);
         }
     }
 
@@ -126,7 +115,6 @@ class CopiesIndex extends Component
                 ->orderBy('nom')
                 ->get();
         }
-
         $this->resetPage();
     }
 
@@ -136,14 +124,17 @@ class CopiesIndex extends Component
         $this->ecs = collect();
 
         if ($this->niveau_id && $this->parcours_id) {
-            $this->ecs = EC::whereHas('examenEc', function($query) {
-                $query->whereHas('examen', function($q) {
-                    $q->where('niveau_id', $this->niveau_id)
-                    ->where('parcours_id', $this->parcours_id);
-                });
-            })->orderBy('nom')->get();
+            $this->ecs = DB::table('ecs')
+                ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
+                ->join('examens', 'examen_ec.examen_id', '=', 'examens.id')
+                ->where('examens.niveau_id', $this->niveau_id)
+                ->where('examens.parcours_id', $this->parcours_id)
+                ->whereNull('ecs.deleted_at')
+                ->select('ecs.*')
+                ->distinct()
+                ->orderBy('ecs.nom')
+                ->get();
         }
-
         $this->resetPage();
     }
 
@@ -152,7 +143,7 @@ class CopiesIndex extends Component
         $this->resetPage();
     }
 
-    public function updatedSecretaireId()
+    public function updatedSaisiePar()
     {
         $this->resetPage();
     }
@@ -165,73 +156,20 @@ class CopiesIndex extends Component
             $this->sortField = $field;
             $this->sortDirection = 'asc';
         }
-
         $this->resetPage();
     }
 
-    public function editCopy($id)
+    public function resetFilters()
     {
-        try {
-            $this->editingCopy = Copie::find($id);
-            
-            if (!$this->editingCopy) {
-                throw new \Exception('Copie introuvable.');
-            }
-
-            // Vérifier que la copie appartient à la session active
-            if ($this->session_exam_id && $this->editingCopy->session_exam_id !== $this->session_exam_id) {
-                throw new \Exception('Cette copie appartient à une autre session.');
-            }
-
-            $this->edit_code_copie = $this->editingCopy->codeAnonymat->code_complet ?? '';
-            $this->edit_note = $this->editingCopy->note;
-            $this->showEditModal = true;
-        } catch (\Exception $e) {
-            $this->dispatch('show-toast', [
-                'type' => 'error',
-                'message' => 'Erreur: ' . $e->getMessage()
-            ]);
-        }
+        $this->reset(['niveau_id', 'parcours_id', 'ec_id', 'search', 'saisie_par']);
+        $this->parcours = collect();
+        $this->ecs = collect();
+        $this->resetPage();
     }
 
-    public function updateCopy()
+    public function editCopie($id)
     {
-        $this->validate();
-
-        try {
-            if (!$this->editingCopy) {
-                throw new \Exception('Aucune copie en cours d\'édition.');
-            }
-
-            // Vérifier que la copie appartient à la session active
-            if ($this->session_exam_id && $this->editingCopy->session_exam_id !== $this->session_exam_id) {
-                throw new \Exception('Cette copie appartient à une autre session.');
-            }
-
-            $this->editingCopy->update([
-                'note' => $this->edit_note,
-                'modifie_par' => Auth::id(),
-                'updated_at' => now(),
-            ]);
-
-            $this->showEditModal = false;
-            $this->reset(['editingCopy', 'edit_code_copie', 'edit_note']);
-            
-            $this->dispatch('show-toast', [
-                'type' => 'success',
-                'message' => 'Copie modifiée avec succès.'
-            ]);
-        } catch (\Exception $e) {
-            $this->dispatch('show-toast', [
-                'type' => 'error',
-                'message' => 'Erreur: ' . $e->getMessage()
-            ]);
-        }
-    }
-
-    public function confirmDelete($id)
-    {
-        $copie = Copie::find($id);
+        $copie = Copie::with(['codeAnonymat'])->find($id);
         
         if (!$copie) {
             $this->dispatch('show-toast', [
@@ -241,90 +179,88 @@ class CopiesIndex extends Component
             return;
         }
 
-        // CORRECTION: Vérifier que la copie appartient à la session active
-        if ($this->session_exam_id && $copie->session_exam_id !== $this->session_exam_id) {
-            $this->dispatch('show-toast', [
-                'type' => 'error',
-                'message' => 'Cette copie appartient à une autre session.'
-            ]);
-            return;
-        }
-
-        $this->copyToDelete = $copie;
-        $this->showDeleteModal = true;
+        $this->editingCopieId = $id;
+        $this->code_anonymat = $copie->codeAnonymat->code_complet ?? 'N/A';
+        $this->note = $copie->note;
+        $this->showEditModal = true;
     }
 
-    public function deleteCopy()
+    public function updateCopie()
     {
-        // Sauvegarder l'ID au début pour les logs
-        $copyId = $this->copyToDelete ? $this->copyToDelete->id : null;
-        
+        $this->validate();
+
         try {
-            if (!$this->copyToDelete) {
-                throw new \Exception('Manchette introuvable.');
+            $copie = Copie::find($this->editingCopieId);
+            
+            if (!$copie) {
+                throw new \Exception('Copie introuvable.');
             }
 
-            // Sauvegarder les infos pour la notification AVANT suppression
-            $copieInfo = [
-                'code' => $this->copyToDelete->codeAnonymat->code_complet ?? 'N/A',
-                'etudiant' => $this->copyToDelete->etudiant->nom . ' ' . $this->copyToDelete->etudiant->prenom
-            ];
+            $copie->update([
+                'note' => $this->note,
+                'modifie_par' => Auth::id(),
+                'updated_at' => now(),
+            ]);
 
-            // Supprimer la manchette DIRECTEMENT - sans vérification d'association
-            $this->copyToDelete->delete();
+            $this->showEditModal = false;
+            $this->reset(['editingCopieId', 'code_anonymat', 'note']);
             
-            // Réinitialisation COMPLÈTE de l'état
-            $this->showDeleteModal = false;
-            $this->copyToDelete = null;
-            
-            // Notification de succès
-            toastr()->success("Manchette {$copieInfo['code']} de {$copieInfo['etudiant']} supprimée avec succès.");
-
-
-            // Rafraîchir les données
-            $this->dispatch('refresh-page');
+            $this->dispatch('show-toast', [
+                'type' => 'success',
+                'message' => 'Note modifiée avec succès.'
+            ]);
             
         } catch (\Exception $e) {
-            // Réinitialisation en cas d'erreur
-            $this->showDeleteModal = false;
-            $this->copyToDelete = null;
-            
-            // Notification d'erreur
             $this->dispatch('show-toast', [
                 'type' => 'error',
                 'message' => 'Erreur: ' . $e->getMessage()
             ]);
-            
-            // Log avec l'ID sauvegardé
-            Log::error('Erreur suppression manchette', [
-                'error' => $e->getMessage(),
-                'copie_id' => $copyId
-            ]);
         }
     }
 
-    public function deleteCopyX()
+    public function cancelEdit()
+    {
+        $this->showEditModal = false;
+        $this->reset(['editingCopieId', 'code_anonymat', 'note']);
+    }
+
+    public function confirmDelete($id)
+    {
+        $copie = Copie::with(['codeAnonymat'])->find($id);
+        
+        if (!$copie) {
+            $this->dispatch('show-toast', [
+                'type' => 'error',
+                'message' => 'Copie introuvable.'
+            ]);
+            return;
+        }
+
+        $this->copieToDelete = $copie;
+        $this->showDeleteModal = true;
+    }
+
+    public function deleteCopie()
     {
         try {
-            if (!$this->copyToDelete) {
-                throw new \Exception('Aucune copie à supprimer.');
+            if (!$this->copieToDelete) {
+                throw new \Exception('Copie introuvable.');
             }
 
-            // Vérifier que la copie appartient à la session active
-            if ($this->session_exam_id && $this->copyToDelete->session_exam_id !== $this->session_exam_id) {
-                throw new \Exception('Cette copie appartient à une autre session.');
-            }
-
-            $this->copyToDelete->delete();
+            $this->copieToDelete->delete();
             
             $this->showDeleteModal = false;
-            $this->copyToDelete = null;
+            $this->copieToDelete = null;
             
             $this->dispatch('show-toast', [
                 'type' => 'success',
                 'message' => 'Copie supprimée avec succès.'
             ]);
+            
         } catch (\Exception $e) {
+            $this->showDeleteModal = false;
+            $this->copieToDelete = null;
+            
             $this->dispatch('show-toast', [
                 'type' => 'error',
                 'message' => 'Erreur: ' . $e->getMessage()
@@ -332,93 +268,156 @@ class CopiesIndex extends Component
         }
     }
 
-    public function closeEditModal()
+    public function cancelDelete()
     {
-        $this->showEditModal = false;
-        $this->reset(['editingCopy', 'edit_code_copie', 'edit_note']);
-    }
-
-    public function closeDeleteModal()
-    {
+        $this->copieToDelete = null;
         $this->showDeleteModal = false;
-        $this->copyToDelete = null;
     }
 
-    public function resetFilters()
+    private function getCopies()
     {
-        $this->reset([
-            'niveau_id', 'parcours_id', 'ec_id', 
-            'secretaire_id', 'search'
-        ]);
-        
-        $this->parcours = collect();
-        $this->ecs = collect();
-        $this->resetPage();
-    }
+        $query = Copie::with(['codeAnonymat.ec.ue', 'utilisateurSaisie', 'sessionExam']);
 
-    public function render()
-    {
-        $query = Copie::with([
-            'examen.niveau', 
-            'examen.parcours',
-            'ec.ue',
-            'utilisateurSaisie',
-            'utilisateurModification',
-            'sessionExam',
-            'codeAnonymat'
-        ]);
+        // LOGIQUE CORRECTE : En session rattrapage, montrer copies rattrapage + copies validées session normale
+        if ($this->showBothSessions && $this->sessionNormaleId) {
+            // Récupérer les étudiants éligibles au rattrapage (ceux qui ont au moins une décision "rattrapage")
+            $etudiantsRattrapage = DB::table('resultats_finaux')
+                ->where('session_exam_id', $this->sessionNormaleId)
+                ->where('decision', 'rattrapage')
+                ->where('statut', 'publie')
+                ->select('etudiant_id')
+                ->distinct()
+                ->pluck('etudiant_id');
 
-        // Application des filtres
-        if ($this->niveau_id) {
-            $query->whereHas('examen', function($q) {
-                $q->where('niveau_id', $this->niveau_id);
-            });
+            if ($etudiantsRattrapage->isEmpty()) {
+                // Aucun étudiant en rattrapage, afficher seulement session active
+                $query->where('session_exam_id', $this->session_exam_id);
+            } else {
+                $copieIds = collect();
+
+                // Utiliser le RattrapageService pour chaque étudiant
+                $rattrapageService = app(\App\Services\RattrapageService::class);
+
+                foreach ($etudiantsRattrapage as $etudiantId) {
+                    try {
+                        // Utiliser le service pour obtenir les ECs non validés
+                        $ecsAnalyse = $rattrapageService->getEcsNonValidesEtudiant($etudiantId, $this->sessionNormaleId);
+                        
+                        $ecsEnRattrapage = $ecsAnalyse['ecs_non_valides'] ?? [];
+                        
+                        // 1. Ajouter les copies de rattrapage pour les ECs en rattrapage
+                        if (!empty($ecsEnRattrapage)) {
+                            $copiesRattrapage = DB::table('copies')
+                                ->join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+                                ->join('manchettes', function($join) use ($etudiantId) {
+                                    $join->on('codes_anonymat.id', '=', 'manchettes.code_anonymat_id')
+                                         ->where('manchettes.etudiant_id', '=', $etudiantId)
+                                         ->where('manchettes.session_exam_id', '=', $this->session_exam_id);
+                                })
+                                ->where('copies.session_exam_id', $this->session_exam_id)
+                                ->whereIn('codes_anonymat.ec_id', $ecsEnRattrapage)
+                                ->pluck('copies.id');
+                            
+                            $copieIds = $copieIds->concat($copiesRattrapage);
+                        }
+
+                        // 2. Ajouter les copies validées de session normale pour les ECs VALIDÉS
+                        $toutesLesEcs = DB::table('resultats_finaux')
+                            ->where('etudiant_id', $etudiantId)
+                            ->where('session_exam_id', $this->sessionNormaleId)
+                            ->where('statut', 'publie')
+                            ->pluck('ec_id')
+                            ->toArray();
+                        
+                        $ecsValidees = array_diff($toutesLesEcs, $ecsEnRattrapage);
+                        
+                        if (!empty($ecsValidees)) {
+                            $copiesValidees = DB::table('copies')
+                                ->join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
+                                ->join('manchettes', function($join) use ($etudiantId) {
+                                    $join->on('codes_anonymat.id', '=', 'manchettes.code_anonymat_id')
+                                         ->where('manchettes.etudiant_id', '=', $etudiantId)
+                                         ->where('manchettes.session_exam_id', '=', $this->sessionNormaleId);
+                                })
+                                ->where('copies.session_exam_id', $this->sessionNormaleId)
+                                ->whereIn('codes_anonymat.ec_id', $ecsValidees)
+                                ->pluck('copies.id');
+                            
+                            $copieIds = $copieIds->concat($copiesValidees);
+                        }
+                        
+                    } catch (\Exception $e) {
+                        Log::error('Erreur récupération ECs pour étudiant', [
+                            'etudiant_id' => $etudiantId,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+                }
+
+                if ($copieIds->isNotEmpty()) {
+                    $query->whereIn('id', $copieIds->unique()->toArray());
+                } else {
+                    $query->where('id', 0); // Aucun résultat
+                }
+            }
+        } else {
+            // Session normale ou pas de logique rattrapage : afficher seulement session active
+            if ($this->session_exam_id) {
+                $query->where('session_exam_id', $this->session_exam_id);
+            }
         }
 
-        if ($this->parcours_id) {
-            $query->whereHas('examen', function($q) {
-                $q->where('parcours_id', $this->parcours_id);
-            });
+        // Filtres simples
+        if ($this->niveau_id && $this->parcours_id) {
+            $examensIds = DB::table('examens')
+                ->where('niveau_id', $this->niveau_id)
+                ->where('parcours_id', $this->parcours_id)
+                ->whereNull('deleted_at')
+                ->pluck('id');
+            $query->whereIn('examen_id', $examensIds);
+        } elseif ($this->niveau_id) {
+            $examensIds = DB::table('examens')
+                ->where('niveau_id', $this->niveau_id)
+                ->whereNull('deleted_at')
+                ->pluck('id');
+            $query->whereIn('examen_id', $examensIds);
         }
 
         if ($this->ec_id) {
             $query->where('ec_id', $this->ec_id);
         }
 
-        if ($this->secretaire_id) {
-            $query->where('saisie_par', $this->secretaire_id);
+        if ($this->saisie_par) {
+            $query->where('saisie_par', $this->saisie_par);
         }
 
-        // Recherche
         if ($this->search) {
-            $query->where(function($q) {
-                $q->whereHas('codeAnonymat', function($sq) {
+            $query->where(function ($q) {
+                $q->whereHas('codeAnonymat', function ($sq) {
                     $sq->where('code_complet', 'like', '%' . $this->search . '%');
                 });
             });
         }
 
-        // Tri
-        switch ($this->sortField) {
-            case 'code_anonymat':
-                $query->join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
-                      ->orderBy('codes_anonymat.code_complet', $this->sortDirection)
-                      ->select('copies.*');
-                break;
-            case 'secretaire':
-                $query->join('users', 'copies.saisie_par', '=', 'users.id')
-                      ->orderBy('users.name', $this->sortDirection)
-                      ->select('copies.*');
-                break;
-            default:
-                $query->orderBy($this->sortField, $this->sortDirection);
-                break;
-        }
+        // Tri simple
+        $query->orderBy($this->sortField, $this->sortDirection);
 
-        $copies = $query->paginate($this->perPage);
+        return $query->paginate($this->perPage);
+    }
+
+    public function render()
+    {
+        $copies = $this->getCopies();
 
         return view('livewire.copie.copies-index', [
-            'copies' => $copies
+            'copies' => $copies,
+            'sessionInfo' => [
+                'active' => $this->sessionActive,
+                'type' => $this->currentSessionType,
+                'session_libelle' => $this->sessionActive ? $this->sessionActive->type : null,
+                'show_both' => $this->showBothSessions,
+                'normale_id' => $this->sessionNormaleId,
+            ],
         ]);
     }
 }

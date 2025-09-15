@@ -165,7 +165,7 @@
                 Paramètres de Simulation Délibération
             </h3>
 
-            {{-- Sélection du type de session à simuler --}}
+            {{-- Sélection du type de session à simuler - CODE ORIGINAL AVEC CORRECTIONS MINIMALES --}}
             <div class="mb-6">
                 <label class="block mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">Session à simuler</label>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -173,9 +173,10 @@
                     @if(!empty($resultatsSession1))
                         <label class="relative flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ ($deliberationParams['session_type'] ?? 'session1') === 'session1' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                             <input type="radio"
-                                   wire:model="deliberationParams.session_type"
-                                   value="session1"
-                                   class="w-4 h-4 text-purple-600">
+                                name="session_type_group"
+                                wire:model.live="deliberationParams.session_type"
+                                value="session1"
+                                class="w-4 h-4 text-purple-600">
                             <div class="ml-3">
                                 <div class="font-medium text-gray-900 dark:text-gray-100">Session 1 (Normale)</div>
                                 <div class="text-sm text-gray-500 dark:text-gray-400">
@@ -192,9 +193,10 @@
                     @if(!empty($resultatsSession2))
                         <label class="relative flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {{ ($deliberationParams['session_type'] ?? 'session1') === 'session2' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30' : 'border-gray-300 dark:border-gray-600' }}">
                             <input type="radio"
-                                   wire:model="deliberationParams.session_type"
-                                   value="session2"
-                                   class="w-4 h-4 text-purple-600">
+                                name="session_type_group"
+                                wire:model.live="deliberationParams.session_type"
+                                value="session2"
+                                class="w-4 h-4 text-purple-600">
                             <div class="ml-3">
                                 <div class="font-medium text-gray-900 dark:text-gray-100">Session 2 (Rattrapage)</div>
                                 <div class="text-sm text-gray-500 dark:text-gray-400">

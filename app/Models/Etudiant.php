@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Services\RattrapageService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Etudiant extends Model
 {
@@ -34,6 +35,23 @@ class Etudiant extends Model
         'updated_at',
         'deleted_at'
     ];
+
+    /**
+     * Récupère les ECs non validés pour cet étudiant
+     */
+    public function getEcsNonValidesSession($sessionNormaleId)
+    {
+        return app(RattrapageService::class)->getEcsNonValidesEtudiant($this->id, $sessionNormaleId);
+    }
+
+    /**
+     * Vérifie si l'étudiant a des ECs à rattraper
+     */
+    public function hasEcsARattraper($sessionNormaleId)
+    {
+        $ecsNonValides = $this->getEcsNonValidesSession($sessionNormaleId);
+        return $ecsNonValides['total_ecs_rattrapage'] > 0;
+    }
 
     /**
      * Accesseur/Mutateur pour la date de naissance

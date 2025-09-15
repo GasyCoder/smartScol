@@ -750,6 +750,7 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\CodeAnonymat $codeAnonymat
+ * @property-read \App\Models\Copie|null $copie
  * @property-read \App\Models\EC $ec
  * @property-read \App\Models\Etudiant $etudiant
  * @property-read \App\Models\Examen $examen

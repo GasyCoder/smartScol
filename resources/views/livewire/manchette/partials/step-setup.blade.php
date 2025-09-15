@@ -1,4 +1,4 @@
-{{-- vue setup avec calculatrice enveloppes --}}
+{{-- vue setup avec calculatrice enveloppes - VERSION CORRIGÉE UE/EC --}}
 <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg">
     <!-- En-tête -->
     <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
@@ -8,6 +8,12 @@
             </h2>
             <p class="text-sm font-semibold text-gray-600 dark:text-gray-400 mt-1">
                 {{ $ecSelected?->nom ?? 'Matière' }} ({{ $ecSelected?->abr ?? 'N/A' }})
+                {{-- ✅ AJOUT : Affichage de l'UE --}}
+                @if($ecSelected?->ue)
+                    <span class="text-xs text-blue-600 dark:text-blue-400 ml-2">
+                        UE: {{ $ecSelected->ue->nom }}
+                    </span>
+                @endif
             </p>
         </div>
         <button wire:click="backToStep('ec')" 
@@ -17,11 +23,81 @@
     </div>
 
     <div class="p-6">
+        {{-- ✅ MODIFICATION : Information rattrapage spécifique à l'EC/UE --}}
+        @if($sessionType === 'rattrapage' && !empty($statistiquesRattrapage))
+            @php
+                // Calculer les étudiants éligibles pour cette EC spécifique
+                $etudiantsEligiblesEC = $this->getEtudiantsEligiblesPourEC($ecSelected->id ?? 0);
+                $ueInfo = null;
+                
+                if ($ecSelected && $ecSelected->ue) {
+                    // Chercher les infos de l'UE dans les statistiques
+                    foreach ($statistiquesRattrapage['detail_etudiants'] as $etudiantStats) {
+                        foreach ($etudiantStats['ues_non_validees'] as $ueData) {
+                            if ($ueData['ue_id'] == $ecSelected->ue_id) {
+                                $ueInfo = $ueData;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            @endphp
+
+            <div class="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
+                <div class="flex items-start gap-3">
+                    <svg class="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                    <div class="flex-1">
+                        <h4 class="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">
+                            Session de Rattrapage - EC spécifique
+                        </h4>
+                        <div class="text-xs text-orange-700 dark:text-orange-400 space-y-1">
+                            @if($ueInfo)
+                                <p>
+                                    <strong>UE non validée :</strong> {{ $ueInfo['ue_nom'] ?? 'N/A' }} 
+                                    (Moyenne: {{ $ueInfo['moyenne'] ?? 'N/A' }}/20)
+                                </p>
+                                <p>
+                                    <strong>Étudiants concernés :</strong> {{ $etudiantsEligiblesEC->count() }} étudiant(s) 
+                                    doivent rattraper cette UE entière
+                                </p>
+                                @if($ueInfo['nb_ecs'] > 1)
+                                    <p class="italic">
+                                        Note: Cette UE contient {{ $ueInfo['nb_ecs'] }} EC(s). 
+                                        Les étudiants devront rattraper TOUTES les ECs de cette UE.
+                                    </p>
+                                @endif
+                            @else
+                                <p>
+                                    <strong>{{ $etudiantsEligiblesEC->count() }}</strong> étudiant(s) 
+                                    éligible(s) pour cette EC en rattrapage.
+                                </p>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         <!-- Informations contextuelles -->
         <div class="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <div class="text-center">
                 <div class="text-lg font-bold text-blue-600 dark:text-blue-400">{{ $totalEtudiantsTheorique }}</div>
-                <div class="text-xs text-gray-600 dark:text-gray-400">Inscrits</div>
+                <div class="text-xs text-gray-600 dark:text-gray-400">
+                    {{-- ✅ MODIFICATION : Texte précis selon la session --}}
+                    @if($sessionType === 'rattrapage')
+                        Éligibles pour cette EC
+                    @else
+                        Inscrits
+                    @endif
+                </div>
+                {{-- ✅ AJOUT : Détail pour rattrapage --}}
+                @if($sessionType === 'rattrapage' && $ecSelected && $ecSelected->ue)
+                    <div class="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                        UE: {{ $ecSelected->ue->nom }}
+                    </div>
+                @endif
             </div>
             <div class="text-center">
                 <div class="text-lg font-bold text-purple-600 dark:text-purple-400">{{ $codeSalle ?? 'N/A' }}</div>
@@ -52,7 +128,12 @@
                         Configuration requise
                     </h3>
                     <p class="text-gray-600 dark:text-gray-400 mb-6">
-                        Définissez le nombre d'étudiants présents pour commencer la saisie
+                        {{-- ✅ MODIFICATION : Message adapté au contexte --}}
+                        @if($sessionType === 'rattrapage')
+                            Définissez le nombre d'étudiants présents parmi les {{ $totalEtudiantsTheorique }} éligible(s) à cette EC
+                        @else
+                            Définissez le nombre d'étudiants présents pour commencer la saisie
+                        @endif
                     </p>
                     <button wire:click="startEditingPresence" 
                             class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg">
@@ -74,20 +155,44 @@
                                     Présences configurées
                                 </h3>
                             </div>
-                            
                             <!-- Statistiques actuelles -->
                             <div class="grid grid-cols-3 gap-4 mb-4">
                                 <div class="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
                                     <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $totalManchettesPresentes }}</div>
                                     <div class="text-sm text-gray-600 dark:text-gray-400">Présents</div>
+                                    {{-- ✅ MODIFICATION : Indication contextuelle --}}
+                                    @if($sessionType === 'rattrapage')
+                                        <div class="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                            (rattrapage EC)
+                                        </div>
+                                    @endif
                                 </div>
                                 <div class="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
                                     <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ $this->totalAbsents }}</div>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">Absents</div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                        {{-- ✅ MODIFICATION : Libellé précis --}}
+                                        @if($sessionType === 'rattrapage')
+                                            Éligibles absents
+                                        @else
+                                            Absents
+                                        @endif
+                                    </div>
+                                    @if($sessionType === 'rattrapage')
+                                        <div class="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                            (sur {{ $totalEtudiantsTheorique }} éligibles pour cette EC)
+                                        </div>
+                                    @endif
                                 </div>
                                 <div class="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
                                     <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $this->pourcentagePresence }}%</div>
-                                    <div class="text-sm text-gray-600 dark:text-gray-400">Taux présence</div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                                        {{-- ✅ MODIFICATION : Libellé contextuel --}}
+                                        @if($sessionType === 'rattrapage')
+                                            Taux présence rattrapage
+                                        @else
+                                            Taux présence
+                                        @endif
+                                    </div>
                                 </div>
                             </div>
 
@@ -122,6 +227,12 @@
                 <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6">
                     <h3 class="text-lg font-semibold text-blue-800 dark:text-blue-300 mb-6">
                         {{ $hasExistingPresence ? 'Modifier les présences' : 'Configurer les présences' }}
+                        {{-- ✅ AJOUT : Contexte rattrapage --}}
+                        @if($sessionType === 'rattrapage')
+                            <span class="text-sm font-normal text-orange-600 dark:text-orange-400 ml-2">
+                                (Rattrapage EC spécifique)
+                            </span>
+                        @endif
                     </h3>
                     
                     <div class="space-y-6">
@@ -129,7 +240,12 @@
                     <div>
                         <div class="flex items-center justify-between mb-2">
                             <label for="totalManchettesPresentes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Nombre d'étudiants présents <span class="text-red-500">*</span>
+                                {{-- ✅ MODIFICATION : Label contextuel --}}
+                                @if($sessionType === 'rattrapage')
+                                    Nombre d'étudiants présents (sur {{ $totalEtudiantsTheorique }} éligible(s)) <span class="text-red-500">*</span>
+                                @else
+                                    Nombre d'étudiants présents <span class="text-red-500">*</span>
+                                @endif
                             </label>
                             <button wire:click="toggleEnvelopeCalculator" 
                                     class="px-2 py-0.5 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 underline hover:no-underline">
@@ -160,7 +276,14 @@
                         @if($progressCount > 0)
                             <p>Minimum {{ $progressCount }} (déjà {{ $progressCount }} manchettes saisies)</p>
                         @endif
-                        <p>Maximum {{ $totalEtudiantsTheorique }} étudiants inscrits</p>
+                        <p>
+                            {{-- ✅ MODIFICATION : Message contextuel --}}
+                            @if($sessionType === 'rattrapage')
+                                Maximum {{ $totalEtudiantsTheorique }} étudiants éligibles pour cette EC
+                            @else
+                                Maximum {{ $totalEtudiantsTheorique }} étudiants inscrits
+                            @endif
+                        </p>
                     </div>
 
                     @error('totalManchettesPresentes') 
@@ -254,7 +377,14 @@
                                     </div>
                                     <div>
                                         <div class="text-sm font-bold text-red-600 dark:text-red-400">{{ $totalEtudiantsTheorique - $totalManchettesPresentes }}</div>
-                                        <div class="text-gray-600 dark:text-gray-400">Absents</div>
+                                        <div class="text-gray-600 dark:text-gray-400">
+                                            {{-- ✅ MODIFICATION : Libellé selon contexte --}}
+                                            @if($sessionType === 'rattrapage')
+                                                Éligibles absents
+                                            @else
+                                                Absents
+                                            @endif
+                                        </div>
                                     </div>
                                     <div>
                                         <div class="text-sm font-bold text-blue-600 dark:text-blue-400">{{ $totalEtudiantsTheorique > 0 ? round(($totalManchettesPresentes / $totalEtudiantsTheorique) * 100, 1) : 0 }}%</div>
@@ -290,11 +420,19 @@
                             $buttonIcon = $isFirstTime ? '🏷️' : '🔄';
                             $progressText = "({$this->getRemainingManchettes()} restante" . ($this->getRemainingManchettes() > 1 ? 's' : '') . ")";
                             
-                            // Message contextuel
-                            if ($isFirstTime) {
-                                $helpText = "Prêt à commencer la saisie des manchettes";
+                            // Message contextuel pour rattrapage
+                            if ($sessionType === 'rattrapage') {
+                                if ($isFirstTime) {
+                                    $helpText = "Prêt à commencer la saisie des manchettes de rattrapage pour cette EC";
+                                } else {
+                                    $helpText = "{$progressCount} manchette" . ($progressCount > 1 ? 's' : '') . " de rattrapage déjà saisie" . ($progressCount > 1 ? 's' : '');
+                                }
                             } else {
-                                $helpText = "{$progressCount} manchette" . ($progressCount > 1 ? 's' : '') . " déjà saisie" . ($progressCount > 1 ? 's' : '');
+                                if ($isFirstTime) {
+                                    $helpText = "Prêt à commencer la saisie des manchettes";
+                                } else {
+                                    $helpText = "{$progressCount} manchette" . ($progressCount > 1 ? 's' : '') . " déjà saisie" . ($progressCount > 1 ? 's' : '');
+                                }
                             }
                         @endphp
 
@@ -335,14 +473,24 @@
                                 Saisie terminée avec succès !
                             </h3>
                             <p class="text-green-600 dark:text-green-400 mb-4">
-                                Toutes les {{ $totalManchettesPresentes }} manchette{{ $totalManchettesPresentes > 1 ? 's' : '' }} ont été saisies
+                                {{-- ✅ MODIFICATION : Message contextuel --}}
+                                @if($sessionType === 'rattrapage')
+                                    Toutes les {{ $totalManchettesPresentes }} manchette{{ $totalManchettesPresentes > 1 ? 's' : '' }} de rattrapage ont été saisies pour cette EC
+                                @else
+                                    Toutes les {{ $totalManchettesPresentes }} manchette{{ $totalManchettesPresentes > 1 ? 's' : '' }} ont été saisies
+                                @endif
                             </p>
                             
                             <!-- Actions après completion -->
                             <div class="flex flex-col sm:flex-row gap-3 justify-center items-center">
                                 <button wire:click="backToStep('ec')" 
                                         class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                                    Choisir une autre matière
+                                    {{-- ✅ MODIFICATION : Texte contextuel --}}
+                                    @if($sessionType === 'rattrapage')
+                                        Choisir une autre EC à rattraper
+                                    @else
+                                        Choisir une autre matière
+                                    @endif
                                 </button>
                                 <button wire:click="backToStep('setup')" 
                                         class="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">

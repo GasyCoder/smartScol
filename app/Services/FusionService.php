@@ -228,14 +228,19 @@ class FusionService
             return [];
         }
 
-        // CORRECTION : Chercher les copies dans la session active
+        // CORRECTION : Si session de rattrapage, utiliser logique spéciale
+        if ($sessionActive->type === 'Rattrapage') {
+            return $this->analyserDonneesPrefusionRattrapage($examenId, $totalEtudiants, $etudiants, $sessionActive);
+        }
+
+        // Logique normale existante pour session normale...
         $copies = Copie::where('examen_id', $examenId)
             ->where('session_exam_id', $sessionActive->id)
             ->whereNotNull('code_anonymat_id')
             ->with(['ec', 'codeAnonymat'])
             ->get();
 
-        // CORRECTION : Obtenir les ECs depuis les copies existantes ET depuis l'examen
+        // Reste de la logique normale existante...
         $ecsDepuisCopies = $copies->pluck('ec_id')->unique();
         $ecsDepuisExamen = EC::whereHas('examens', function ($query) use ($examenId) {
             $query->where('examens.id', $examenId);
@@ -258,14 +263,13 @@ class FusionService
             $copiesEc = $copies->where('ec_id', $ec->id);
             $copiesAvecNote = $copiesEc->whereNotNull('note');
 
-            // Filtrer et valider les codes en copies
+            // Logique normale existante...
             $codesEnCopies = $copiesEc->filter(function ($copie) {
                 return $copie->codeAnonymat && is_string($copie->codeAnonymat->code_complet) && !empty($copie->codeAnonymat->code_complet);
             })->map(function ($copie) {
                 return $copie->codeAnonymat->code_complet;
             })->unique()->values();
 
-            // Chercher les manchettes pour cette EC dans la session active
             $manchettes = Manchette::where('examen_id', $examenId)
                 ->where('session_exam_id', $sessionActive->id)
                 ->whereNotNull('code_anonymat_id')
@@ -289,13 +293,11 @@ class FusionService
                 return $codesEnCopies->contains($manchette->codeAnonymat->code_complet);
             });
 
-            // Calculs pour le rapport
             $codesSansManchettes = collect($codesEnCopies)->diff(collect($codesEnManchettes));
             $codesSansCopies = collect($codesEnManchettes)->diff(collect($codesEnCopies));
 
             $etudiantsAvecManchette = $manchettesCorrespondantes->pluck('etudiant_id')->unique();
 
-            // ✅ CORRECTION PRINCIPALE : Utiliser les données de présence
             $donneesPresence = $this->getPresenceDataForEC($examenId, $sessionActive, $ec->id);
             $etudiantsAttendus = $donneesPresence['etudiants_presents'];
             $etudiantsSansManchette = max(0, $etudiantsAttendus - $etudiantsAvecManchette->count());
@@ -325,12 +327,10 @@ class FusionService
                 'ec_id' => $ec->id,
                 'ec_nom' => $ec->nom,
                 'ec_abr' => $ec->abr ?? $ec->code ?? 'N/A',
-                // ✅ NOUVEAU : Données basées sur la présence
                 'total_etudiants' => $etudiantsAttendus,
-                'etudiants_presents' => $etudiantsAttendus, // Nombre d'étudiants présents (base de calcul)
-                'etudiants_attendus_theorique' => $donneesPresence['total_inscrits'], // Total théorique pour info
+                'etudiants_presents' => $etudiantsAttendus,
+                'etudiants_attendus_theorique' => $donneesPresence['total_inscrits'],
                 'source_presence' => $donneesPresence['source'],
-                // Données existantes
                 'etudiants_avec_note' => $copiesAvecNote->count(),
                 'manchettes_count' => $manchettesCorrespondantes->count(),
                 'copies_count' => $copiesEc->count(),
@@ -353,6 +353,162 @@ class FusionService
         return $rapport;
     }
 
+
+    /**
+     * NOUVELLE MÉTHODE : Analyse spéciale pour session de rattrapage
+     */
+    private function analyserDonneesPrefusionRattrapage($examenId, $totalEtudiants, Collection $etudiants, $sessionActive)
+    {
+        try {
+            // 1. Trouver la session normale correspondante
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionActive->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                \Log::warning('Session normale introuvable pour le rapport rattrapage', [
+                    'examen_id' => $examenId,
+                    'session_rattrapage_id' => $sessionActive->id,
+                ]);
+                return [];
+            }
+
+            // 2. Récupérer TOUTES les ECs de l'examen
+            $ecs = EC::whereHas('examens', function ($query) use ($examenId) {
+                $query->where('examens.id', $examenId);
+            })->get();
+
+            if ($ecs->isEmpty()) {
+                return [];
+            }
+
+            // 3. Récupérer les résultats de session normale (NOTES VALIDÉES)
+            $resultatsNormale = ResultatFinal::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionNormale->id)
+                ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                ->get()
+                ->groupBy('ec_id');
+
+            // 4. Récupérer copies de rattrapage RÉELLES
+            $copiesRattrapage = Copie::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionActive->id)
+                ->whereNotNull('note')
+                ->get()
+                ->groupBy('ec_id');
+
+            $rapport = [];
+
+            foreach ($ecs as $ec) {
+                // Notes de session normale pour cette EC
+                $notesNormales = $resultatsNormale->get($ec->id, collect());
+                $nbNotesNormales = $notesNormales->count();
+
+                // Copies de rattrapage RÉELLES pour cette EC
+                $copiesRattrapEc = $copiesRattrapage->get($ec->id, collect());
+                $nbCopiesRattrapage = $copiesRattrapEc->count();
+
+                // CORRECTION : Déterminer le type d'affichage
+                if ($nbCopiesRattrapage > 0) {
+                    // CAS 1: EC avec copies de rattrapage + récupération normale
+                    $rapport[] = [
+                        'ec_id' => $ec->id,
+                        'ec_nom' => $ec->nom,
+                        'ec_abr' => $ec->abr ?? $ec->code ?? 'N/A',
+                        
+                        // Affichage correct pour fusion
+                        'total_etudiants' => $nbNotesNormales,
+                        'etudiants_presents' => $nbNotesNormales,
+                        'etudiants_avec_note' => $nbNotesNormales,
+                        
+                        // CORRECTION : Vraies valeurs
+                        'manchettes_count' => $nbNotesNormales,     // Notes normales récupérées
+                        'copies_count' => $nbCopiesRattrapage,      // Copies rattrapage réelles
+                        'codes_count' => $nbNotesNormales,
+                        
+                        'complet' => true,
+                        'etudiants_sans_manchette' => 0,
+                        'codes_sans_manchettes' => ['count' => 0, 'codes' => []],
+                        'codes_sans_copies' => ['count' => 0, 'codes' => []],
+                        'issues' => [],
+                        'session_type' => 'Rattrapage',
+                        'type_fusion' => 'avec_rattrapage',
+                        'fusion_automatique' => true,
+                    ];
+                } else if ($nbNotesNormales > 0) {
+                    // CAS 2: EC avec SEULEMENT récupération automatique (PAS de copies rattrapage)
+                    $rapport[] = [
+                        'ec_id' => $ec->id,
+                        'ec_nom' => $ec->nom,
+                        'ec_abr' => $ec->abr ?? $ec->code ?? 'N/A',
+                        
+                        // Affichage pour récupération pure
+                        'total_etudiants' => $nbNotesNormales,
+                        'etudiants_presents' => $nbNotesNormales,
+                        'etudiants_avec_note' => $nbNotesNormales,
+                        
+                        // CORRECTION : Affichage spécial pour récupération auto
+                        'manchettes_count' => 0,                    // PAS de vraies manchettes rattrapage
+                        'copies_count' => 0,                        // PAS de copies rattrapage
+                        'codes_count' => $nbNotesNormales,
+                        
+                        // Données spéciales pour récupération auto
+                        'notes_recuperees_auto' => $nbNotesNormales,
+                        'affichage_special' => 'AUTO',
+                        
+                        'complet' => true,
+                        'etudiants_sans_manchette' => 0,
+                        'codes_sans_manchettes' => ['count' => 0, 'codes' => []],
+                        'codes_sans_copies' => ['count' => 0, 'codes' => []],
+                        'issues' => [],
+                        'session_type' => 'Rattrapage',
+                        'type_fusion' => 'recuperation_auto',
+                        'fusion_automatique' => true,
+                    ];
+                } else {
+                    // CAS 3: EC sans données (ne devrait pas arriver)
+                    $rapport[] = [
+                        'ec_id' => $ec->id,
+                        'ec_nom' => $ec->nom,
+                        'ec_abr' => $ec->abr ?? $ec->code ?? 'N/A',
+                        'total_etudiants' => 0,
+                        'etudiants_presents' => 0,
+                        'etudiants_avec_note' => 0,
+                        'manchettes_count' => 0,
+                        'copies_count' => 0,
+                        'codes_count' => 0,
+                        'complet' => false,
+                        'etudiants_sans_manchette' => 0,
+                        'codes_sans_manchettes' => ['count' => 0, 'codes' => []],
+                        'codes_sans_copies' => ['count' => 0, 'codes' => []],
+                        'issues' => ['Aucune donnée trouvée'],
+                        'session_type' => 'Rattrapage',
+                        'type_fusion' => 'vide',
+                        'fusion_automatique' => false,
+                    ];
+                }
+            }
+
+            \Log::info('Analyse rapport rattrapage avec affichage correct terminée', [
+                'examen_id' => $examenId,
+                'session_rattrapage_id' => $sessionActive->id,
+                'session_normale_id' => $sessionNormale->id,
+                'nb_ecs_analysees' => count($rapport),
+                'total_notes_normales' => $resultatsNormale->flatten()->count(),
+                'total_copies_rattrapage' => $copiesRattrapage->flatten()->count(),
+            ]);
+
+            return $rapport;
+
+        } catch (\Exception $e) {
+            \Log::error('Erreur analyse données pré-fusion rattrapage', [
+                'examen_id' => $examenId,
+                'session_id' => $sessionActive->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [];
+        }
+    }
 
     /**
      * Récupérer les données de présence pour une EC spécifique
@@ -643,7 +799,14 @@ class FusionService
             $sessionId = $sessionActive->id;
         }
 
-        // OPTIMISATION 1: Récupérer toutes les données d'un coup avec les relations
+        $sessionActive = SessionExam::find($sessionId);
+        
+        // ✅ AJOUT SIMPLE : Si c'est du rattrapage, utiliser la logique spéciale
+        if ($sessionActive && $sessionActive->type === 'Rattrapage') {
+            return $this->executerEtape1Rattrapage($examenId, $sessionId, $sessionActive);
+        }
+
+        // Logique normale existante pour session normale...
         $manchettes = Manchette::where('examen_id', $examenId)
             ->where('session_exam_id', $sessionId)
             ->whereHas('codeAnonymat', function ($query) {
@@ -676,7 +839,7 @@ class FusionService
             ];
         }
 
-        // OPTIMISATION 2: Vérifier les résultats existants en une seule requête
+        // Reste du code existant pour session normale...
         $resultatsExistants = ResultatFusion::where('examen_id', $examenId)
             ->where('session_exam_id', $sessionId)
             ->get()
@@ -684,13 +847,9 @@ class FusionService
                 return $item->etudiant_id . '_' . $item->ec_id;
             });
 
-        // OPTIMISATION 3: Indexer les copies par code d'anonymat
         $copiesParCode = $copies->groupBy('codeAnonymat.code_complet');
-
-        // OPTIMISATION 4: Préparer les données pour insertion en masse
         $resultatsAInserer = [];
-        $codesAnonymatACreer = [];
-        $batchSize = 500; // Traiter par lots de 500
+        $batchSize = 500;
         $resultatsGeneres = 0;
         $erreursIgnorees = 0;
 
@@ -706,29 +865,14 @@ class FusionService
                 foreach ($copiesParCode[$codeAnonymat] as $copie) {
                     $cleUnique = $manchette->etudiant_id . '_' . $copie->ec_id;
                     
-                    // Vérifier si le résultat existe déjà
                     if ($resultatsExistants->has($cleUnique)) {
                         continue;
                     }
 
-                    // Préparer le code d'anonymat
-                    $codeKey = $codeAnonymat . '_' . $copie->ec_id;
-                    if (!isset($codesAnonymatACreer[$codeKey])) {
-                        $codesAnonymatACreer[$codeKey] = [
-                            'code_complet' => $codeAnonymat,
-                            'examen_id' => $examenId,
-                            'ec_id' => $copie->ec_id,
-                            'sequence' => $this->extraireSequence($codeAnonymat),
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ];
-                    }
-
-                    // Préparer les données pour insertion
                     $resultatsAInserer[] = [
                         'etudiant_id' => $manchette->etudiant_id,
                         'examen_id' => $examenId,
-                        'code_anonymat_id' => null, // Sera mis à jour après insertion des codes
+                        'code_anonymat_id' => $manchette->code_anonymat_id,
                         'ec_id' => $copie->ec_id,
                         'note' => $copie->note,
                         'genere_par' => Auth::id(),
@@ -737,27 +881,21 @@ class FusionService
                         'session_exam_id' => $sessionId,
                         'created_at' => now(),
                         'updated_at' => now(),
-                        '_code_key' => $codeKey, // Temporaire pour liaison
                     ];
 
                     $resultatsGeneres++;
                 }
-            }
 
-            // OPTIMISATION 5: Traiter par batch pour éviter le timeout
-            if (count($resultatsAInserer) >= $batchSize) {
-                $this->insererResultatsBatch($resultatsAInserer, $codesAnonymatACreer, $examenId);
-                $resultatsAInserer = [];
-                $codesAnonymatACreer = [];
-                
-                // Petit délai pour éviter la surcharge
-                usleep(10000); // 10ms
+                if (count($resultatsAInserer) >= $batchSize) {
+                    ResultatFusion::insert($resultatsAInserer);
+                    $resultatsAInserer = [];
+                    usleep(10000);
+                }
             }
         }
 
-        // Insérer le dernier batch
         if (!empty($resultatsAInserer)) {
-            $this->insererResultatsBatch($resultatsAInserer, $codesAnonymatACreer, $examenId);
+            ResultatFusion::insert($resultatsAInserer);
         }
 
         if ($resultatsGeneres === 0) {
@@ -774,6 +912,313 @@ class FusionService
         ];
     }
 
+
+    /**
+     * ✅ MÉTHODE CORRIGÉE : Étape 1 spécialisée pour rattrapage (RÉCUPÉRATION AUTO)
+     */
+    private function executerEtape1Rattrapage($examenId, $sessionRattrapageId, $sessionRattrapage)
+    {
+        try {
+            // 1. Trouver la session normale correspondante
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionRattrapage->annee_universitaire_id)
+                ->where('type', 'Normale')
+                ->first();
+
+            if (!$sessionNormale) {
+                return [
+                    'success' => false,
+                    'message' => 'Session normale correspondante introuvable pour ce rattrapage.',
+                ];
+            }
+
+            // ✅ CORRECTION PRINCIPALE : Récupérer SEULEMENT les étudiants éligibles au rattrapage
+            $etudiantsEligibles = $this->getEtudiantsEligiblesRattrapage($examenId, $sessionNormale->id, $sessionRattrapage->id);
+            
+            if ($etudiantsEligibles->isEmpty()) {
+                return [
+                    'success' => false,
+                    'message' => 'Aucun étudiant éligible au rattrapage trouvé.',
+                ];
+            }
+
+            $etudiantsEligiblesIds = $etudiantsEligibles->pluck('etudiant_id')->toArray();
+
+            // 2. Récupérer SEULEMENT les résultats des étudiants éligibles (pas les admis)
+            $resultatsNormale = ResultatFinal::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionNormale->id)
+                ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                ->whereIn('etudiant_id', $etudiantsEligiblesIds) // ✅ FILTRAGE CRUCIAL
+                ->get()
+                ->groupBy(function($item) {
+                    return $item->etudiant_id . '_' . $item->ec_id;
+                });
+
+            Log::info('Étudiants filtrés pour rattrapage', [
+                'examen_id' => $examenId,
+                'session_normale_id' => $sessionNormale->id,
+                'session_rattrapage_id' => $sessionRattrapageId,
+                'total_etudiants_eligibles' => count($etudiantsEligiblesIds),
+                'resultats_normaux_eligibles' => $resultatsNormale->count(),
+            ]);
+
+            if ($resultatsNormale->isEmpty()) {
+                return [
+                    'success' => false,
+                    'message' => 'Aucun résultat de session normale trouvé pour les étudiants éligibles au rattrapage.',
+                ];
+            }
+
+            // 3. Récupérer copies de rattrapage RÉELLES
+            $copiesRattrapage = Copie::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionRattrapageId)
+                ->whereNotNull('note')
+                ->with(['codeAnonymat'])
+                ->get();
+
+            // 4. Vérifier les résultats fusion existants
+            $resultatsExistants = ResultatFusion::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionRattrapageId)
+                ->get()
+                ->groupBy(function($item) {
+                    return $item->etudiant_id . '_' . $item->ec_id;
+                });
+
+            // 5. Grouper les copies par étudiant + EC
+            $copiesParEtudiantEc = collect();
+            foreach ($copiesRattrapage as $copie) {
+                $etudiant = $copie->etudiant;
+                
+                if ($etudiant) {
+                    $cle = $etudiant->id . '_' . $copie->ec_id;
+                    $copiesParEtudiantEc->put($cle, [
+                        'etudiant_id' => $etudiant->id,
+                        'ec_id' => $copie->ec_id,
+                        'note' => $copie->note,
+                        'code_anonymat_id' => $copie->code_anonymat_id,
+                        'copie' => $copie
+                    ]);
+                }
+            }
+
+            $resultatsAInserer = [];
+            $resultatsGeneres = 0;
+
+            // 6. LOGIQUE PRINCIPALE : Pour chaque résultat de session normale (étudiants éligibles seulement)
+            foreach ($resultatsNormale as $cleNormale => $resultatsGroupe) {
+                $resultatNormale = $resultatsGroupe->first();
+                $etudiantId = $resultatNormale->etudiant_id;
+                $ecId = $resultatNormale->ec_id;
+                $noteNormale = $resultatNormale->note;
+
+                // ✅ VÉRIFICATION SUPPLÉMENTAIRE : S'assurer que l'étudiant est bien éligible
+                if (!in_array($etudiantId, $etudiantsEligiblesIds)) {
+                    Log::warning('Étudiant non éligible détecté dans les résultats', [
+                        'etudiant_id' => $etudiantId,
+                        'examen_id' => $examenId,
+                        'session_rattrapage_id' => $sessionRattrapageId
+                    ]);
+                    continue;
+                }
+
+                // Vérifier si déjà traité
+                if ($resultatsExistants->has($cleNormale)) {
+                    continue;
+                }
+
+                // Chercher s'il y a une copie de rattrapage pour cet étudiant/EC
+                $copieRattrapageData = $copiesParEtudiantEc->get($cleNormale);
+                $noteRattrapage = null;
+                $codeAnonymatId = null;
+
+                if ($copieRattrapageData) {
+                    $noteRattrapage = $copieRattrapageData['note'];
+                    $codeAnonymatId = $copieRattrapageData['code_anonymat_id'];
+                }
+
+                // FUSION DES NOTES : Appliquer la logique médecine
+                $noteFinale = $this->determinerMeilleureNote($noteNormale, $noteRattrapage);
+                $sourceNote = $this->determinerSourceNote($noteNormale, $noteRattrapage, $noteFinale);
+
+                // Créer le code anonymat pour rattrapage si pas existant
+                if (!$codeAnonymatId) {
+                    $codeAnonymat = CodeAnonymat::firstOrCreate([
+                        'examen_id' => $examenId,
+                        'ec_id' => $ecId,
+                        'code_complet' => "RAT-{$ecId}-{$etudiantId}-" . time(),
+                    ], [
+                        'sequence' => $etudiantId * 1000 + $ecId
+                    ]);
+                    $codeAnonymatId = $codeAnonymat->id;
+                }
+
+                // Créer le résultat fusion SANS metadata
+                $resultatsAInserer[] = [
+                    'etudiant_id' => $etudiantId,
+                    'examen_id' => $examenId,
+                    'code_anonymat_id' => $codeAnonymatId,
+                    'ec_id' => $ecId,
+                    'note' => $noteFinale,
+                    'genere_par' => Auth::id(),
+                    'statut' => ResultatFusion::STATUT_VERIFY_1,
+                    'etape_fusion' => 1,
+                    'session_exam_id' => $sessionRattrapageId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $resultatsGeneres++;
+            }
+
+            // 7. Insérer les résultats en masse
+            if (!empty($resultatsAInserer)) {
+                $chunks = array_chunk($resultatsAInserer, 500);
+                foreach ($chunks as $chunk) {
+                    ResultatFusion::insert($chunk);
+                }
+            }
+
+            Log::info('Fusion rattrapage corrigée terminée', [
+                'examen_id' => $examenId,
+                'session_rattrapage_id' => $sessionRattrapageId,
+                'session_normale_id' => $sessionNormale->id,
+                'etudiants_eligibles' => count($etudiantsEligiblesIds),
+                'resultats_generes' => $resultatsGeneres,
+                'resultats_normale_recuperes' => $resultatsNormale->count(),
+                'copies_rattrapage_trouvees' => $copiesRattrapage->count()
+            ]);
+
+            return [
+                'success' => true,
+                'resultats_generes' => $resultatsGeneres,
+                'fusion_rattrapage' => true,
+                'etudiants_eligibles_traites' => count($etudiantsEligiblesIds),
+                'notes_normales_recuperees' => $resultatsNormale->count(),
+                'copies_rattrapage_integrees' => $copiesRattrapage->count()
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Erreur fusion rattrapage corrigée', [
+                'examen_id' => $examenId,
+                'session_rattrapage_id' => $sessionRattrapageId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Erreur lors de la fusion rattrapage : ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Récupère les étudiants éligibles au rattrapage
+     */
+    private function getEtudiantsEligiblesRattrapage($examenId, $sessionNormaleId, $sessionRattrapageId)
+    {
+        try {
+            // Récupérer les étudiants avec décision "rattrapage" ou "redoublant" en session normale
+            $etudiantsEligibles = ResultatFinal::where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionNormaleId)
+                ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                ->whereIn('decision', [
+                    ResultatFinal::DECISION_RATTRAPAGE,
+                    ResultatFinal::DECISION_REDOUBLANT
+                    // ✅ NE PAS inclure DECISION_ADMIS
+                ])
+                ->select('etudiant_id')
+                ->distinct()
+                ->with('etudiant')
+                ->get();
+
+            // Fallback : si pas de décisions enregistrées, utiliser la moyenne < 10
+            if ($etudiantsEligibles->isEmpty()) {
+                Log::info('Aucune décision trouvée, utilisation du fallback moyenne < 10', [
+                    'examen_id' => $examenId,
+                    'session_normale_id' => $sessionNormaleId
+                ]);
+
+                $etudiantsAvecMoyenne = ResultatFinal::where('examen_id', $examenId)
+                    ->where('session_exam_id', $sessionNormaleId)
+                    ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                    ->select('etudiant_id')
+                    ->selectRaw('AVG(note) as moyenne')
+                    ->groupBy('etudiant_id')
+                    ->havingRaw('AVG(note) < 10')
+                    ->with('etudiant')
+                    ->get();
+
+                return $etudiantsAvecMoyenne->map(function($resultat) {
+                    return [
+                        'etudiant_id' => $resultat->etudiant_id,
+                        'etudiant' => $resultat->etudiant,
+                        'moyenne_normale' => $resultat->moyenne,
+                        'decision_normale' => 'rattrapage',
+                        'source' => 'moyenne_calculee'
+                    ];
+                });
+            }
+
+            return $etudiantsEligibles->map(function($resultat) {
+                return [
+                    'etudiant_id' => $resultat->etudiant_id,
+                    'etudiant' => $resultat->etudiant,
+                    'decision_normale' => $resultat->decision,
+                    'source' => 'decision_officielle'
+                ];
+            });
+
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la récupération des étudiants éligibles', [
+                'examen_id' => $examenId,
+                'session_normale_id' => $sessionNormaleId,
+                'error' => $e->getMessage()
+            ]);
+            return collect();
+        }
+    }
+    /**
+     * ✅ MÉTHODE SIMPLE : Détermine la meilleure note selon logique médecine
+     */
+    private function determinerMeilleureNote($noteNormale, $noteRattrapage)
+    {
+        // Si pas de note de rattrapage, garder la normale
+        if ($noteRattrapage === null) {
+            return $noteNormale;
+        }
+
+        // Si note de rattrapage = 0 et normale > 0 → Note éliminatoire
+        if ($noteRattrapage == 0 && $noteNormale > 0) {
+            return 0;
+        }
+
+        // Sinon prendre la meilleure note
+        return max($noteNormale, $noteRattrapage);
+    }
+
+    /**
+     * ✅ MÉTHODE SIMPLE : Détermine la source de la note finale
+     */
+    private function determinerSourceNote($noteNormale, $noteRattrapage, $noteFinale)
+    {
+        if ($noteRattrapage === null) {
+            return 'normale_conservee';
+        }
+        
+        if ($noteFinale == 0 && $noteRattrapage == 0) {
+            return 'rattrapage_eliminatoire';
+        }
+        
+        if ($noteFinale == $noteRattrapage && $noteRattrapage >= $noteNormale) {
+            return 'rattrapage_ameliore';
+        }
+        
+        if ($noteFinale == $noteNormale && $noteNormale > $noteRattrapage) {
+            return 'normale_meilleure';
+        }
+        
+        return 'fusion_auto';
+    }
 
     /**
      * Insérer les résultats par batch

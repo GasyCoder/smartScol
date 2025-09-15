@@ -91,6 +91,16 @@ class ResultatFusion extends Model
         return $this->belongsTo(EC::class);
     }
 
+    /**
+     * Relation vers la copie originale
+     */
+    public function copie()
+    {
+        return $this->hasOne(Copie::class, 'code_anonymat_id', 'code_anonymat_id')
+            ->where('ec_id', $this->ec_id)
+            ->where('session_exam_id', $this->session_exam_id);
+    }
+
     // Scopes pour filtrer par session
     public function scopeForCurrentSession($query)
     {

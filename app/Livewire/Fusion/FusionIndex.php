@@ -851,85 +851,43 @@ class FusionIndex extends Component
             return collect();
         }
 
-        try {
-            $sessionNormale = SessionExam::where('annee_universitaire_id', $this->sessionActive->annee_universitaire_id)
-                ->where('type', 'Normale')
-                ->first();
+        $sessionNormale = SessionExam::where('annee_universitaire_id', $this->sessionActive->annee_universitaire_id)
+            ->where('type', 'Normale')
+            ->first();
 
-            if (!$sessionNormale) return collect();
+        if (!$sessionNormale) return collect();
 
-            $sessionNormaleId = $sessionNormale->id; // Stocker l'ID pour éviter les problèmes de portée
+        // ✅ FILTRER PAR DÉCISION (pas les admis)
+        $resultatsFinaux = ResultatFinal::where('session_exam_id', $sessionNormale->id)
+            ->whereHas('examen', function($q) {
+                $q->where('niveau_id', $this->examen->niveau_id)
+                ->where('parcours_id', $this->examen->parcours_id);
+            })
+            ->where('statut', ResultatFinal::STATUT_PUBLIE)
+            ->whereIn('decision', [
+                ResultatFinal::DECISION_RATTRAPAGE,
+                ResultatFinal::DECISION_REDOUBLANT
+                // ✅ NE PAS inclure DECISION_ADMIS
+            ])
+            ->with('etudiant')
+            ->get();
 
-            // Chercher d'abord dans ResultatFinal
-            $resultatsFinaux = ResultatFinal::where('session_exam_id', $sessionNormaleId)
-                ->whereHas('examen', function($q) {
-                    $q->where('niveau_id', $this->examen->niveau_id)
-                      ->where('parcours_id', $this->examen->parcours_id);
-                })
-                ->where('statut', ResultatFinal::STATUT_PUBLIE)
-                ->with('etudiant')
-                ->get();
+        return $resultatsFinaux->groupBy('etudiant_id')
+            ->map(function($resultats) {
+                $etudiant = $resultats->first()->etudiant;
+                if (!$etudiant || !$etudiant->is_active) return null;
 
-            if ($resultatsFinaux->isNotEmpty()) {
-                return $resultatsFinaux->groupBy('etudiant_id')
-                    ->map(function($resultats) use ($sessionNormaleId) {
-                        $etudiant = $resultats->first()->etudiant;
-                        if (!$etudiant || !$etudiant->is_active) return null;
-
-                        $decisions = $resultats->pluck('decision')->unique()->toArray();
-                        $aRattrapage = in_array(ResultatFinal::DECISION_RATTRAPAGE, $decisions);
-                        $aAdmis = in_array(ResultatFinal::DECISION_ADMIS, $decisions);
-
-                        if ($aRattrapage && !$aAdmis) {
-                            return [
-                                'etudiant_id' => $etudiant->id,
-                                'etudiant' => $etudiant,
-                                'moyenne_normale' => $this->calculerMoyenneEtudiant($etudiant->id, $sessionNormaleId),
-                                'decision_normale' => 'rattrapage',
-                                'source' => 'resultats_final'
-                            ];
-                        }
-                        return null;
-                    })
-                    ->filter()
-                    ->values();
-            }
-
-            // Fallback : chercher dans ResultatFusion
-            $resultsFusion = ResultatFusion::where('session_exam_id', $sessionNormaleId)
-                ->whereHas('examen', function($q) {
-                    $q->where('niveau_id', $this->examen->niveau_id)
-                      ->where('parcours_id', $this->examen->parcours_id);
-                })
-                ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_3, ResultatFusion::STATUT_VALIDE])
-                ->with('etudiant')
-                ->get();
-
-            return $resultsFusion->groupBy('etudiant_id')
-                ->map(function($resultats) {
-                    $etudiant = $resultats->first()->etudiant;
-                    if (!$etudiant || !$etudiant->is_active) return null;
-
-                    $moyenne = $resultats->avg('note');
-                    if ($moyenne < 10) {
-                        return [
-                            'etudiant_id' => $etudiant->id,
-                            'etudiant' => $etudiant,
-                            'moyenne_normale' => $moyenne,
-                            'decision_normale' => 'rattrapage',
-                            'source' => 'resultats_fusion'
-                        ];
-                    }
-                    return null;
-                })
-                ->filter()
-                ->values();
-
-        } catch (\Exception $e) {
-            return collect();
-        }
+                return [
+                    'etudiant_id' => $etudiant->id,
+                    'etudiant' => $etudiant,
+                    'decision_normale' => $resultats->first()->decision,
+                    'source' => 'decision_officielle'
+                ];
+            })
+            ->filter()
+            ->values();
     }
-
+    
     private function calculerMoyenneEtudiant($etudiantId, $sessionId)
     {
         try {

@@ -28,6 +28,19 @@ class SessionExam extends Model
         'is_current' => 'boolean'
     ];
 
+    /**
+     * Récupère la session normale correspondante à cette session de rattrapage
+     */
+    public function getSessionNormaleCorrespondante()
+    {
+        if ($this->type !== 'Rattrapage') {
+            return null;
+        }
+        
+        return self::where('annee_universitaire_id', $this->annee_universitaire_id)
+            ->where('type', 'Normale')
+            ->first();
+    }
 
     protected static function boot()
     {

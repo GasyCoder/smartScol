@@ -75,20 +75,32 @@
                 </div>
 
                 {{-- Métriques en ligne compactes --}}
-                <div class="grid grid-cols-3 gap-4 mb-3 md:grid-cols-5">
+              <div class="grid grid-cols-3 gap-4 mb-3 md:grid-cols-5">
                     <div class="text-center">
                         <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $totalMatieres }}</div>
                         <div class="text-xs text-gray-600 dark:text-gray-400">Total</div>
                     </div>
-                    
+        
                     <div class="text-center">
                         <div class="text-lg font-semibold text-green-600 dark:text-green-400">{{ $matieresCompletes }}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">Complètes</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                Fusionnées
+                            @else
+                                Complètes
+                            @endif
+                        </div>
                     </div>
-                    
+    
                     <div class="text-center">
                         <div class="text-lg font-semibold text-orange-600 dark:text-orange-400">{{ $matieresIncompletes }}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">Incomplètes</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                Partielles
+                            @else
+                                Incomplètes
+                            @endif
+                        </div>
                     </div>
 
                     <div class="text-center">
@@ -131,14 +143,6 @@
                     </div>
 
                     <div class="flex flex-wrap gap-2">
-                        @if($showFusionButton && $statut === 'verification' && $matieresCompletes > 0)
-                            <button wire:click="$set('confirmingFusion', true)"
-                                    wire:loading.attr="disabled"
-                                    class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 transition-colors disabled:opacity-50">
-                                🔄 Fusion
-                            </button>
-                        @endif
-
                         @if($showVerificationButton)
                             <button wire:click="confirmVerification"
                                     wire:loading.attr="disabled"
@@ -206,19 +210,41 @@
                                                 {{ $rapport['ec_nom'] ?? 'N/A' }}
                                             </div>
                                         </td>
-                                        
+                                            
                                         <td class="px-3 py-2 text-center text-sm {{ ($rapport['manchettes_count'] ?? 0) > 0 ? 'text-green-600 font-semibold' : 'text-gray-400' }} dark:text-gray-100">
-                                            {{ $rapport['manchettes_count'] ?? 0 }}
+                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                @if(isset($rapport['type_fusion']) && $rapport['type_fusion'] === 'recuperation_auto')
+                                                    {{-- AFFICHAGE SPÉCIAL pour récupération automatique --}}
+                                                    <span class="px-1 py-0.5 text-xs bg-blue-100 text-blue-800 rounded dark:bg-blue-900 dark:text-blue-200">
+                                                        AUTO
+                                                    </span>
+                                                @else
+                                                    {{-- Affichage normal pour fusion avec rattrapage --}}
+                                                    {{ $rapport['manchettes_count'] ?? 0 }}
+                                                @endif
+                                            @else
+                                                {{ $rapport['manchettes_count'] ?? 0 }}
+                                            @endif
                                         </td>
-                                        
+                                                                                
                                         <td class="px-3 py-2 text-center text-sm {{ ($rapport['copies_count'] ?? 0) > 0 ? 'text-blue-600 font-semibold' : 'text-gray-400' }} dark:text-gray-100">
                                             {{ $rapport['copies_count'] ?? 0 }}
                                         </td>
-                                        
+
                                         <td class="px-3 py-2 text-center text-sm {{ ($rapport['etudiants_presents'] ?? 0) > 0 ? 'text-purple-600 font-semibold' : 'text-gray-400' }} dark:text-gray-100">
-                                            {{ $rapport['etudiants_presents'] ?? 0 }}
+                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                                @if(isset($rapport['type_fusion']) && $rapport['type_fusion'] === 'recuperation_auto')
+                                                    {{-- Pour récupération auto, afficher le nombre de notes récupérées --}}
+                                                    {{ $rapport['notes_recuperees_auto'] ?? $rapport['etudiants_presents'] ?? 0 }}
+                                                @else
+                                                    {{-- Pour fusion normale --}}
+                                                    {{ $rapport['etudiants_presents'] ?? 0 }}
+                                                @endif
+                                            @else
+                                                {{ $rapport['etudiants_presents'] ?? 0 }}
+                                            @endif
                                         </td>
-                                        
+
                                         <td class="px-4 py-2 text-center">
                                             @if($rapport['complet'] ?? false)
                                                 <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-green-800 bg-green-100 rounded dark:bg-green-900 dark:text-green-300">
@@ -249,9 +275,15 @@
                     {{-- Légende compacte --}}
                     <div class="px-4 py-2 bg-gray-50 border-t border-gray-200 dark:bg-gray-900 dark:border-gray-700">
                         <div class="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-400">
-                            <span><strong>M:</strong> Manchettes</span>
-                            <span><strong>C:</strong> Copies</span>
-                            <span><strong>P:</strong> Présents</span>
+                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                <span><strong>M:</strong> Notes normales / AUTO = récupération auto</span>
+                                <span><strong>C:</strong> Copies rattrapage</span>
+                                <span><strong>P:</strong> Notes fusionnées</span>
+                            @else
+                                <span><strong>M:</strong> Manchettes</span>
+                                <span><strong>C:</strong> Copies</span>
+                                <span><strong>P:</strong> Présents</span>
+                            @endif
                             <span class="ml-auto">{{ $matieresCompletes }} complète(s) sur {{ $totalMatieres }}</span>
                         </div>
                     </div>

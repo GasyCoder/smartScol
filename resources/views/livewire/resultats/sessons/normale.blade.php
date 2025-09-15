@@ -1,4 +1,4 @@
-{{-- ✅ AJOUT : Indicateur de rechargement après délibération --}}
+{{-- ✅Session Normale --}}
 <div wire:loading.delay wire:target="appliquerDeliberation,annulerDeliberation,actualiserDonneesApresDeliberation,refreshResultats,forceReloadData"
      class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
     <div class="p-6 bg-white rounded-lg shadow-xl dark:bg-gray-800">
@@ -208,262 +208,284 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                 </div>
             </div>
 
-            {{-- ✅ TABLEAU AMÉLIORÉ avec indicateurs temps réel 1e session--}}
-            <table class="min-w-full bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-900/20">
-                        {{-- Première ligne d'en-têtes : UE --}}
-                        <tr>
-                            <th rowspan="2" class="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
-                                Ordre
-                            </th>
-                            <th rowspan="2" class="px-4 py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
-                                Matricule
-                            </th>
-                            <th rowspan="2" class="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
-                                Nom
-                            </th>
-                            <th rowspan="2" class="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
-                                Prénom
-                            </th>
-                                
-                                @foreach($uesStructure as $ueStructure)
-                                    @php
-                                        $ue = $ueStructure['ue'];
-                                        $nombreECs = count($ueStructure['ecs']) + 1;
-                                        
-                                        // ✅ EXTRAIRE SEULEMENT LA PARTIE UTILE DU NOM (après l'abréviation)
-                                        $nomPropre = $ue->nom;
-                                        if ($ue->abr && str_starts_with($nomPropre, $ue->abr . '.')) {
-                                            $nomPropre = trim(substr($nomPropre, strlen($ue->abr) + 1));
-                                        }
-                                    @endphp
-                                    
-                                    <th colspan="{{ $nombreECs }}" 
-                                        class="px-3 py-2 text-xs font-bold tracking-wider text-center text-gray-900 uppercase bg-gray-100 border-b border-r dark:text-gray-100 dark:border-gray-700 dark:bg-gray-800">
-                                        <div class="flex flex-col items-center">
-                                            <span class="font-bold text-blue-600 dark:text-blue-400">{{ $ue->abr }}</span>
-                                            <span class="text-xs font-normal text-gray-600 dark:text-gray-400">{{ $nomPropre }}</span>
-                                            <span class="text-xs font-normal text-green-600 dark:text-green-400">({{ $ue->credits }} crédits)</span>
-                                        </div>
-                                    </th>
-                                @endforeach
-                                
-                                <th rowspan="2" class="px-4 py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-l-2 border-r border-l-gray-400 dark:text-gray-100 dark:border-gray-700 dark:border-l-gray-500">
-                                    <div class="flex flex-col items-center">
-                                        <span>Moyenne</span>
-                                        <span>Générale</span>
-                                    </div>
-                                </th>
-                                <th rowspan="2" lass="px-4 py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
-                                    Crédits
-                                </th>
-                                <th rowspan="2" class="px-4 py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b dark:text-gray-100 dark:border-gray-700">
-                                    Décision
-                                </th>
-                            </tr>
-                            <tr>
-                                @foreach($uesStructure as $ueStructure)
-                                    {{-- ECs de cette UE --}}
-                                    @foreach($ueStructure['ecs'] as $ecData)
-                                        @php
-                                            $ec = $ecData['ec'];
+                {{-- Conteneur responsive pour le tableau --}}
+                <div class="overflow-x-auto -mx-4 sm:mx-0">
+                    <div class="inline-block min-w-full py-2 align-middle">
+                        <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead class="bg-gray-50 dark:bg-gray-900/20">
+                                    {{-- Première ligne d'en-têtes : UE --}}
+                                    <tr>
+                                        <th rowspan="2" class="sticky left-0 z-10 px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-left text-gray-900 uppercase border-b border-r bg-gray-50 dark:bg-gray-900/20 dark:text-gray-100 dark:border-gray-700">
+                                            <span class="hidden sm:inline">Ordre</span>
+                                            <span class="sm:hidden">#</span>
+                                        </th>
+                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
+                                            Matricule
+                                        </th>
+                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-left text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
+                                            <span class="hidden md:inline">Nom</span>
+                                            <span class="md:hidden">Nom/Prénom</span>
+                                        </th>
+                                        <th rowspan="2" class="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-left text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
+                                            Prénom
+                                        </th>
                                             
-                                            // ✅ EXTRAIRE SEULEMENT LA PARTIE UTILE DU NOM EC (après l'abréviation)
-                                            $nomEcPropre = trim($ec->nom);
-                                            if ($ec->abr && str_starts_with($nomEcPropre, $ec->abr . '.')) {
-                                                $nomEcPropre = trim(substr($nomEcPropre, strlen($ec->abr) + 1));
-                                            }
-                                        @endphp
-
-                                        <th class="px-2 py-2 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700"
-                                            title="{{ $ec->abr }}. {{ $nomEcPropre }} - {{ $ec->enseignant }}">
-                                            <div class="flex flex-col">
-                                                <span class="font-bold">{{ $ec->abr }}</span>
-                                                <span class="text-xs font-normal">{{ Str::limit($nomEcPropre, 20) }}</span>
-                                                @if($ec->enseignant)
-                                                    <span class="text-xs italic text-gray-500">[{{ Str::limit(trim($ec->enseignant), 12) }}]</span>
-                                                @endif
+                                        @foreach($uesStructure as $ueStructure)
+                                            @php
+                                                $ue = $ueStructure['ue'];
+                                                $nombreECs = count($ueStructure['ecs']) + 1;
+                                                
+                                                // Extraire seulement la partie utile du nom
+                                                $nomPropre = $ue->nom;
+                                                if ($ue->abr && str_starts_with($nomPropre, $ue->abr . '.')) {
+                                                    $nomPropre = trim(substr($nomPropre, strlen($ue->abr) + 1));
+                                                }
+                                            @endphp
+                                            
+                                            <th colspan="{{ $nombreECs }}" 
+                                                class="px-1 sm:px-3 py-1 sm:py-2 text-xs font-bold tracking-wider text-center text-gray-900 uppercase bg-gray-100 border-b border-r dark:text-gray-100 dark:border-gray-700 dark:bg-gray-800">
+                                                <div class="flex flex-col items-center">
+                                                    <span class="font-bold text-blue-600 dark:text-blue-400">{{ $ue->abr }}</span>
+                                                    <span class="hidden sm:block text-xs font-normal text-gray-600 dark:text-gray-400">{{ Str::limit($nomPropre, 15) }}</span>
+                                                    <span class="text-xs font-normal text-green-600 dark:text-green-400">({{ $ue->credits }})</span>
+                                                </div>
+                                            </th>
+                                        @endforeach
+                                        
+                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-l-2 border-r border-l-gray-400 dark:text-gray-100 dark:border-gray-700 dark:border-l-gray-500">
+                                            <div class="flex flex-col items-center">
+                                                <span class="hidden sm:inline">Moyenne</span>
+                                                <span class="hidden sm:inline">Générale</span>
+                                                <span class="sm:hidden">Moy.</span>
                                             </div>
                                         </th>
-                                    @endforeach
-                                    
-                                    {{-- Moyenne UE --}}
-                                    <th class="px-2 py-2 text-xs font-bold tracking-wider text-center text-gray-900 uppercase bg-gray-200 border-b border-r dark:text-gray-100 dark:border-gray-700 dark:bg-gray-700">
-                                        <span>Moy.</span>
-                                    </th>
-                                @endforeach
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                            @foreach($resultatsSession1 as $indexEtudiant => $resultat)
-                                <tr class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50" data-etudiant-id="{{ $resultat['etudiant']->id }}">
-                                    {{-- Ordre --}}
-                                    <td class="px-4 py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
-                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ $indexEtudiant + 1 }}
-                                        </div>
-                                    </td>
-                                    {{-- Matricule --}}
-                                    <td class="px-4 py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
-                                        <div class="font-mono text-sm text-gray-900 dark:text-gray-100">
-                                            {{ $resultat['etudiant']->matricule }}
-                                        </div>
-                                    </td>
-                                    {{-- Nom --}}
-                                    <td class="px-4 py-3 border-r whitespace-nowrap dark:border-gray-700">
-                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ $resultat['etudiant']->nom }}
-                                        </div>
-                                    </td>
-                                    {{-- Prénom --}}
-                                    <td class="px-4 py-3 border-r whitespace-nowrap dark:border-gray-700">
-                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ $resultat['etudiant']->prenom }}
-                                        </div>
-                                    </td>
-                                    @foreach($uesStructure as $index => $ueStructure)
-                                        @php
-                                            $ueId = $ueStructure['ue']->id;
-                                            $notesUE = [];
-                                            $hasNoteZeroInUE = false;
-                                        @endphp
-                                        {{-- Notes EC de cette UE --}}
-                                        @foreach($ueStructure['ecs'] as $ecIndex => $ecData)
-                                            <td class="px-2 py-3 text-center whitespace-nowrap border-r dark:border-gray-700
-                                                {{ $index === 0 && $ecIndex === 0 ? 'border-l-2 border-l-gray-400 dark:border-l-gray-500' : '' }}">
-                                                @if(isset($resultat['notes'][$ecData['ec']->id]))
+                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
+                                            Crédits
+                                        </th>
+                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b dark:text-gray-100 dark:border-gray-700">
+                                            Décision
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        @foreach($uesStructure as $ueStructure)
+                                            {{-- ECs de cette UE --}}
+                                            @foreach($ueStructure['ecs'] as $ecData)
+                                                @php
+                                                    $ec = $ecData['ec'];
+                                                    
+                                                    // Extraire seulement la partie utile du nom EC
+                                                    $nomEcPropre = trim($ec->nom);
+                                                    if ($ec->abr && str_starts_with($nomEcPropre, $ec->abr . '.')) {
+                                                        $nomEcPropre = trim(substr($nomEcPropre, strlen($ec->abr) + 1));
+                                                    }
+                                                @endphp
+
+                                                <th class="px-1 sm:px-2 py-1 sm:py-2 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700"
+                                                    title="{{ $ec->abr }}. {{ $nomEcPropre }} - {{ $ec->enseignant }}">
+                                                    <div class="flex flex-col">
+                                                        <span class="font-bold">{{ $ec->abr }}</span>
+                                                        <span class="hidden lg:block text-xs font-normal">{{ Str::limit($nomEcPropre, 15) }}</span>
+                                                        @if($ec->enseignant)
+                                                            <span class="hidden xl:block text-xs italic text-gray-500">[{{ Str::limit(trim($ec->enseignant), 10) }}]</span>
+                                                        @endif
+                                                    </div>
+                                                </th>
+                                            @endforeach
+                                            
+                                            {{-- Moyenne UE --}}
+                                            <th class="px-1 sm:px-2 py-1 sm:py-2 text-xs font-bold tracking-wider text-center text-gray-900 uppercase bg-gray-200 border-b border-r dark:text-gray-100 dark:border-gray-700 dark:bg-gray-700">
+                                                <span class="hidden sm:inline">Moy.</span>
+                                                <span class="sm:hidden">M</span>
+                                            </th>
+                                        @endforeach
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                                    @foreach($resultatsSession1 as $indexEtudiant => $resultat)
+                                        <tr class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50" data-etudiant-id="{{ $resultat['etudiant']->id }}">
+                                            {{-- Ordre --}}
+                                            <td class="sticky left-0 z-10 px-2 sm:px-4 py-2 sm:py-3 text-center border-r whitespace-nowrap bg-white dark:bg-gray-800 dark:border-gray-700">
+                                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                    {{ $indexEtudiant + 1 }}
+                                                </div>
+                                            </td>
+                                            {{-- Matricule --}}
+                                            <td class="px-2 sm:px-4 py-2 sm:py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
+                                                <div class="font-mono text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                                                    <span class="hidden sm:inline">{{ $resultat['etudiant']->matricule }}</span>
+                                                    <span class="sm:hidden">{{ Str::limit($resultat['etudiant']->matricule, 8) }}</span>
+                                                </div>
+                                            </td>
+                                            {{-- Nom (+ Prénom sur mobile) --}}
+                                            <td class="px-2 sm:px-4 py-2 sm:py-3 border-r whitespace-nowrap dark:border-gray-700">
+                                                <div class="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                    <div class="md:hidden">
+                                                        {{ $resultat['etudiant']->nom }}<br>
+                                                        <span class="text-xs text-gray-600 dark:text-gray-400">{{ $resultat['etudiant']->prenom }}</span>
+                                                    </div>
+                                                    <div class="hidden md:block">
+                                                        {{ $resultat['etudiant']->nom }}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            {{-- Prénom (masqué sur mobile) --}}
+                                            <td class="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 border-r whitespace-nowrap dark:border-gray-700">
+                                                <div class="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                    {{ $resultat['etudiant']->prenom }}
+                                                </div>
+                                            </td>
+                                            @foreach($uesStructure as $index => $ueStructure)
+                                                @php
+                                                    $ueId = $ueStructure['ue']->id;
+                                                    $notesUE = [];
+                                                    $hasNoteZeroInUE = false;
+                                                @endphp
+                                                {{-- Notes EC de cette UE --}}
+                                                @foreach($ueStructure['ecs'] as $ecIndex => $ecData)
+                                                    <td class="px-1 sm:px-2 py-2 sm:py-3 text-center whitespace-nowrap border-r dark:border-gray-700
+                                                        {{ $index === 0 && $ecIndex === 0 ? 'border-l-2 border-l-gray-400 dark:border-l-gray-500' : '' }}">
+                                                        @if(isset($resultat['notes'][$ecData['ec']->id]))
+                                                            @php
+                                                                $note = $resultat['notes'][$ecData['ec']->id]->note;
+                                                                $notesUE[] = $note;
+                                                                if ($note == 0) $hasNoteZeroInUE = true;
+                                                            @endphp
+                                                            <span class="text-xs sm:text-sm {{ $note >= 10 ? 'text-green-600 dark:text-green-400 font-semibold' : ($note == 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-orange-600 dark:text-orange-400') }}">
+                                                                {{ number_format($note, 2) }}
+                                                                @if($note == 0)
+                                                                    <span class="ml-1" title="Note éliminatoire">⚠️</span>
+                                                                @endif
+                                                            </span>
+                                                        @else
+                                                            <span class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">-</span>
+                                                        @endif
+                                                    </td>
+                                                @endforeach
+                                                {{-- Moyenne UE --}}
+                                                <td class="px-1 sm:px-2 py-2 sm:py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
                                                     @php
-                                                        $note = $resultat['notes'][$ecData['ec']->id]->note;
-                                                        $notesUE[] = $note;
-                                                        if ($note == 0) $hasNoteZeroInUE = true;
+                                                        // Logique académique exacte
+                                                        if ($hasNoteZeroInUE) {
+                                                            $moyenneUE = 0;
+                                                            $moyenneDisplay = '0.00';
+                                                            $ueValidee = false;
+                                                            $moyenneClass = 'text-red-600 dark:text-red-400 font-bold';
+                                                        } elseif (!empty($notesUE)) {
+                                                            $moyenneUE = array_sum($notesUE) / count($notesUE);
+                                                            $ueValidee = $moyenneUE >= 10;
+                                                            $moyenneDisplay = number_format($moyenneUE, 2);
+                                                            $moyenneClass = $ueValidee ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-orange-600 dark:text-orange-400';
+                                                        } else {
+                                                            $moyenneUE = 0;
+                                                            $moyenneDisplay = '-';
+                                                            $ueValidee = false;
+                                                            $moyenneClass = 'text-gray-500 dark:text-gray-400';
+                                                        }
                                                     @endphp
-                                                    <span class="text-sm {{ $note >= 10 ? 'text-green-600 dark:text-green-400 font-semibold' : ($note == 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-orange-600 dark:text-orange-400') }}">
-                                                        {{ number_format($note, 2) }}
-                                                        @if($note == 0)
+                                                    <div class="flex flex-col items-center justify-center">
+                                                        <span class="text-xs sm:text-sm font-bold {{ $moyenneClass }}">
+                                                            {{ $moyenneDisplay }}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            @endforeach
+                                            {{-- Moyenne générale --}}
+                                            <td class="px-2 sm:px-4 py-2 sm:py-3 text-center border-l-2 border-r whitespace-nowrap border-l-gray-400 dark:border-gray-700 dark:border-l-gray-500">
+                                                <div class="flex flex-col items-center">
+                                                    <span class="text-xs sm:text-sm font-bold {{ $resultat['moyenne_generale'] >= 10 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
+                                                        {{ number_format($resultat['moyenne_generale'], 2) }}
+                                                    </span>
+                                                    @if(isset($resultat['has_note_eliminatoire']) && $resultat['has_note_eliminatoire'])
+                                                        <span class="mt-1 text-xs text-red-500" title="Présence de note(s) éliminatoire(s)">⚠️</span>
+                                                    @endif
+                                                </div>
+                                            </td>
+                                            {{-- Crédits --}}
+                                            <td class="px-2 sm:px-4 py-2 sm:py-4 text-center border-r whitespace-nowrap dark:border-gray-700">
+                                                <div class="flex flex-col items-center">
+                                                    <span class="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                        {{ $resultat['credits_valides'] }}
+                                                    </span>
+                                                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                                                        /{{ $resultat['total_credits'] ?? 60 }}
+                                                    </span>
+                                                    <div class="w-full bg-gray-200 rounded-full h-1 sm:h-1.5 mt-1 dark:bg-gray-700">
+                                                        @php
+                                                            $totalCredits = $resultat['total_credits'] ?? 60;
+                                                            $pourcentage = $totalCredits > 0 ? ($resultat['credits_valides'] / $totalCredits) * 100 : 0;
+                                                        @endphp
+                                                        <div class="h-1 sm:h-1.5 rounded-full {{ $pourcentage >= 100 ? 'bg-green-600' : ($pourcentage >= 67 ? 'bg-orange-500' : 'bg-red-600') }}"
+                                                            style="width: {{ min($pourcentage, 100) }}%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            
+                                            {{-- Décision avec indicateur jury --}}
+                                            <td class="px-2 sm:px-4 py-2 sm:py-3 text-center whitespace-nowrap">
+                                                @php
+                                                    $decision = $resultat['decision'];
+                                                    $juryValidated = $resultat['jury_validated'] ?? false;
+                                                    $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
+
+                                                    // Couleurs selon décision
+                                                    $baseClass = match($decision) {
+                                                        'admis' => 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
+                                                        'rattrapage' => 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/50 dark:text-orange-300 dark:border-orange-700',
+                                                        'redoublant' => 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+                                                        'exclus' => 'bg-red-200 text-red-900 dark:bg-red-900/70 dark:text-red-200',
+                                                        default => 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-gray-100'
+                                                    };
+
+                                                    $finalClass = $juryValidated
+                                                        ? $baseClass . ' ring-2 ring-blue-300 shadow-md'
+                                                        : $baseClass . ' ';
+
+                                                    $decisionLibelle = match($decision) {
+                                                        'admis' => 'Admis',
+                                                        'rattrapage' => 'Rattrapage',
+                                                        'redoublant' => 'Redoublant',
+                                                        'exclus' => 'Exclus',
+                                                        default => 'Non définie'
+                                                    };
+
+                                                    // Version mobile plus courte
+                                                    $decisionMobile = match($decision) {
+                                                        'admis' => 'Admis',
+                                                        'rattrapage' => 'Rattr.',
+                                                        'redoublant' => 'Redoub.',
+                                                        'exclus' => 'Exclus',
+                                                        default => 'N/D'
+                                                    };
+                                                @endphp
+
+                                                <div class="flex flex-col items-center space-y-1 sm:space-y-2">
+                                                    {{-- Badge principal --}}
+                                                    <span class="px-2 sm:px-3 py-1 text-xs rounded-full {{ $finalClass }}">
+                                                        <span class="hidden sm:inline">{{ $decisionLibelle }}</span>
+                                                        <span class="sm:hidden">{{ $decisionMobile }}</span>
+                                                        @if($hasNoteEliminatoire)
                                                             <span class="ml-1" title="Note éliminatoire">⚠️</span>
                                                         @endif
                                                     </span>
-                                                @else
-                                                    <span class="text-sm text-gray-500 dark:text-gray-400">-</span>
-                                                @endif
-                                            </td>
-                                        @endforeach
-                                        {{-- Moyenne UE selon logique médecine --}}
-                                        <td class="px-2 py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
-                                            @php
-                                                // Appliquer la logique académique exacte
-                                                if ($hasNoteZeroInUE) {
-                                                    // UE éliminée à cause d'une note de 0
-                                                    $moyenneUE = 0;
-                                                    $moyenneDisplay = '0.00';
-                                                    $ueValidee = false;
-                                                    $moyenneClass = 'text-red-600 dark:text-red-400 font-bold';
-                                                    $statutUE = 'eliminee';
-                                                } elseif (!empty($notesUE)) {
-                                                    // Moyenne UE = somme notes / nombre EC
-                                                    $moyenneUE = array_sum($notesUE) / count($notesUE);
-                                                    $ueValidee = $moyenneUE >= 10;
-                                                    $moyenneDisplay = number_format($moyenneUE, 2);
-                                                    $moyenneClass = $ueValidee ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-orange-600 dark:text-orange-400';
-                                                    $statutUE = $ueValidee ? 'validee' : 'non_validee';
-                                                } else {
-                                                    $moyenneUE = 0;
-                                                    $moyenneDisplay = '-';
-                                                    $ueValidee = false;
-                                                    $moyenneClass = 'text-gray-500 dark:text-gray-400';
-                                                    $statutUE = 'non_disponible';
-                                                }
-                                            @endphp
-                                            <div class="flex flex-col items-center justify-center">
-                                                <span class="text-sm font-bold {{ $moyenneClass }}">
-                                                    {{ $moyenneDisplay }}
-                                                </span>
-                                            </div>
-                                        </td>
-                                    @endforeach
-                                    {{-- Moyenne générale --}}
-                                    <td class="px-4 py-3 text-center border-l-2 border-r whitespace-nowrap border-l-gray-400 dark:border-gray-700 dark:border-l-gray-500">
-                                        <div class="flex flex-col items-center">
-                                            <span class="text-sm font-bold {{ $resultat['moyenne_generale'] >= 10 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
-                                                {{ number_format($resultat['moyenne_generale'], 2) }}
-                                            </span>
-                                            @if(isset($resultat['has_note_eliminatoire']) && $resultat['has_note_eliminatoire'])
-                                                <span class="mt-1 text-xs text-red-500" title="Présence de note(s) éliminatoire(s)">⚠️</span>
-                                            @endif
-                                        </div>
-                                    </td>
-                                    {{-- Crédits --}}
-                                    <td class="px-4 py-4 text-center border-r whitespace-nowrap dark:border-gray-700">
-                                        <div class="flex flex-col items-center">
-                                            <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                {{ $resultat['credits_valides'] }}
-                                            </span>
-                                            <span class="text-xs text-gray-500 dark:text-gray-400">
-                                                /{{ $resultat['total_credits'] ?? 60 }}
-                                            </span>
-                                            <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1 dark:bg-gray-700">
-                                                @php
-                                                    $totalCredits = $resultat['total_credits'] ?? 60;
-                                                    $pourcentage = $totalCredits > 0 ? ($resultat['credits_valides'] / $totalCredits) * 100 : 0;
-                                                @endphp
-                                                <div class="h-1.5 rounded-full {{ $pourcentage >= 100 ? 'bg-green-600' : ($pourcentage >= 67 ? 'bg-orange-500' : 'bg-red-600') }}"
-                                                    style="width: {{ min($pourcentage, 100) }}%"></div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    
-                                    {{-- Décision avec indicateur jury --}}
-                                    <td class="px-4 py-3 text-center whitespace-nowrap">
-                                        @php
-                                            $decision = $resultat['decision'];
-                                            $juryValidated = $resultat['jury_validated'] ?? false;
-                                            $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
 
-                                            // Couleurs selon décision avec emphasis si délibéré
-                                            $baseClass = match($decision) {
-                                                'admis' => 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
-                                                'rattrapage' => 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/50 dark:text-orange-300 dark:border-orange-700',
-                                                'redoublant' => 'bg-red-100 text-red-80 dark:bg-red-900/50 dark:text-red-300',
-                                                'exclus' => 'bg-red-200 text-red-900 dark:bg-red-900/70 dark:text-red-200',
-                                                default => 'bg-gray-100 text-gray-900 bdark:bg-gray-700 dark:text-gray-100'
-                                            };
-
-                                            // Ajouter des effets si délibéré
-                                            $finalClass = $juryValidated
-                                                ? $baseClass . ' ring-2 ring-blue-300 shadow-md'
-                                                : $baseClass . ' ';
-
-                                            $decisionLibelle = match($decision) {
-                                                'admis' => 'Admis',
-                                                'rattrapage' => 'Rattrapage',
-                                                'redoublant' => 'Redoublant',
-                                                'exclus' => 'Exclus',
-                                                default => 'Non définie'
-                                            };
-                                        @endphp
-
-                                        <div class="flex flex-col items-center space-y-2">
-                                            {{-- Badge principal --}}
-                                            <span class="px-3 py-1 text-xs rounded-full {{ $finalClass }}">
-                                                {{ $decisionLibelle }}
-                                                @if($hasNoteEliminatoire)
-                                                    <span class="ml-1" title="Note éliminatoire">⚠️</span>
-                                                @endif
-                                            </span>
-
-                                            {{-- Indicateur source de la décision --}}
-                                            @if($juryValidated)
-                                                <div class="flex items-center px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/50 dark:text-blue-300">
-                                                    <em class="mr-1 ni ni-shield-check"></em>
-                                                    <span class="font-semibold">Délibération</span>
+                                                    {{-- Indicateur source de la décision --}}
+                                                    @if($juryValidated)
+                                                        <div class="hidden sm:flex items-center px-2 py-1 text-xs text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/50 dark:text-blue-300">
+                                                            <em class="mr-1 ni ni-shield-check"></em>
+                                                            <span class="font-semibold">Délibération</span>
+                                                        </div>
+                                                        <div class="sm:hidden w-2 h-2 bg-blue-500 rounded-full" title="Délibération"></div>
+                                                    @endif
                                                 </div>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                </table>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {{-- ✅ AJOUT : Légende et informations supplémentaires --}}
