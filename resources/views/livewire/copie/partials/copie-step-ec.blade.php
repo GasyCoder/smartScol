@@ -51,7 +51,7 @@
     @if($pageCount > 0)
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             @foreach($ecs as $ec)
-                <button wire:click="selectEC({{ $ec->id }})"
+                <button wire:click="selectEC({{ $ec->id }})" wire:key="selectEC-{{ $ec->id }}"
                         class="w-full p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 text-left group
                                {{ isset($ec->est_terminee) && $ec->est_terminee ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' : '' }}">
                     
