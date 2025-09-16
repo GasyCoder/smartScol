@@ -94,6 +94,7 @@ class FusionIndex extends Component
 
         $this->verifierEtatActuel();
     }
+    
 
     private function loadParcours()
     {
@@ -344,6 +345,8 @@ class FusionIndex extends Component
         $this->$confirmProperty = false;
 
         try {
+            DB::beginTransaction(); // ← Ajout transaction
+            
             $resultats = ResultatFusion::where('examen_id', $this->examen_id)
                 ->where('session_exam_id', $this->sessionActive->id)
                 ->where('statut', $fromStatus)
@@ -351,6 +354,7 @@ class FusionIndex extends Component
 
             if ($resultats->isEmpty()) {
                 toastr()->error("Aucun résultat trouvé pour cette étape de vérification.");
+                DB::rollback();
                 return;
             }
 
@@ -359,14 +363,28 @@ class FusionIndex extends Component
                 $fusion->changerStatut($toStatus, $userId);
             }
 
-            $this->etapeFusion = $etape;
-            $this->etapeProgress = $progress;
+            DB::commit(); // ← Commit avant mise à jour état
+            
+            // ✅ Attendre que les changements soient persistés
+            sleep(1);
+            
+            // ✅ Forcer rafraîchissement complet
+            $this->verifierEtatActuel();
+            
+            // ✅ Forcer le rendu du composant
+            $this->dispatch('$refresh');
 
             toastr()->success(count($resultats) . " résultats passés à l'étape suivante pour la session {$this->sessionActive->type}.");
-            $this->verifierEtatActuel();
 
         } catch (\Exception $e) {
+            DB::rollback();
             toastr()->error('Erreur lors du passage à l\'étape suivante: ' . $e->getMessage());
+            \Log::error('Erreur processVerifyStep', [
+                'error' => $e->getMessage(),
+                'fromStatus' => $fromStatus,
+                'toStatus' => $toStatus,
+                'etape' => $etape
+            ]);
         }
     }
 

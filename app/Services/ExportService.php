@@ -14,6 +14,87 @@ use Maatwebsite\Excel\Facades\Excel;
 class ExportService
 {
     /**
+     * ✅ Export PDF format officiel (nouveau)
+     */
+    public function exporterPDFOfficiel($resultats, $niveau = null, $anneeUniv = null, $parcours = null, $session = null, $optionsExport = [])
+    {
+        try {
+            if (empty($resultats)) {
+                throw new \Exception('Aucun résultat disponible pour l\'export PDF.');
+            }
+
+            // Trier les résultats par ordre de mérite (moyenne décroissante)
+            $resultatsOrdonnes = collect($resultats)->sortByDesc('moyenne_generale')->values()->toArray();
+
+            $donnees = [
+                'resultats' => $resultatsOrdonnes,
+                'niveau' => $niveau,
+                'parcours' => $parcours,
+                'annee_universitaire' => $anneeUniv,
+                'session' => $session,
+                'statistiques' => $this->calculerStats($resultats),
+                'date_export' => now()->format('d/m/Y H:i'),
+                'export_par' => Auth::user()->name ?? 'Système',
+                'titre_special' => $optionsExport['titre_special'] ?? null,
+                'conditions' => $optionsExport['conditions'] ?? 'Sous réserve de validation de Stage Hospitalier',
+                'doyen_nom' => $optionsExport['doyen_nom'] ?? 'RAKOTOMALALA Jules Robert'
+            ];
+
+            $nomFichier = $this->genererNomFichierPDF($niveau, $parcours, $anneeUniv, $optionsExport['suffix'] ?? null);
+
+            $pdf = Pdf::loadView('exports.resultats-pdf-officiel', $donnees)
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont' => 'DejaVu Sans',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                    'margin_top' => 15,
+                    'margin_bottom' => 20,
+                    'margin_left' => 20,
+                    'margin_right' => 20,
+                ]);
+
+            return response()->streamDownload(function() use ($pdf) {
+                echo $pdf->output();
+            }, $nomFichier);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export PDF officiel: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ Export PDF admis uniquement - Format officiel
+     */
+    public function exporterAdmisPDFOfficiel($resultats, $niveau = null, $anneeUniv = null, $parcours = null, $session = null, $optionsExport = [])
+    {
+        try {
+            // Filtrer pour ne garder que les admis et ordonner par mérite
+            $resultatsAdmis = collect($resultats)
+                ->filter(function($resultat) {
+                    return ($resultat['decision'] ?? '') === 'admis';
+                })
+                ->sortByDesc('moyenne_generale')
+                ->values()
+                ->toArray();
+
+            if (empty($resultatsAdmis)) {
+                throw new \Exception('Aucun étudiant admis à exporter.');
+            }
+
+            $optionsExport['titre_special'] = 'LISTE DES ETUDIANTS ADMIS EN ' . strtoupper($niveau->nom ?? '');
+            $optionsExport['suffix'] = 'Admis';
+
+            return $this->exporterPDFOfficiel($resultatsAdmis, $niveau, $anneeUniv, $parcours, $session, $optionsExport);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export PDF admis officiel: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
      * ✅ Export Excel avec le nouveau format de l'image
      */
     public function exporterExcel($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null)
@@ -67,7 +148,7 @@ class ExportService
     }
 
     /**
-     * ✅ Export PDF simple (garder l'existant)
+     * ✅ Export PDF simple (garder l'existant pour compatibilité)
      */
     public function exporterPDF($resultats, $niveau = null, $anneeUniv = null, $parcours = null, $uesStructure = [])
     {
@@ -108,7 +189,7 @@ class ExportService
     }
 
     /**
-     * ✅ Export PDF admis uniquement
+     * ✅ Export PDF admis uniquement (format détaillé ancien)
      */
     public function exporterAdmisPDF($resultats, $niveau = null, $anneeUniv = null, $parcours = null, $uesStructure = [])
     {
@@ -186,7 +267,13 @@ class ExportService
      */
     private function genererNomFichierPDF($niveau = null, $parcours = null, $anneeUniv = null, $suffix = null)
     {
-        $parts = ['Resultats'];
+        $parts = ['Liste'];
+        
+        if ($suffix === 'Admis') {
+            $parts[] = 'Admis';
+        } else {
+            $parts[] = 'Resultats';
+        }
         
         if ($niveau) {
             $parts[] = str_replace(' ', '_', $niveau->nom);
@@ -198,10 +285,6 @@ class ExportService
         
         if ($anneeUniv) {
             $parts[] = str_replace(['/', ' '], ['_', '_'], $anneeUniv->libelle);
-        }
-        
-        if ($suffix) {
-            $parts[] = $suffix;
         }
         
         $parts[] = now()->format('Y-m-d_H-i');
@@ -236,6 +319,59 @@ class ExportService
             'etudiants_avec_note_eliminatoire' => collect($resultats)->where('has_note_eliminatoire', true)->count(),
             'etudiants_jury_validated' => collect($resultats)->where('jury_validated', true)->count(),
         ];
+    }
+
+    /**
+     * ✅ Convertir nombres en lettres (utilitaire)
+     */
+    public function nombreEnLettres($nombre)
+    {
+        $unites = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
+        $dixaines = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingt', 'quatre-vingt-dix'];
+        $dizaines = ['dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+        
+        if ($nombre < 10) {
+            return $unites[$nombre];
+        } elseif ($nombre < 20) {
+            return $dizaines[$nombre - 10];
+        } elseif ($nombre < 100) {
+            $dix = intval($nombre / 10);
+            $unite = $nombre % 10;
+            if ($unite == 0) {
+                return $dixaines[$dix];
+            } else {
+                return $dixaines[$dix] . '-' . $unites[$unite];
+            }
+        } elseif ($nombre < 1000) {
+            $cent = intval($nombre / 100);
+            $reste = $nombre % 100;
+            $result = '';
+            if ($cent == 1) {
+                $result = 'cent';
+            } else {
+                $result = $unites[$cent] . ' cent';
+            }
+            if ($reste > 0) {
+                $result .= ' ' . $this->nombreEnLettres($reste);
+            }
+            return $result;
+        }
+        
+        return (string) $nombre; // Fallback pour nombres > 999
+    }
+
+    /**
+     * ✅ Convertir numéro de mois en nom français
+     */
+    public function moisEnFrancais($numeroMois)
+    {
+        $mois = [
+            '01' => 'Janvier', '02' => 'Février', '03' => 'Mars', '04' => 'Avril',
+            '05' => 'Mai', '06' => 'Juin', '07' => 'Juillet', '08' => 'Août',
+            '09' => 'Septembre', '10' => 'Octobre', '11' => 'Novembre', '12' => 'Décembre'
+        ];
+        
+        return $mois[$numeroMois] ?? 'Mois invalide';
     }
 
     /**

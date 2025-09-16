@@ -167,8 +167,10 @@
                                 </button>
                             @elseif($etapeFusion === 2)
                                 <button wire:click="confirmVerify3"
+                                        wire:loading.attr="disabled"
+                                        wire:key="verify3-{{ now()->timestamp }}"
                                         class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-yellow-500 border border-transparent rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50">
-                                     <em class="text-xl ni ni-repeat mr-2"></em> Étape finale
+                                    <em class="text-xl ni ni-repeat mr-2"></em> Étape finale
                                     <span wire:loading wire:target="confirmVerify3" class="ml-2 animate-spin">⟳</span>
                                 </button>
                             @endif
