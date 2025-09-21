@@ -496,14 +496,15 @@ class ResultatFinal extends Model
     public static function calculerMoyenneUE($etudiantId, $ueId, $sessionId)
     {
         try {
-            // CORRECTION : Utiliser directement session_exam_id
-            $resultats = self::with('ec')
-                ->where('session_exam_id', $sessionId)
-                ->whereHas('ec', function($q) use ($ueId) {
-                    $q->where('ue_id', $ueId);
-                })
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
+            // Jointure directe pour éviter les relations null
+            $resultats = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.ue_id', $ueId)
+                ->where('ec.is_active', true)
+                ->select('rf.note')
                 ->get();
 
             if ($resultats->isEmpty()) {
@@ -681,11 +682,16 @@ class ResultatFinal extends Model
     public static function calculerMoyenneGenerale($etudiantId, $sessionId)
     {
         try {
-            // CORRECTION : Utiliser directement session_exam_id
-            $resultats = self::with('ec.ue')
-                ->where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
+            // Jointure directe pour éviter les relations null
+            $resultats = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->join('ues as ue', 'ec.ue_id', '=', 'ue.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.is_active', true)
+                ->where('ue.is_active', true)
+                ->select('rf.note', 'ec.ue_id')
                 ->get();
 
             if ($resultats->isEmpty()) {
@@ -693,7 +699,7 @@ class ResultatFinal extends Model
             }
 
             // Grouper par UE
-            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            $resultatsParUE = $resultats->groupBy('ue_id');
             $moyennesUE = [];
 
             foreach ($resultatsParUE as $ueId => $notesUE) {
@@ -725,7 +731,6 @@ class ResultatFinal extends Model
             return 0;
         }
     }
-
     /**
      * CORRECTION : Récupère les résultats académiques complets pour cet étudiant
      * NE PAS UTILISER CalculAcademiqueService qui peut avoir des références à examen.session_id
@@ -1713,13 +1718,15 @@ class ResultatFinal extends Model
     public static function calculerMoyenneUE_LogiqueMedecine($etudiantId, $ueId, $sessionId)
     {
         try {
-            // Récupérer tous les résultats de l'UE pour cet étudiant
-            $resultats = self::where('session_exam_id', $sessionId)
-                ->whereHas('ec', function($q) use ($ueId) {
-                    $q->where('ue_id', $ueId);
-                })
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
+            // Jointure directe pour éviter les relations null
+            $resultats = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.ue_id', $ueId)
+                ->where('ec.is_active', true)
+                ->select('rf.note')
                 ->get();
 
             if ($resultats->isEmpty()) {
@@ -1747,6 +1754,7 @@ class ResultatFinal extends Model
             return null;
         }
     }
+
 
     /**
      * MÉTHODE MISE À JOUR : Vérifie si un étudiant valide une UE selon logique médecine
@@ -1789,10 +1797,16 @@ class ResultatFinal extends Model
     public static function calculerMoyenneGenerale_LogiqueMedecine($etudiantId, $sessionId)
     {
         try {
-            $resultats = self::with('ec.ue')
-                ->where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
+            // Jointure directe pour éviter les relations null
+            $resultats = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->join('ues as ue', 'ec.ue_id', '=', 'ue.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.is_active', true)
+                ->where('ue.is_active', true)
+                ->select('rf.note', 'ec.ue_id')
                 ->get();
 
             if ($resultats->isEmpty()) {
@@ -1800,7 +1814,7 @@ class ResultatFinal extends Model
             }
 
             // LOGIQUE MÉDECINE : Grouper par UE
-            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            $resultatsParUE = $resultats->groupBy('ue_id');
             $moyennesUE = [];
             $hasNoteEliminatoire = false;
 
@@ -1915,26 +1929,32 @@ class ResultatFinal extends Model
     public static function calculerCreditsValides_LogiqueMedecine($etudiantId, $sessionId)
     {
         try {
-            $resultats = self::with('ec.ue')
-                ->where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId)
-                ->where('statut', self::STATUT_PUBLIE)
+            // Jointure directe pour éviter les relations null
+            $resultats = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->join('ues as ue', 'ec.ue_id', '=', 'ue.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.is_active', true)
+                ->where('ue.is_active', true)
+                ->select('rf.*', 'ec.ue_id', 'ue.credits')
                 ->get();
 
             if ($resultats->isEmpty()) {
                 return 0;
             }
 
-            // Grouper par UE pour calculer les crédits selon logique médecine
-            $resultatsParUE = $resultats->groupBy('ec.ue_id');
+            // Grouper par UE
+            $resultatsParUE = $resultats->groupBy('ue_id');
             $creditsValides = 0;
 
             foreach ($resultatsParUE as $ueId => $notesUE) {
-                $ue = $notesUE->first()->ec->ue;
-
+                $credits = $notesUE->first()->credits ?? 0;
+                
                 // LOGIQUE MÉDECINE : Vérifier si UE validée
                 if (self::etudiantValideUE_LogiqueMedecine($etudiantId, $ueId, $sessionId)) {
-                    $creditsValides += $ue->credits ?? 0;
+                    $creditsValides += $credits;
                 }
             }
 
@@ -1949,6 +1969,7 @@ class ResultatFinal extends Model
             return 0;
         }
     }
+
 
     /**
      * NOUVELLE MÉTHODE : Vérifie s'il y a des notes éliminatoires selon logique médecine

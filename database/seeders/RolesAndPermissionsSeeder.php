@@ -265,6 +265,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'manchettes.edit',
             'copies.view',
             'copies.edit',
+            'resultats.fusion'
         ]);
 
         // Créer le rôle secrétaire

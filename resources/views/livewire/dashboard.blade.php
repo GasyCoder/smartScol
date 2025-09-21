@@ -207,15 +207,18 @@
 
         <!-- Charts Section -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Évolution Mensuelle -->
+            <!-- Taux de Réussite Mensuel -->
             <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Évolution Mensuelle</h3>
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">
+                        <i class="fas fa-chart-line mr-2 text-green-500"></i>
+                        Taux de Réussite Mensuel
+                    </h3>
                     <div class="flex items-center space-x-3">
                         <select wire:model="selectedYear" wire:change="changeYear($event.target.value)" 
                                 class="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
                             @foreach($anneesUniversitaires as $annee)
-                                <option value="{{ $annee->id }}">{{ $annee->nom }}</option>
+                                <option value="{{ $annee->id }}">{{ $annee->libelle }}</option>
                             @endforeach
                         </select>
                         <div class="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
@@ -231,32 +234,62 @@
                     </div>
                 </div>
                 <div class="h-80">
-                    <canvas id="evolutionChart" class="w-full h-full"></canvas>
+                    <canvas id="tauxReussiteChart" class="w-full h-full"></canvas>
+                </div>
+                <div class="mt-4 grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-green-600">
+                            {{ $totalEtudiants > 0 ? round(($etudiantsAdmis / $totalEtudiants) * 100, 1) : 0 }}%
+                        </div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Taux Global</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600">{{ $etudiantsAdmis }}</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Total Admis</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-gray-600">{{ $totalEtudiants }}</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Total Candidats</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Répartition Actuelle -->
+            <!-- Performance Académique Détaillée -->
             <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Répartition des Résultats</h3>
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">
+                        <i class="fas fa-graduation-cap mr-2 text-blue-500"></i>
+                        Performance Académique
+                    </h3>
                 </div>
                 <div class="h-80">
-                    <canvas id="distributionChart" class="w-full h-full"></canvas>
+                    <canvas id="performanceChart" class="w-full h-full"></canvas>
                 </div>
-                <div class="mt-4 grid grid-cols-2 gap-4">
-                    <div class="text-center">
-                        <div class="w-4 h-4 bg-green-500 rounded-full mx-auto mb-1"></div>
+                <div class="mt-4 grid grid-cols-4 gap-2 text-center">
+                    <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-green-500 rounded-full mx-auto mb-1"></div>
                         <p class="text-xs text-gray-600 dark:text-gray-400">Admis</p>
                         <p class="font-semibold text-green-600 dark:text-green-400">{{ $etudiantsAdmis }}</p>
                     </div>
-                    <div class="text-center">
-                        <div class="w-4 h-4 bg-red-500 rounded-full mx-auto mb-1"></div>
-                        <p class="text-xs text-gray-600 dark:text-gray-400">Échecs</p>
-                        <p class="font-semibold text-red-600 dark:text-red-400">{{ $redoublants + $exclus }}</p>
+                    <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-yellow-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Rattrapage</p>
+                        <p class="font-semibold text-yellow-600 dark:text-yellow-400">{{ $rattrapage }}</p>
+                    </div>
+                    <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-orange-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Redoublants</p>
+                        <p class="font-semibold text-orange-600 dark:text-orange-400">{{ $redoublants }}</p>
+                    </div>
+                    <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-red-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Exclus</p>
+                        <p class="font-semibold text-red-600 dark:text-red-400">{{ $exclus }}</p>
                     </div>
                 </div>
             </div>
         </div>
+
 
         <!-- Statistics Tables -->
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
@@ -435,42 +468,55 @@
         const gridColor = isDarkMode ? '#374151' : '#f1f5f9';
         const textColor = isDarkMode ? '#d1d5db' : '#6b7280';
 
-        const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
-        const evolutionChart = new Chart(evolutionCtx, {
+        // ✅ GRAPHIQUE 1 : Taux de Réussite Mensuel (adapté éducation)
+        const tauxReussiteCtx = document.getElementById('tauxReussiteChart').getContext('2d');
+        const tauxReussiteChart = new Chart(tauxReussiteCtx, {
             type: '{{ $selectedChartType }}',
             data: {
                 labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'],
                 datasets: [
                     {
-                        label: 'Admis',
+                        label: 'Taux de Réussite (%)',
+                        data: @json($chartDataTauxReussite ?? array_fill(0, 12, 0)),
+                        borderColor: '#10b981',
+                        backgroundColor: '#10b98120',
+                        tension: 0.4,
+                        fill: true,
+                        yAxisID: 'y1'
+                    },
+                    {
+                        label: 'Nombre d\'Admis',
                         data: @json($chartDataAdmis),
-                        borderColor: '#18b38a',
-                        backgroundColor: '#18b38a20',
+                        borderColor: '#3b82f6',
+                        backgroundColor: '#3b82f620',
                         tension: 0.4,
-                        fill: false
+                        fill: false,
+                        yAxisID: 'y'
                     },
                     {
-                        label: 'Redoublants',
-                        data: @json($chartDataRedoublants),
-                        borderColor: '#f4bd0e',
-                        backgroundColor: '#f4bd0e20',
+                        label: 'Moyenne Générale',
+                        data: @json($chartDataMoyennes ?? array_fill(0, 12, 10)),
+                        borderColor: '#8b5cf6',
+                        backgroundColor: '#8b5cf620',
                         tension: 0.4,
-                        fill: false
-                    },
-                    {
-                        label: 'Exclus',
-                        data: @json($chartDataExclus),
-                        borderColor: '#e85347',
-                        backgroundColor: '#e8534720',
-                        tension: 0.4,
-                        fill: false
+                        fill: false,
+                        yAxisID: 'y2'
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
+                    title: {
+                        display: true,
+                        text: 'Évolution des Performances Académiques',
+                        color: textColor
+                    },
                     legend: {
                         position: 'bottom',
                         labels: {
@@ -478,18 +524,23 @@
                             usePointStyle: true,
                             color: textColor
                         }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label === 'Taux de Réussite (%)') {
+                                    return label + ': ' + context.parsed.y + '%';
+                                } else if (label === 'Moyenne Générale') {
+                                    return label + ': ' + context.parsed.y + '/20';
+                                } else {
+                                    return label + ': ' + context.parsed.y + ' étudiants';
+                                }
+                            }
+                        }
                     }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: gridColor
-                        },
-                        ticks: {
-                            color: textColor
-                        }
-                    },
                     x: {
                         grid: {
                             display: false
@@ -497,40 +548,167 @@
                         ticks: {
                             color: textColor
                         }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Nombre d\'Étudiants',
+                            color: textColor
+                        },
+                        grid: {
+                            color: gridColor
+                        },
+                        ticks: {
+                            color: textColor
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Taux de Réussite (%)',
+                            color: textColor
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            color: textColor,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    },
+                    y2: {
+                        type: 'linear',
+                        display: false,
+                        position: 'right',
+                        min: 0,
+                        max: 20,
+                        grid: {
+                            drawOnChartArea: false,
+                        }
                     }
                 }
             }
         });
 
-        const distributionCtx = document.getElementById('distributionChart').getContext('2d');
-        const distributionChart = new Chart(distributionCtx, {
+        // ✅ GRAPHIQUE 2 : Performance Académique (adapté éducation)
+        const performanceCtx = document.getElementById('performanceChart').getContext('2d');
+        const performanceChart = new Chart(performanceCtx, {
             type: 'doughnut',
             data: {
-                labels: ['Admis', 'Redoublants', 'Exclus', 'Rattrapage'],
+                labels: ['Admis', 'Rattrapage', 'Redoublants', 'Exclus'],
                 datasets: [{
-                    data: [{{ $etudiantsAdmis }}, {{ $redoublants }}, {{ $exclus }}, {{ $rattrapage }}],
-                    backgroundColor: ['#18b38a', '#f4bd0e', '#e85347', '#09c2de'],
+                    data: [{{ $etudiantsAdmis }}, {{ $rattrapage }}, {{ $redoublants }}, {{ $exclus }}],
+                    backgroundColor: [
+                        '#10b981', // Vert pour admis
+                        '#f59e0b', // Jaune pour rattrapage  
+                        '#f97316', // Orange pour redoublants
+                        '#ef4444'  // Rouge pour exclus
+                    ],
                     borderWidth: 3,
                     borderColor: isDarkMode ? '#111827' : '#ffffff',
-                    hoverBorderWidth: 4
+                    hoverBorderWidth: 4,
+                    hoverOffset: 10
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '60%',
+                cutout: '50%',
                 plugins: {
+                    title: {
+                        display: true,
+                        text: 'Répartition des Résultats Scolaires',
+                        color: textColor,
+                        padding: 20
+                    },
                     legend: {
-                        display: false
+                        position: 'bottom',
+                        labels: {
+                            padding: 15,
+                            usePointStyle: true,
+                            color: textColor,
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    return data.labels.map((label, i) => {
+                                        const value = data.datasets[0].data[i];
+                                        const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                        return {
+                                            text: `${label}: ${value} (${percentage}%)`,
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            pointStyle: 'circle',
+                                            hidden: false,
+                                            index: i
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} étudiants (${percentage}%)`;
+                            }
+                        }
                     }
+                },
+                // Animation d'entrée éducative
+                animation: {
+                    animateRotate: true,
+                    animateScale: true,
+                    duration: 1500,
+                    easing: 'easeOutBounce'
                 }
             }
         });
 
+        // ✅ Mise à jour dynamique des graphiques
         Livewire.on('dashboard-refreshed', () => {
-            evolutionChart.config.type = '{{ $selectedChartType }}';
-            evolutionChart.update();
-            distributionChart.update();
+            tauxReussiteChart.config.type = '{{ $selectedChartType }}';
+            tauxReussiteChart.update('active');
+            performanceChart.update('active');
+        });
+
+        // ✅ Animation au scroll pour les graphiques éducatifs
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.querySelector('canvas').style.opacity = '1';
+                    entry.target.querySelector('canvas').style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.bg-white.dark\\:bg-gray-900').forEach(chart => {
+            if (chart.querySelector('canvas')) {
+                chart.querySelector('canvas').style.opacity = '0';
+                chart.querySelector('canvas').style.transform = 'translateY(20px)';
+                chart.querySelector('canvas').style.transition = 'all 0.6s ease-out';
+                observer.observe(chart);
+            }
         });
     });
 </script>

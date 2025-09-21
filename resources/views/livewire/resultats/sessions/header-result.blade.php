@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between">
         {{-- Fil d'Ariane à gauche --}}
         <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-            <span class="text-gray-900 dark:text-white font-medium">Résultats Finaux des Examens</span>
+            <span class="text-gray-900 dark:text-white font-bold text-xl ">Résultats Finaux des Examens</span>
             @if($selectedNiveau)
                 <em class="ni ni-bold-right text-xs"></em>
                 <span class="text-gray-900 dark:text-white font-medium">
@@ -42,10 +42,10 @@
 </div>
 
 {{-- Filtres principaux en format cards --}}
-<div class="bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 mb-6">
+<div class="">
     
     {{-- Année Universitaire (reste en select) --}}
-    <div class="mb-6">
+    {{-- <div class="mb-6">
         <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
             <em class="ni ni-calendar-grid-58 mr-2"></em>
             Année Universitaire
@@ -58,7 +58,7 @@
                 <option value="{{ $annee->id }}">{{ $annee->libelle }}</option>
             @endforeach
         </select>
-    </div>
+    </div> --}}
 
     {{-- Sélection du niveau --}}
     @if($etape_actuelle === 'niveau')
@@ -221,7 +221,9 @@
                 </svg>
                 
                 {{-- Texte du bouton --}}
-                <span wire:loading.remove wire:target="chargerResultats">Charger les résultats</span>
+                <span wire:loading.remove wire:target="chargerResultats">
+                    <em class="text-xl ni ni-repeat"></em> Charger les résultats
+                </span>
                 <span wire:loading wire:target="chargerResultats">Chargement en cours...</span>
             </button>
             

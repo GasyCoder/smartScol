@@ -2,14 +2,13 @@
 @if(!empty($resultatsSession1) || (!empty($resultatsSession2) && $showSession2))
     <div class="mb-6">
         <div class="grid grid-cols-1 {{ $showSession2 ? 'lg:grid-cols-2' : '' }} gap-6">
-
             {{-- Stats Session 1 --}}
             @if(!empty($resultatsSession1))
-                <div class="p-4 bg-white border border-gray-200 dark:bg-gray-800 rounded-xl dark:border-gray-700">
+                <div class="p-4 bg-white border border-gray-200 dark:bg-gray-800 rounded-xl dark:border-gray-700 mt-4">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center space-x-2">
                             <div class="flex items-center justify-center w-6 h-6 bg-blue-500 rounded-md">
-                                <em class="text-white ni ni-graduation"></em>
+                                <em class="text-white ni ni-check-circle"></em>
                             </div>
                             <h3 class="font-semibold text-gray-900 dark:text-gray-100">Session 1</h3>
                             <span class="text-xs text-gray-500 dark:text-gray-400">(Normale)</span>

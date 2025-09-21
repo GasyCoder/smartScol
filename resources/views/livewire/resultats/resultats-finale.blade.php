@@ -1,6 +1,5 @@
 {{-- Vue principale simplifiée avec includes conservés --}}
-<div class="p-6 bg-white rounded-lg shadow-sm dark:bg-gray-800">
-    
+<div>
     {{-- Header avec filtres (vue partielle) --}}
     @include('livewire.resultats.sessions.header-result')
 

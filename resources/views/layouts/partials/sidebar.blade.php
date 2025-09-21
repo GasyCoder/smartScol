@@ -195,42 +195,35 @@
                         </a>
                     </li>
                     @endcan
-                    @if(auth()->user()->hasAnyRole(['superadmin', 'enseignant']))
-                    <li class="nk-menu-item py-0.5 has-sub group/item {{ is_route('resultats.index.*') ? ' active' : '' }}">
-                        <a href="#" class="nk-menu-link sub nk-menu-toggle flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
-                            <span class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-award"></em>
+                    
+                    @can('resultats.view')
+                        <li class="nk-menu-item {{ request()->routeIs('resultats.finale') ? 'active' : '' }}">
+                            <a href="{{ route('resultats.finale') }}"
+                            class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                    {{ request()->routeIs('resultats.finale') 
+                                            ? 'text-primary-500' 
+                                            : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                                <span class="w-9 flex-shrink-0 text-slate-400">
+                                    <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-award"></em>
+                                </span>
+                                <span class="flex-grow">Résultats finaux</span>
+                            </a>
+                        </li>
+                    @endcan
+                    @if(auth()->user()->hasAnyRole(['superadmin']))
+                    <li class="nk-menu-item {{ request()->routeIs('resultats.releve_note') ? 'active' : '' }}">
+                        <a href="{{ route('resultats.releve_note') }}"
+                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                {{ request()->routeIs('resultats.releve_note') 
+                                        ? 'text-primary-500' 
+                                        : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                            <span class="w-9 flex-shrink-0 text-slate-400">
+                                <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-article"></em>
                             </span>
-                            <span class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
-                                Résulats
-                            </span>
-                            <em class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-base leading-none text-slate-400 group-[.active]/item:text-primary-500 absolute end-5 top-1/2 -translate-y-1/2 rtl:-scale-x-100 group-[.active]/item:rotate-90 group-[.active]/item:rtl:-rotate-90 transition-all duration-300 icon ni ni-chevron-right"></em>
+                            <span class="flex-grow"> Relevé de notes</span>
                         </a>
-                        <ul class="nk-menu-sub mb-1 hidden group-[&.is-compact:not(.has-hover)]/sidebar:!hidden"  {{ is_route('resultats.index.*') ? 'style=display:block' : '' }}>
-                            @can('resultats.view')
-                            <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.finale') ? ' active' : '' }}">
-                                <a href="{{ route('resultats.finale') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
-                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
-                                        <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-list-check"></em>
-                                        Résultats finaux
-                                    </span>
-                                </a>
-                            </li>
-                            @endcan
-                            @endif 
-                            @if(auth()->user()->hasAnyRole(['superadmin']))
-                             <li class="nk-menu-item py-px sub has-sub group/sub1 {{ is_route('resultats.releve_note') ? ' active' : '' }}">
-                                <a href="{{ route('resultats.releve_note') }}" class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
-                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
-                                        <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-article"></em>
-                                        Relevé de notes
-                                    </span>
-                                </a>
-                            </li>
-                            @endif
-                        </ul>
                     </li>
-
+                    @endif
                     <!-- PARAMÈTRAGES - Réservé SUPERADMIN uniquement -->
                     @if(auth()->user()->hasRole('superadmin'))
                     <li
@@ -243,7 +236,7 @@
                             </span>
                         </h6>
                     </li>
-                   <li class="nk-menu-item py-0.5 has-sub group/item {{ is_route('setting.index.*') ? ' active' : '' }}">
+                    <li class="nk-menu-item py-0.5 has-sub group/item {{ is_route('setting.index.*') ? ' active' : '' }}">
                         <a href="#" class="nk-menu-link sub nk-menu-toggle flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
                             <span class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
                                 <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-setting-alt"></em>
@@ -290,7 +283,6 @@
                     </li>
                     @endif
                 </ul>
-
             </div>
         </div>
     </div>

@@ -107,48 +107,50 @@
         @endif
 
         {{-- Onglet Paramètres/Délibération --}}
-        @if(!empty($resultatsSession1) || !empty($resultatsSession2))
-            <button wire:click="setActiveTab('simulation')"
-                    wire:loading.attr="disabled"
-                    wire:target="setActiveTab('simulation')"
-                    class="group relative flex items-center px-8 py-4 text-sm font-semibold rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none {{ $activeTab === 'simulation' ? 'bg-purple-600 text-white shadow-xl shadow-purple-500/30 ring-2 ring-purple-300 dark:ring-purple-500' : 'text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30' }}">
+        @if(auth()->user()->hasRole('superadmin'))
+            @if(!empty($resultatsSession1) || !empty($resultatsSession2))
+                <button wire:click="setActiveTab('simulation')"
+                        wire:loading.attr="disabled"
+                        wire:target="setActiveTab('simulation')"
+                        class="group relative flex items-center px-8 py-4 text-sm font-semibold rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none {{ $activeTab === 'simulation' ? 'bg-purple-600 text-white shadow-xl shadow-purple-500/30 ring-2 ring-purple-300 dark:ring-purple-500' : 'text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30' }}">
 
-                <div class="relative flex items-center space-x-3">
-                    {{-- Container icône --}}
-                    <div class="relative">
-                        {{-- Icône normale --}}
-                        <div class="flex items-center justify-center w-8 h-8 rounded-lg {{ $activeTab === 'simulation' ? 'bg-white/20' : 'bg-purple-100 dark:bg-purple-900/50 group-hover:bg-purple-200 dark:group-hover:bg-purple-800/70' }} transition-all duration-300"
-                            wire:loading.remove wire:target="setActiveTab('simulation')">
-                            <em class="text-lg ni ni-setting {{ $activeTab === 'simulation' ? 'text-white' : 'text-purple-600 dark:text-purple-400' }}"></em>
+                    <div class="relative flex items-center space-x-3">
+                        {{-- Container icône --}}
+                        <div class="relative">
+                            {{-- Icône normale --}}
+                            <div class="flex items-center justify-center w-8 h-8 rounded-lg {{ $activeTab === 'simulation' ? 'bg-white/20' : 'bg-purple-100 dark:bg-purple-900/50 group-hover:bg-purple-200 dark:group-hover:bg-purple-800/70' }} transition-all duration-300"
+                                wire:loading.remove wire:target="setActiveTab('simulation')">
+                                <em class="text-lg ni ni-setting {{ $activeTab === 'simulation' ? 'text-white' : 'text-purple-600 dark:text-purple-400' }}"></em>
+                            </div>
+                            
+                            {{-- Spinner de chargement --}}
+                            <div class="flex items-center justify-center w-8 h-8 rounded-lg {{ $activeTab === 'simulation' ? 'bg-white/20' : 'bg-purple-100 dark:bg-purple-900/50' }}"
+                                wire:loading wire:target="setActiveTab('simulation')">
+                                <svg class="animate-spin h-5 w-5 {{ $activeTab === 'simulation' ? 'text-white' : 'text-purple-600 dark:text-purple-400' }}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </div>
                         </div>
-                        
-                        {{-- Spinner de chargement --}}
-                        <div class="flex items-center justify-center w-8 h-8 rounded-lg {{ $activeTab === 'simulation' ? 'bg-white/20' : 'bg-purple-100 dark:bg-purple-900/50' }}"
-                            wire:loading wire:target="setActiveTab('simulation')">
-                            <svg class="animate-spin h-5 w-5 {{ $activeTab === 'simulation' ? 'text-white' : 'text-purple-600 dark:text-purple-400' }}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
+
+                        <div class="flex flex-col items-start">
+                            <span class="font-bold text-base">Paramètres</span>
+                            <span class="text-xs opacity-80 font-medium">Délibération</span>
                         </div>
-                    </div>
 
-                    <div class="flex flex-col items-start">
-                        <span class="font-bold text-base">Paramètres</span>
-                        <span class="text-xs opacity-80 font-medium">Délibération</span>
+                        {{-- Badge sessions disponibles --}}
+                        <span class="px-3 py-1.5 text-xs font-bold {{ $activeTab === 'simulation' ? 'bg-white/25 text-white border border-white/30' : 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700' }} rounded-full">
+                            @if(!empty($resultatsSession1) && !empty($resultatsSession2))
+                                S1+S2
+                            @elseif(!empty($resultatsSession1))
+                                S1
+                            @else
+                                S2
+                            @endif
+                        </span>
                     </div>
-
-                    {{-- Badge sessions disponibles --}}
-                    <span class="px-3 py-1.5 text-xs font-bold {{ $activeTab === 'simulation' ? 'bg-white/25 text-white border border-white/30' : 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700' }} rounded-full">
-                        @if(!empty($resultatsSession1) && !empty($resultatsSession2))
-                            S1+S2
-                        @elseif(!empty($resultatsSession1))
-                            S1
-                        @else
-                            S2
-                        @endif
-                    </span>
-                </div>
-            </button>
+                </button>
+            @endif
         @endif
     </div>
     

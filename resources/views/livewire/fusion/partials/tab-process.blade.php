@@ -228,16 +228,17 @@
                             Validez les résultats après vérification.
                         @endif
                     </p>
-
-                    @if($statut === 'fusion' && $etapeFusion >= 3)
-                        <div class="mt-3">
-                            <button wire:click="confirmValidation"
-                                    wire:loading.attr="disabled"
-                                    class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 transition-colors disabled:opacity-50">
-                                ✅ Valider les résultats
-                                <span wire:loading wire:target="confirmValidation" class="ml-2 animate-spin">⟳</span>
-                            </button>
-                        </div>
+                   @if(auth()->user()->hasAnyRole(['superadmin']))  
+                        @if($statut === 'fusion' && $etapeFusion >= 3)
+                            <div class="mt-3">
+                                <button wire:click="confirmValidation"
+                                        wire:loading.attr="disabled"
+                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 transition-colors disabled:opacity-50">
+                                    ✅ Valider les résultats
+                                    <span wire:loading wire:target="confirmValidation" class="ml-2 animate-spin">⟳</span>
+                                </button>
+                            </div>
+                        @endif
                     @endif
 
                     @if($statut === 'fusion' && $etapeFusion >= 1 && $etapeFusion <= 2)
@@ -251,6 +252,7 @@
                 </div>
             </div>
         </div>
+        
 
         {{-- 4. Publication --}}
         <div class="p-4 border rounded-lg {{ $statut === 'publie' ? 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800' : ($statut === 'annule' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700') }}">
@@ -308,11 +310,13 @@
                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 transition-colors">
                                 👁️ Voir résultats
                             </a>
+                           @if(auth()->user()->hasAnyRole(['superadmin']))
                             <button wire:click="$set('confirmingAnnulation', true)"
                                     wire:loading.attr="disabled"
                                     class="inline-flex items-center px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors disabled:opacity-50">
                                 ❌ Annuler
                             </button>
+                            @endif
                         </div>
                     @endif
 

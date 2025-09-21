@@ -12,6 +12,7 @@ use App\Models\Deliberation;
 use App\Models\ResultatFinal;
 use App\Models\ResultatFusion;
 use App\Config\ReglesDeliberation;
+use App\Models\AnneeUniversitaire;
 use App\Models\DeliberationConfig;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -508,6 +509,16 @@ class CalculAcademiqueService
             ];
 
             $resultat->update($updateData);
+
+            // Log pour traçabilité
+            Log::info('📝 Résultat mis à jour pour délibération', [
+                'resultat_id' => $resultat->id,
+                'etudiant_id' => $etudiantId,
+                'examen_id' => $examenId,
+                'ancienne_decision' => $ancienneDecision,
+                'nouvelle_decision' => $nouvelleDecision,
+                'jury_validated' => $resultat->jury_validated
+            ]);
 
             // Ajouter à l'historique JSON
             $statusHistory = $resultat->status_history ?? [];
@@ -1256,6 +1267,87 @@ class CalculAcademiqueService
             ]);
 
             throw new \Exception('Erreur lors de la récupération des étudiants éligibles: ' . $e->getMessage());
+        }
+    }
+
+
+    public function corrigerToutesLesDecisions()
+    {
+        try {
+            DB::beginTransaction();
+            
+            $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+            if (!$anneeActive) {
+                return ['success' => false, 'message' => 'Aucune année active'];
+            }
+
+            $sessions = SessionExam::where('annee_universitaire_id', $anneeActive->id)->get();
+            $stats = ['admis' => 0, 'rattrapage' => 0, 'redoublant' => 0, 'exclus' => 0, 'corriges' => 0];
+
+            foreach ($sessions as $session) {
+                Log::info("🔧 Correction session: {$session->type} (ID: {$session->id})");
+                
+                $etudiantsIds = ResultatFinal::where('session_exam_id', $session->id)
+                    ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                    ->distinct('etudiant_id')
+                    ->pluck('etudiant_id');
+
+                foreach ($etudiantsIds as $etudiantId) {
+                    try {
+                        $etudiant = Etudiant::find($etudiantId);
+                        if (!$etudiant) continue;
+
+                        $resultats = $this->calculerResultatsComplets(
+                            $etudiantId, 
+                            $session->id, 
+                            true, 
+                            $etudiant->niveau_id, 
+                            $etudiant->parcours_id
+                        );
+                        
+                        $nouvelleDecision = $resultats['decision']['code'];
+                        
+                        $ancienneDecision = ResultatFinal::where('session_exam_id', $session->id)
+                            ->where('etudiant_id', $etudiantId)
+                            ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                            ->first()?->decision;
+
+                        if ($ancienneDecision !== $nouvelleDecision) {
+                            $updated = ResultatFinal::where('session_exam_id', $session->id)
+                                ->where('etudiant_id', $etudiantId)
+                                ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                                ->update([
+                                    'decision' => $nouvelleDecision,
+                                    'modifie_par' => Auth::id() ?? 1,
+                                    'updated_at' => now()
+                                ]);
+                            
+                            if ($updated > 0) {
+                                $stats['corriges']++;
+                                Log::info("✅ Étudiant {$etudiantId}: {$ancienneDecision} → {$nouvelleDecision}");
+                            }
+                        }
+
+                        $stats[$nouvelleDecision]++;
+
+                    } catch (\Exception $e) {
+                        Log::error("❌ Erreur recalcul étudiant {$etudiantId}: " . $e->getMessage());
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'statistiques' => $stats,
+                'message' => "Correction terminée ! {$stats['corriges']} étudiants corrigés."
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('❌ Erreur correction globale: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 }
