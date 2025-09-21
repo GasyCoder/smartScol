@@ -235,14 +235,16 @@
                                             @if($sessionActive && $sessionActive->type === 'Rattrapage')
                                                 @if(isset($rapport['type_fusion']) && $rapport['type_fusion'] === 'recuperation_auto')
                                                     {{-- Pour récupération auto, afficher le nombre de notes récupérées --}}
-                                                    {{ $rapport['notes_recuperees_auto'] ?? $rapport['etudiants_presents'] ?? 0 }}
+                                                    {{ $rapport['notes_recuperees_auto'] ?? $rapport['total_etudiants'] ?? 0 }}
                                                 @else
-                                                    {{-- Pour fusion normale --}}
-                                                    {{ $rapport['etudiants_presents'] ?? 0 }}
+                                                    {{-- Pour fusion normale avec rattrapage --}}
+                                                    {{ $rapport['total_etudiants'] ?? $rapport['etudiants_presents'] ?? 0 }}
                                                 @endif
                                             @else
-                                                {{ $rapport['etudiants_presents'] ?? 0 }}
+                                                {{-- Session normale : toujours afficher etudiants_presents --}}
+                                                {{ $rapport['etudiants_presents'] ?? $rapport['total_etudiants'] ?? 0 }}
                                             @endif
+                                            
                                         </td>
 
                                         <td class="px-4 py-2 text-center">

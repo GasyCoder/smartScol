@@ -3,6 +3,7 @@
 namespace App\Livewire\Resultats;
 
 use App\Models\UE;
+use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;
@@ -20,24 +21,63 @@ use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\AdmisDeliberationPDF;
 use App\Models\ResultatFinalHistorique;
+use Illuminate\Support\Facades\Storage;
 use App\Exports\AdmisDeliberationExport;
 use App\Services\CalculAcademiqueService;
+use App\Services\DeliberationApplicationService;
 
-/**
- * Component Livewire pour la gestion des résultats finaux avec délibération
- *
- * @property \Illuminate\Support\Collection $niveaux
- * @property \Illuminate\Support\Collection $parcours
- * @property \Illuminate\Support\Collection $anneesUniversitaires
- */
 class ResultatsFinale extends Component
 {
-    /**
-     * ✅ PROPRIÉTÉS POUR L'EXPORT AVEC CONFIGURATION
-     */
+    // PROPRIÉTÉS D'ÉTAT
+    public $etape_actuelle = 'niveau';
+    public $dois_afficher_resultats = false;
+    public $peut_charger_resultats = false;
+    public $nom_niveau_selectionne;
+    public $nom_parcours_selectionne = 'Tous les parcours';
+    public $nom_annee_selectionnee;
+    public $showConfirmationModal = false; 
+
+    // PROPRIÉTÉS FILTRES
+    public $selectedNiveau;
+    public $selectedParcours;
+    public $selectedAnneeUniversitaire;
+    public $niveaux;
+    public $parcours;
+    public $anneesUniversitaires;
+    public $simulationResults = [];
+
+    // PROPRIÉTÉS SESSIONS
+    public $sessionNormale;
+    public $sessionRattrapage;
+    public $showSession2 = false;
+    public $activeTab = 'session1';
+
+    // PROPRIÉTÉS RÉSULTATS
+    public $resultatsSession1 = [];
+    public $resultatsSession2 = [];
+    public $statistiquesSession1 = [];
+    public $statistiquesSession2 = [];
+    public $uesStructure = [];
+
+    // PROPRIÉTÉS DÉLIBÉRATION
+    public $deliberationParams = [
+        'session_type' => 'session1',
+        'session_id' => null,
+        'credits_admission_s1' => 60,
+        'credits_admission_s2' => 40,
+        'credits_redoublement_s2' => 20,
+        'note_eliminatoire_bloque_s1' => true,
+        'note_eliminatoire_exclusion_s2' => true
+    ];
+    public $showDeliberationModal = false;
+    public $deliberationStatus = [];
+    public $simulationDeliberation = [];
+    public $simulationParams = [];
+
+    // PROPRIÉTÉS EXPORT
     public $showExportModal = false;
-    public $exportType = 'pdf'; // 'pdf' ou 'excel'
-    public $exportData = 'simulation'; // 'simulation' ou 'deliberation'
+    public $exportType = 'pdf';
+    public $exportData = 'simulation';
     public $exportConfig = [
         'colonnes' => [
             'rang' => true,
@@ -49,279 +89,88 @@ class ResultatsFinale extends Component
             'niveau' => false,
         ],
         'filtres' => [
-            'decision_filter' => 'tous', // 'tous', 'admis', 'rattrapage', 'redoublant', 'exclus'
+            'decision_filter' => 'tous',
             'moyenne_min' => null,
             'moyenne_max' => null,
         ],
         'tri' => [
-            'champ' => 'moyenne_generale', // 'rang', 'nom', 'moyenne_generale', 'credits_valides'
-            'ordre' => 'desc' // 'asc' ou 'desc'
+            'champ' => 'moyenne_generale',
+            'ordre' => 'desc'
         ]
     ];
 
-    // ✅ PROPRIÉTÉS FILTRES
-    public $selectedNiveau;
-    public $selectedParcours;
-    public $selectedAnneeUniversitaire;
-    // ✅ PROPRIÉTÉS OPTIONS DISPONIBLES
-    public $niveaux = [];
-    public $parcours = [];
-    public $anneesUniversitaires = [];
+    protected $calculAcademiqueService;
+    protected $queryString = ['selectedNiveau', 'selectedParcours', 'selectedAnneeUniversitaire'];
+    protected $deliberationApplicationService;
 
-    // ✅ PROPRIÉTÉS DÉLIBÉRATION
-    public $deliberationParams = [
-        'credits_admission_s1' => 60,
-        'credits_admission_s2' => 40,
-        'credits_redoublement_s2' => 20,
-        'note_eliminatoire_bloque_s1' => true,
-        'note_eliminatoire_exclusion_s2' => true
-    ];
-
-    public $showDeliberationModal = false;
-    public $deliberationStatus = [];
-    public $simulationDeliberation = [];
-
-    // ✅ PROPRIÉTÉS ONGLETS
-    public $activeTab = 'session1';
-
-    // ✅ PROPRIÉTÉS SESSIONS
-    public $sessionNormale;
-    public $sessionRattrapage;
-    public $showSession2 = false;
-
-    // ✅ PROPRIÉTÉS SIMULATION
-    public $simulationParams = [];
-    public $simulationResults = [];
-
-    // ✅ PROPRIÉTÉS RÉSULTATS
-    public $resultatsSession1 = [];
-    public $resultatsSession2 = [];
-    public $statistiquesSession1 = [];
-    public $statistiquesSession2 = [];
-    public $uesStructure = [];
-
-    // ✅ VALIDATION
     protected $rules = [
         'selectedNiveau' => 'required|exists:niveaux,id',
         'selectedAnneeUniversitaire' => 'required|exists:annees_universitaires,id',
     ];
 
-    protected $messages = [
-        'selectedNiveau.required' => 'Veuillez sélectionner un niveau.',
-        'selectedAnneeUniversitaire.required' => 'Veuillez sélectionner une année universitaire.',
-    ];
-    protected $calculAcademiqueService;
-
-
-    // ✅ INITIALISATION
     public function mount()
     {
-        // ✅ Initialiser le service de calcul académique
         $this->calculAcademiqueService = new CalculAcademiqueService();
-        // ✅ Initialiser avec les dernières valeurs de délibération
-        $this->initialiserParametresDeliberation();
+        $this->deliberationApplicationService = new DeliberationApplicationService($this->calculAcademiqueService);
+        
+        // Initialiser les collections
+        $this->niveaux = collect();
+        $this->parcours = collect();
+        $this->anneesUniversitaires = collect();
+        $this->uesStructure = collect();
+        
+        // ✅ AJOUT : Sauvegarder les valeurs avant setDefaultValues
+        $savedNiveau = $this->selectedNiveau;
+        $savedParcours = $this->selectedParcours;
+        
+        // Initialiser les noms affichés
+        $this->nom_niveau_selectionne = null;
+        $this->nom_parcours_selectionne = null;
+        $this->nom_annee_selectionnee = null;
+        
         $this->initializeData();
         $this->setDefaultValues();
-        $this->loadResultats();
+        
+        // ✅ AJOUT : Restaurer les valeurs après setDefaultValues
+        if ($savedNiveau) {
+            $this->selectedNiveau = $savedNiveau;
+            
+            // Charger les parcours pour ce niveau
+            if ($savedNiveau) {
+                try {
+                    $niveau = Niveau::find($savedNiveau);
+                    if ($niveau?->has_parcours) {
+                        $this->parcours = Parcour::where('niveau_id', $savedNiveau)
+                            ->where('is_active', true)
+                            ->orderBy('id', 'asc')
+                            ->get();
+                            
+                        // Restaurer le parcours s'il existe
+                        if ($savedParcours && $this->parcours->where('id', $savedParcours)->isNotEmpty()) {
+                            $this->selectedParcours = $savedParcours;
+                        }
+                    }
+                    $this->loadUEStructure();
+                } catch (\Exception $e) {
+                    Log::error('Erreur restauration niveau/parcours: ' . $e->getMessage());
+                }
+            }
+        }
+        
+        $this->updateNomsAffiches();
+        $this->updateEtapeActuelle();
+        $this->updatePeutChargerResultats();
     }
 
 
-    /**
-     * ✅ MÉTHODE : Ouvrir le modal d'export avec configuration
-     */
-    public function ouvrirModalExport($type = 'pdf', $source = 'simulation')
-    {
-        // Vérifier qu'on a des données à exporter
-        $donnees = $this->getDonneesExport($source);
-
-        if (empty($donnees)) {
-            toastr()->error("Aucune donnée disponible pour l'export. Veuillez d'abord effectuer une simulation ou délibération.");
-            return;
-        }
-
-        $this->exportType = $type;
-        $this->exportData = $source;
-        $this->showExportModal = true;
-
-        // Reset des filtres
-        $this->exportConfig['filtres'] = [
-            'decision_filter' => 'tous',
-            'moyenne_min' => null,
-            'moyenne_max' => null,
-        ];
-
-        toastr()->info("Configuration de l'export {$type} - " . ucfirst($source));
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Obtenir les données pour l'export selon la source
-     */
-    private function getDonneesExport($source)
-    {
-        switch ($source) {
-            case 'simulation':
-                return $this->simulationDeliberation['resultats_detailles'] ?? [];
-
-            case 'deliberation':
-                // Prendre les résultats de la session active
-                $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
-                return $this->formatResultatsForExport($resultats);
-
-            default:
-                return [];
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Formater les résultats pour l'export
-     */
-    private function formatResultatsForExport($resultats)
-    {
-        $formatted = [];
-        $rang = 1;
-
-        foreach ($resultats as $resultat) {
-            $etudiant = $resultat['etudiant'];
-
-            $formatted[] = [
-                'rang' => $rang,
-                'etudiant_id' => $etudiant->id,
-                'etudiant' => $etudiant,
-                'nom' => $etudiant->nom,
-                'prenom' => $etudiant->prenom,
-                'matricule' => $etudiant->matricule,
-                'nom_complet' => $etudiant->nom . ' ' . $etudiant->prenom,
-                'moyenne_generale' => $resultat['moyenne_generale'] ?? 0,
-                'credits_valides' => $resultat['credits_valides'] ?? 0,
-                'total_credits' => $resultat['total_credits'] ?? 60,
-                'has_note_eliminatoire' => $resultat['has_note_eliminatoire'] ?? false,
-                'decision_actuelle' => $resultat['decision'] ?? 'non_definie',
-                'decision_simulee' => $resultat['decision'] ?? 'non_definie',
-                'changement' => false
-            ];
-            $rang++;
-        }
-
-        return $formatted;
-    }
-
-    /**
-     * ✅ MÉTHODE : Fermer le modal d'export
-     */
-    public function fermerModalExport()
-    {
-        $this->showExportModal = false;
-        $this->resetErrorBag(['export']);
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Appliquer les filtres et tri aux données d'export
-     */
-    private function appliquerFiltresExport($donnees)
-    {
-        $donneesCollection = collect($donnees);
-
-        // Appliquer le filtre par décision
-        if ($this->exportConfig['filtres']['decision_filter'] !== 'tous') {
-            $decisionFiltre = $this->exportConfig['filtres']['decision_filter'];
-            $champ = $this->exportData === 'simulation' ? 'decision_simulee' : 'decision_actuelle';
-            $donneesCollection = $donneesCollection->where($champ, $decisionFiltre);
-        }
-
-        // Appliquer le filtre par moyenne
-        if (!empty($this->exportConfig['filtres']['moyenne_min'])) {
-            $donneesCollection = $donneesCollection->where('moyenne_generale', '>=', $this->exportConfig['filtres']['moyenne_min']);
-        }
-
-        if (!empty($this->exportConfig['filtres']['moyenne_max'])) {
-            $donneesCollection = $donneesCollection->where('moyenne_generale', '<=', $this->exportConfig['filtres']['moyenne_max']);
-        }
-
-        // Appliquer le tri
-        $champ = $this->exportConfig['tri']['champ'];
-        $ordre = $this->exportConfig['tri']['ordre'];
-
-        if ($ordre === 'asc') {
-            $donneesCollection = $donneesCollection->sortBy($champ);
-        } else {
-            $donneesCollection = $donneesCollection->sortByDesc($champ);
-        }
-
-        // Recalculer les rangs après tri/filtrage
-        $donneesFinales = [];
-        $rang = 1;
-        foreach ($donneesCollection->values() as $item) {
-            $item['rang'] = $rang;
-            $donneesFinales[] = $item;
-            $rang++;
-        }
-
-        return $donneesFinales;
-    }
-
-
-
-    /**
-     * ✅ MÉTHODE : Générer l'Excel avec configuration
-     */
-    private function genererExcelAvecConfig($donnees, $session, $niveau, $parcours, $anneeUniv)
-    {
-        try {
-            $filename = $this->genererNomFichier('xlsx', $session, $niveau, $parcours, $anneeUniv);
-
-            $this->showExportModal = false;
-            toastr()->success("Export Excel généré avec succès ! (" . count($donnees) . " résultats)");
-
-            return Excel::download(
-                new AdmisDeliberationExport(
-                    $donnees,
-                    $session,
-                    $niveau,
-                    $parcours,
-                    $this->exportConfig['colonnes']
-                ),
-                $filename
-            );
-
-        } catch (\Exception $e) {
-            Log::error('Erreur génération Excel avec config', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Générer le nom de fichier pour l'export
-     */
-    private function genererNomFichier($extension, $session, $niveau, $parcours, $anneeUniv)
-    {
-        $sessionType = $session->type === 'Normale' ? 'Session1' : 'Session2';
-        $niveauNom = str_replace(' ', '_', $niveau->nom);
-        $parcoursNom = $parcours ? '_' . str_replace(' ', '_', $parcours->nom) : '';
-        $anneeNom = str_replace(['/', ' '], ['_', '_'], $anneeUniv->libelle);
-        $source = ucfirst($this->exportData);
-        $date = now()->format('Ymd_His');
-
-        // Ajouter info sur les filtres si appliqués
-        $filtreSuffix = '';
-        if ($this->exportConfig['filtres']['decision_filter'] !== 'tous') {
-            $filtreSuffix .= '_' . ucfirst($this->exportConfig['filtres']['decision_filter']);
-        }
-
-        return "{$source}_{$sessionType}_{$niveauNom}{$parcoursNom}_{$anneeNom}{$filtreSuffix}_{$date}.{$extension}";
-    }
-
+    
     public function initializeData()
     {
         try {
             $this->anneesUniversitaires = AnneeUniversitaire::orderBy('date_start', 'desc')->get();
             $this->niveaux = Niveau::where('is_active', true)->orderBy('id', 'asc')->get();
-
         } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'initialisation des données: ' . $e->getMessage());
+            Log::error('Erreur initialisation données: ' . $e->getMessage());
             $this->anneesUniversitaires = collect();
             $this->niveaux = collect();
         }
@@ -332,128 +181,357 @@ class ResultatsFinale extends Component
         try {
             $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
             $this->selectedAnneeUniversitaire = $anneeActive?->id;
-
-            if ($this->niveaux->isNotEmpty()) {
-                $this->selectedNiveau = $this->niveaux->first()->id;
-                $this->updatedSelectedNiveau();
+            
+            // Mettre à jour le nom de l'année sélectionnée
+            if ($anneeActive) {
+                $this->nom_annee_selectionnee = $anneeActive->libelle;
             }
-
+            
             $this->loadSessions();
             $this->initializeSimulationParams();
-
         } catch (\Exception $e) {
-            Log::error('Erreur lors de la définition des valeurs par défaut: ' . $e->getMessage());
+            Log::error('Erreur valeurs par défaut: ' . $e->getMessage());
         }
     }
-
-
-
-
-
-    /**
-     * ✅ MÉTHODE : Exporter rapidement les admis (raccourci)
-     */
-    public function exporterAdmisRapide($type = 'pdf')
+    
+    private function updateNomsAffiches()
     {
-        try {
-            // Configuration par défaut pour les admis
-            $this->exportConfig['filtres']['decision_filter'] = 'admis';
-            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
-            $this->exportConfig['tri']['ordre'] = 'desc';
-
-            $this->exportType = $type;
-            $this->exportData = !empty($this->simulationDeliberation) ? 'simulation' : 'deliberation';
-
-            return $this->genererExportAvecConfig();
-
-        } catch (\Exception $e) {
-            Log::error('Erreur export admis rapide', ['error' => $e->getMessage()]);
-            toastr()->error('Erreur lors de l\'export rapide des admis : ' . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Reset configuration export
-     */
-    public function resetConfigExport()
-    {
-        $this->exportConfig = [
-            'colonnes' => [
-                'rang' => true,
-                'nom_complet' => true,
-                'matricule' => true,
-                'moyenne' => true,
-                'credits' => true,
-                'decision' => true,
-                'niveau' => false,
-            ],
-            'filtres' => [
-                'decision_filter' => 'tous',
-                'moyenne_min' => null,
-                'moyenne_max' => null,
-            ],
-            'tri' => [
-                'champ' => 'moyenne_generale',
-                'ordre' => 'desc'
-            ]
-        ];
-
-        toastr()->info('Configuration d\'export réinitialisée');
-    }
-
-    private function initializeSimulationParams()
-    {
-        $this->simulationParams = [
-            'session_type' => 'session1',
-            'credits_admission_session1' => 60,
-            'appliquer_note_eliminatoire_s1' => true,
-            'credits_admission_session2' => 40,
-            'credits_redoublement_session2' => 20,
-            'appliquer_note_eliminatoire_s2' => true,
-        ];
-
-        // ✅ NOUVEAU : Initialiser aussi deliberationParams avec pourcentages
-        $this->deliberationParams = [
-            'session_type' => 'session1',
-            'session_id' => null,
-            'credits_admission_s1' => 60,
-            'credits_admission_s2' => 40,
-            'credits_redoublement_s2' => 20,
-            'note_eliminatoire_bloque_s1' => true,
-            'note_eliminatoire_exclusion_s2' => true
-        ];
+        // Niveau
+        $this->nom_niveau_selectionne = $this->selectedNiveau ? 
+            $this->niveaux->where('id', $this->selectedNiveau)->first()?->nom : null;
         
-        // ✅ NOUVEAU : Initialiser avec pourcentages
-        $this->initialiserParametresAvecPourcentages();
+        // Parcours - avec vérification que la collection parcours est chargée
+        if ($this->selectedParcours) {
+            // Si la collection parcours est vide, la recharger
+            if ($this->parcours->isEmpty() && $this->selectedNiveau) {
+                try {
+                    $niveau = Niveau::find($this->selectedNiveau);
+                    if ($niveau?->has_parcours) {
+                        $this->parcours = Parcour::where('niveau_id', $this->selectedNiveau)
+                            ->where('is_active', true)
+                            ->orderBy('id', 'asc')
+                            ->get();
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Erreur rechargement parcours dans updateNomsAffiches: ' . $e->getMessage());
+                }
+            }
+            
+            $parcoursFound = $this->parcours->where('id', $this->selectedParcours)->first();
+            $this->nom_parcours_selectionne = $parcoursFound?->nom ?: 'Parcours introuvable';
+        } else {
+            $this->nom_parcours_selectionne = 'Tous les parcours';
+        }
+        
+        // Année
+        $this->nom_annee_selectionnee = $this->selectedAnneeUniversitaire ? 
+            $this->anneesUniversitaires->where('id', $this->selectedAnneeUniversitaire)->first()?->libelle : null;
     }
 
-    // ✅ MÉTHODES DE CHARGEMENT DES DONNÉES
+    public function selectNiveau($niveauId = null)
+    {
+        $ancienNiveau = $this->selectedNiveau;
+        $this->selectedNiveau = $niveauId;
+        
+        // ✅ MODIFICATION : Reset parcours seulement si changement de niveau
+        if ($ancienNiveau !== $niveauId) {
+            $this->selectedParcours = null;
+            $this->resetResults();
+        }
+        
+        if ($niveauId) {
+            try {
+                $niveau = Niveau::find($niveauId);
+                if ($niveau?->has_parcours) {
+                    $this->parcours = Parcour::where('niveau_id', $niveauId)
+                        ->where('is_active', true)
+                        ->orderBy('id', 'asc')
+                        ->get();
+                } else {
+                    $this->parcours = collect();
+                    $this->selectedParcours = null;
+                }
+                $this->loadUEStructure();
+            } catch (\Exception $e) {
+                Log::error('Erreur sélection niveau: ' . $e->getMessage());
+                $this->parcours = collect();
+            }
+        } else {
+            $this->parcours = collect();
+        }
+        
+        $this->updateNomsAffiches();
+        $this->updateEtapeActuelle();
+        $this->updatePeutChargerResultats();
+    }
+
+    public function selectParcours($parcoursId = null)
+    {
+        
+        $this->selectedParcours = $parcoursId;
+        $this->resetResults();
+        
+        $this->updateNomsAffiches();
+        $this->updateEtapeActuelle();
+        $this->updatePeutChargerResultats();
+    }
+
+    public function chargerResultats()
+    {
+        if (!$this->peut_charger_resultats) {
+            toastr()->error('Configuration incomplète pour charger les résultats.');
+            return;
+        }
+        
+        try {
+            $this->loadSessions();
+            $this->checkSession2Availability();
+            $this->loadResultats();
+            $this->updateEtapeActuelle();
+            
+            $totalSession1 = count($this->resultatsSession1);
+            $totalSession2 = count($this->resultatsSession2);
+            
+            $message = "Résultats chargés ! Session 1: {$totalSession1} étudiants";
+            if ($totalSession2 > 0) {
+                $message .= ", Session 2: {$totalSession2} étudiants";
+            }
+            
+            toastr()->success($message);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur chargement résultats: ' . $e->getMessage());
+            toastr()->error('Erreur lors du chargement des résultats: ' . $e->getMessage());
+        }
+    }
+
+    private function updateEtapeActuelle()
+    {
+        if (!$this->selectedNiveau) {
+            $this->etape_actuelle = 'niveau';
+        } elseif ($this->parcours->isNotEmpty() && $this->selectedParcours === null) {
+            $this->etape_actuelle = 'parcours';
+        } elseif (!empty($this->resultatsSession1) || !empty($this->resultatsSession2)) {
+            $this->etape_actuelle = 'resultats';
+            $this->dois_afficher_resultats = true;
+        } else {
+            $this->etape_actuelle = 'pret_charger';
+            $this->dois_afficher_resultats = false;
+        }
+    }
+
+    private function updatePeutChargerResultats()
+    {
+        $this->peut_charger_resultats = $this->selectedNiveau && 
+            $this->selectedAnneeUniversitaire && 
+            ($this->parcours->isEmpty() || $this->selectedParcours !== null);
+    }
+
+    private function resetResults()
+    {
+        $this->resultatsSession1 = [];
+        $this->resultatsSession2 = [];
+        $this->statistiquesSession1 = [];
+        $this->statistiquesSession2 = [];
+        $this->simulationDeliberation = [];
+        $this->sessionNormale = null;
+        $this->sessionRattrapage = null;
+        $this->showSession2 = false;
+        $this->dois_afficher_resultats = false;
+    }
+
     private function loadSessions()
     {
         if (!$this->selectedAnneeUniversitaire) {
-            $this->sessionNormale = null;
-            $this->sessionRattrapage = null;
-            $this->showSession2 = false;
             return;
         }
 
         try {
             $this->sessionNormale = SessionExam::where('annee_universitaire_id', $this->selectedAnneeUniversitaire)
-                ->where('type', 'Normale')
-                ->first();
+                ->where('type', 'Normale')->first();
 
             $this->sessionRattrapage = SessionExam::where('annee_universitaire_id', $this->selectedAnneeUniversitaire)
-                ->where('type', 'Rattrapage')
-                ->first();
+                ->where('type', 'Rattrapage')->first();
 
             $this->checkSession2Availability();
+        } catch (\Exception $e) {
+            Log::error('Erreur chargement sessions: ' . $e->getMessage());
+        }
+    }
+
+    private function checkSession2Availability()
+    {
+        if (!$this->selectedNiveau || !$this->sessionRattrapage) {
+            $this->showSession2 = false;
+            return;
+        }
+
+        try {
+            $this->showSession2 = ResultatFinal::where('session_exam_id', $this->sessionRattrapage->id)
+                ->whereHas('examen', function($q) {
+                    $q->where('niveau_id', $this->selectedNiveau);
+                    if ($this->selectedParcours) {
+                        $q->where('parcours_id', $this->selectedParcours);
+                    }
+                })
+                ->where('statut', ResultatFinal::STATUT_PUBLIE)
+                ->exists();
+        } catch (\Exception $e) {
+            Log::error('Erreur vérification session 2: ' . $e->getMessage());
+            $this->showSession2 = false;
+        }
+    }
+
+    public function loadResultats()
+    {
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            return;
+        }
+
+        try {
+            $this->resultatsSession1 = $this->loadResultatsForSession($this->sessionNormale);
+            
+            if ($this->showSession2 && $this->sessionRattrapage) {
+                $this->resultatsSession2 = $this->loadResultatsForSession($this->sessionRattrapage);
+            }
+
+            $this->calculateStatistics();
+            $this->updateEtapeActuelle();
+        } catch (\Exception $e) {
+            Log::error('Erreur chargement résultats: ' . $e->getMessage());
+        }
+    }
+
+    private function loadResultatsForSession($session)
+    {
+        if (!$session) return [];
+
+        try {
+            // S'assurer que le service est initialisé
+            if (!$this->calculAcademiqueService) {
+                $this->calculAcademiqueService = new CalculAcademiqueService();
+            }
+            
+            $calculService = $this->calculAcademiqueService;
+
+            // ✅ CORRECTION : Trouver l'examen spécifique pour ce niveau/parcours
+            $examenQuery = Examen::where('niveau_id', $this->selectedNiveau);
+            if ($this->selectedParcours) {
+                $examenQuery->where('parcours_id', $this->selectedParcours);
+            }
+            
+            $examen = $examenQuery->first();
+            
+            if (!$examen) {
+                Log::warning('Aucun examen trouvé pour ce niveau/parcours', [
+                    'niveau_id' => $this->selectedNiveau,
+                    'parcours_id' => $this->selectedParcours,
+                    'session_id' => $session->id
+                ]);
+                return [];
+            }
+
+            // ✅ REQUÊTE CORRIGÉE avec filtrage par examen spécifique
+            $query = ResultatFinal::with([
+                'etudiant:id,nom,prenom,matricule,niveau_id,parcours_id',
+                'ec.ue:id,nom,abr,credits',
+                'examen:id,niveau_id,parcours_id'
+            ])
+            ->where('session_exam_id', $session->id)
+            ->where('examen_id', $examen->id) // ✅ FILTRAGE CRUCIAL PAR EXAMEN
+            ->whereHas('etudiant', function($q) {
+                $q->where('niveau_id', $this->selectedNiveau);
+                if ($this->selectedParcours) {
+                    $q->where('parcours_id', $this->selectedParcours);
+                }
+            })
+            ->where('statut', ResultatFinal::STATUT_PUBLIE);
+
+            $resultats = $query->get();
+            
+            if ($resultats->isEmpty()) {
+                Log::info('Aucun résultat trouvé pour cet examen', [
+                    'examen_id' => $examen->id,
+                    'session_id' => $session->id,
+                    'niveau_id' => $this->selectedNiveau,
+                    'parcours_id' => $this->selectedParcours
+                ]);
+                return [];
+            }
+
+            // ✅ FILTRER les résultats avec relations valides
+            $resultatsValides = $resultats->filter(function($resultat) {
+                return $resultat->etudiant && 
+                       $resultat->ec && 
+                       $resultat->ec->ue &&
+                       $resultat->examen &&
+                       $resultat->examen->id &&
+                       $resultat->etudiant->niveau_id == $this->selectedNiveau &&
+                       (!$this->selectedParcours || $resultat->etudiant->parcours_id == $this->selectedParcours);
+            });
+
+            if ($resultatsValides->isEmpty()) {
+                Log::warning('Aucun résultat avec relations valides', [
+                    'total_resultats' => $resultats->count(),
+                    'examen_id' => $examen->id,
+                    'session_id' => $session->id
+                ]);
+                return [];
+            }
+
+            $resultatsGroupes = $resultatsValides->groupBy('etudiant_id');
+
+            return $resultatsGroupes->map(function($resultatsEtudiant, $etudiantId) use ($session, $calculService, $examen) {
+                $etudiant = $resultatsEtudiant->first()->etudiant;
+                if (!$etudiant) return null;
+
+                try {
+                    // ✅ PASSER LES PARAMÈTRES DE NIVEAU/PARCOURS AU SERVICE
+                    $calculComplet = $calculService->calculerResultatsComplets(
+                        $etudiantId, 
+                        $session->id, 
+                        true, 
+                        $this->selectedNiveau, 
+                        $this->selectedParcours
+                    );
+                    
+                    $premierResultat = $resultatsEtudiant->first();
+
+                    return [
+                        'etudiant' => $etudiant,
+                        'notes' => $resultatsEtudiant->keyBy('ec_id'),
+                        'moyennes_ue' => collect($calculComplet['resultats_ue'])->pluck('moyenne_ue', 'ue_id')->toArray(),
+                        'moyenne_generale' => $calculComplet['synthese']['moyenne_generale'],
+                        'credits_valides' => $calculComplet['synthese']['credits_valides'],
+                        'total_credits' => $calculComplet['synthese']['total_credits'],
+                        'has_note_eliminatoire' => $calculComplet['synthese']['a_note_eliminatoire'],
+                        'decision' => $premierResultat->decision,
+                        'details_ue' => $calculComplet['resultats_ue'],
+                        'jury_validated' => $premierResultat->jury_validated ?? false,
+                        'examen_id' => $examen->id // ✅ AJOUT POUR TRAÇABILITÉ
+                    ];
+                } catch (\Exception $e) {
+                    Log::error('Erreur calcul étudiant: ' . $e->getMessage(), [
+                        'etudiant_id' => $etudiantId,
+                        'session_id' => $session->id,
+                        'examen_id' => $examen->id,
+                        'niveau_id' => $etudiant->niveau_id,
+                        'parcours_id' => $etudiant->parcours_id
+                    ]);
+                    return null;
+                }
+            })
+            ->filter()
+            ->sortBy([
+                ['credits_valides', 'desc'],
+                ['moyenne_generale', 'desc']
+            ])
+            ->values()
+            ->toArray();
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors du chargement des sessions: ' . $e->getMessage());
-            $this->sessionNormale = null;
-            $this->sessionRattrapage = null;
-            $this->showSession2 = false;
+            Log::error('Erreur loadResultatsForSession: ' . $e->getMessage());
+            return [];
         }
     }
 
@@ -473,410 +551,17 @@ class ResultatsFinale extends Component
                 ->orderBy('id')
                 ->get();
 
-            if ($ues->isEmpty()) {
-                $this->uesStructure = [];
-                return;
-            }
-
-            $this->uesStructure = $ues->map(function($ue, $index) {
+            $this->uesStructure = $ues->map(function($ue) {
                 return [
                     'ue' => $ue,
                     'ecs' => $ue->ecs->map(function($ec) {
-                        return [
-                            'ec' => $ec
-                        ];
+                        return ['ec' => $ec];
                     })
                 ];
             });
-
         } catch (\Exception $e) {
             Log::error('Erreur loadUEStructure: ' . $e->getMessage());
             $this->uesStructure = collect();
-        }
-    }
-
-    // ✅ MÉTHODES DE MISE À JOUR DES FILTRES
-    public function updatedSelectedNiveau()
-    {
-        if ($this->selectedNiveau) {
-            try {
-                $niveau = Niveau::find($this->selectedNiveau);
-                if ($niveau?->has_parcours) {
-                    $this->parcours = Parcour::where('niveau_id', $this->selectedNiveau)
-                        ->where('is_active', true)
-                        ->orderBy('id', 'asc')
-                        ->get();
-                } else {
-                    $this->parcours = collect();
-                    $this->selectedParcours = null;
-                }
-
-                $this->loadUEStructure();
-                $this->initialiserParametresDeliberation();
-
-                // ✅ NOUVEAU : Recalculer les pourcentages avec le nouveau niveau
-                $this->initialiserParametresAvecPourcentages();
-
-            } catch (\Exception $e) {
-                Log::error('Erreur lors de la mise à jour du niveau: ' . $e->getMessage());
-                $this->parcours = collect();
-                $this->selectedParcours = null;
-            }
-        }
-
-        $this->checkSession2Availability();
-        $this->loadResultats();
-    }
-
-    public function updatedSelectedParcours()
-    {
-        $this->checkSession2Availability();
-        $this->loadResultats();
-        $this->initialiserParametresDeliberation();
-        
-        // ✅ NOUVEAU : Recalculer les pourcentages avec le nouveau parcours
-        $this->initialiserParametresAvecPourcentages();
-        
-        $this->viderCacheDeliberation();
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Vider le cache des configurations de délibération
-     */
-    public function viderCacheDeliberation()
-    {
-        try {
-            // Construire la clé de cache actuelle
-            $cacheKey = sprintf(
-                'deliberation_config_%s_%s_%s_%s',
-                $this->selectedNiveau ?? 'null',
-                $this->selectedParcours ?? 'null',
-                $this->sessionNormale?->id ?? 'null',
-                $this->sessionRattrapage?->id ?? 'null'
-            );
-
-            // Vider le cache
-            cache()->forget($cacheKey);
-
-            // ✅ Vider aussi les caches pour toutes les combinaisons possibles si nécessaire
-            $patterns = [
-                "deliberation_config_{$this->selectedNiveau}_*",
-                "deliberation_config_*_{$this->selectedParcours}_*",
-            ];
-
-            foreach ($patterns as $pattern) {
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur vidage cache délibération: ' . $e->getMessage());
-        }
-    }
-
-    public function updatedSelectedAnneeUniversitaire()
-    {
-        $this->loadSessions();
-        $this->checkSession2Availability();
-        $this->loadResultats();
-    }
-
-    // ✅ MÉTHODES DE VÉRIFICATION
-    private function checkSession2Availability()
-    {
-        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire || !$this->sessionRattrapage) {
-            $this->showSession2 = false;
-            return;
-        }
-
-        try {
-            $hasResultsRattrapage = ResultatFinal::where('session_exam_id', $this->sessionRattrapage->id)
-                ->whereHas('examen', function($q) {
-                    $q->where('niveau_id', $this->selectedNiveau);
-                    if ($this->selectedParcours) {
-                        $q->where('parcours_id', $this->selectedParcours);
-                    }
-                })
-                ->where('statut', ResultatFinal::STATUT_PUBLIE)
-                ->exists();
-
-            $this->showSession2 = $hasResultsRattrapage;
-
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de la vérification de la session 2: ' . $e->getMessage());
-            $this->showSession2 = false;
-        }
-    }
-
-    // ✅ MÉTHODES DE CHARGEMENT DES RÉSULTATS
-    public function loadResultats()
-    {
-        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-            $this->resultatsSession1 = [];
-            $this->resultatsSession2 = [];
-            $this->resetValidation();
-            return;
-        }
-
-        try {
-            $this->resultatsSession1 = $this->loadResultatsForSession($this->sessionNormale);
-
-            if ($this->showSession2 && $this->sessionRattrapage) {
-                $this->resultatsSession2 = $this->loadResultatsForSession($this->sessionRattrapage);
-            } else {
-                $this->resultatsSession2 = [];
-            }
-
-            if (empty($this->resultatsSession1) && !empty($this->resultatsSession2)) {
-                $this->simulationParams['session_type'] = 'session2';
-            } elseif (!empty($this->resultatsSession1)) {
-                $this->simulationParams['session_type'] = 'session1';
-            }
-
-            $this->calculateStatistics();
-
-        } catch (\Exception $e) {
-            Log::error('Erreur lors du chargement des résultats: ' . $e->getMessage());
-            $this->resultatsSession1 = [];
-            $this->resultatsSession2 = [];
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE COMPLÈTE ET CORRIGÉE : loadResultatsForSession
-     * Charge les résultats d'une session avec gestion du cache et enrichissement
-     */
-    private function loadResultatsForSession($session)
-    {
-        if (!$session) {
-            return [];
-        }
-
-        try {
-
-            $calculService = new CalculAcademiqueService();
-
-            // ✅ ÉTAPE 1 : Requête avec relations optimisées et cache busting
-            $query = ResultatFinal::with([
-                'etudiant:id,nom,prenom,matricule', // ✅ Sélection spécifique des champs
-                'ec.ue:id,nom,abr,credits',
-                'examen:id,niveau_id,parcours_id'
-            ])
-            ->where('session_exam_id', $session->id)
-            ->whereHas('examen', function($q) {
-                $q->where('niveau_id', $this->selectedNiveau);
-                if ($this->selectedParcours) {
-                    $q->where('parcours_id', $this->selectedParcours);
-                }
-            })
-            ->where('statut', ResultatFinal::STATUT_PUBLIE);
-
-            // ✅ ÉTAPE 2 : Exécuter la requête avec fresh() pour éviter le cache
-            $resultats = $query->get()->fresh();
-
-            if ($resultats->isEmpty()) {
-                return [];
-            }
-
-            // ✅ ÉTAPE 3 : Grouper par étudiant
-            $resultatsGroupes = $resultats->groupBy('etudiant_id');
-
-            // ✅ ÉTAPE 4 : Traiter chaque étudiant
-            $resultatsFinaux = $resultatsGroupes->map(function($resultatsEtudiant, $etudiantId) use ($session, $calculService) {
-                $etudiant = $resultatsEtudiant->first()->etudiant;
-
-                if (!$etudiant) {
-                    return null;
-                }
-
-                try {
-                    // ✅ CALCUL COMPLET avec service académique
-                    $calculComplet = $calculService->calculerResultatsComplets($etudiantId, $session->id, true);
-
-                    // ✅ RÉCUPÉRER LES VRAIES DONNÉES DE LA DB (pas calculées)
-                    $premierResultat = $resultatsEtudiant->first();
-                    $decisionDB = $premierResultat->decision;
-                    $juryValidatedDB = $premierResultat->jury_validated ?? false;
-                    $createdAt = $premierResultat->created_at;
-                    $updatedAt = $premierResultat->updated_at;
-
-                    // ✅ CONSTRUCTION DU RÉSULTAT ENRICHI
-                    return [
-                        'etudiant' => $etudiant,
-                        'notes' => $resultatsEtudiant->keyBy('ec_id'),
-                        'moyennes_ue' => collect($calculComplet['resultats_ue'])->pluck('moyenne_ue', 'ue_id')->toArray(),
-                        'moyenne_generale' => $calculComplet['synthese']['moyenne_generale'],
-                        'credits_valides' => $calculComplet['synthese']['credits_valides'],
-                        'total_credits' => $calculComplet['synthese']['total_credits'],
-                        'has_note_eliminatoire' => $calculComplet['synthese']['a_note_eliminatoire'],
-                        'decision' => $decisionDB, // ✅ DECISION RÉELLE DE LA DB
-                        'details_ue' => $calculComplet['resultats_ue'],
-                        'jury_validated' => $juryValidatedDB, // ✅ FLAG DÉLIBÉRATION
-                        'decision_details' => $calculComplet['decision'],
-                        // ✅ METADATA UTILES
-                        'created_at' => $createdAt,
-                        'updated_at' => $updatedAt,
-                        'nb_resultats' => $resultatsEtudiant->count()
-                    ];
-
-                } catch (\Exception $e) {
-                    Log::error('❌ Erreur calcul résultats étudiant', [
-                        'etudiant_id' => $etudiantId,
-                        'session_id' => $session->id,
-                        'error' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString()
-                    ]);
-
-                    // ✅ FALLBACK vers calcul manuel en cas d'erreur
-                    return $this->calculerResultatsEtudiantFallback($resultatsEtudiant, $session);
-                }
-            })
-            ->filter() // Retirer les résultats null
-            ->values(); // Reset des indices
-
-            // ✅ ÉTAPE 5 : Enrichir avec les informations de changement
-            $resultatsEnrichis = $this->enrichirResultatsAvecChangements($resultatsFinaux->toArray(), $session->id);
-
-            // ✅ ÉTAPE 6 : Tri final par performance académique
-            $resultatsTriés = collect($resultatsEnrichis)
-                ->sortBy([
-                    ['jury_validated', 'desc'], // Délibérés en premier
-                    ['credits_valides', 'desc'], // Puis par crédits
-                    ['moyenne_generale', 'desc'], // Puis par moyenne
-                    ['etudiant.nom', 'asc'] // Enfin par nom
-                ])
-                ->values()
-                ->toArray();
-            return $resultatsTriés;
-
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur critique loadResultatsForSession', [
-                'session_id' => $session->id ?? 'unknown',
-                'niveau_id' => $this->selectedNiveau,
-                'parcours_id' => $this->selectedParcours,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return [];
-        }
-    }
-
-
-    private function calculerResultatsEtudiantFallback($resultatsEtudiant, $session)
-    {
-        $etudiant = $resultatsEtudiant->first()->etudiant;
-        $notes = $resultatsEtudiant->keyBy('ec_id');
-
-        $calculAcademique = $this->calculerResultatsAcademiques($resultatsEtudiant);
-
-        return [
-            'etudiant' => $etudiant,
-            'notes' => $notes,
-            'moyennes_ue' => $calculAcademique['moyennes_ue'],
-            'moyenne_generale' => $calculAcademique['moyenne_generale'],
-            'credits_valides' => $calculAcademique['credits_valides'],
-            'total_credits' => $calculAcademique['total_credits'],
-            'has_note_eliminatoire' => $calculAcademique['has_note_eliminatoire'],
-            'decision' => $this->determinerDecision($calculAcademique, $session),
-            'details_ue' => $calculAcademique['details_ue'],
-            'jury_validated' => $resultatsEtudiant->first()->jury_validated ?? false
-        ];
-    }
-
-    private function calculerResultatsAcademiques($resultatsEtudiant)
-    {
-        $moyennesUE = [];
-        $creditsValides = 0;
-        $totalCredits = 0;
-        $hasNoteEliminatoire = false;
-        $detailsUE = [];
-
-        try {
-            $resultatsParUE = $resultatsEtudiant->groupBy('ec.ue_id');
-
-            foreach ($resultatsParUE as $ueId => $notesUE) {
-                $ue = $notesUE->first()->ec->ue;
-                $totalCredits += $ue->credits ?? 0;
-
-                $notes = $notesUE->pluck('note')->toArray();
-                $hasNoteZeroInUE = in_array(0, $notes);
-
-                if ($hasNoteZeroInUE) {
-                    $hasNoteEliminatoire = true;
-                    $moyenneUE = 0;
-                    $ueValidee = false;
-                } else {
-                    $moyenneUE = count($notes) > 0 ? array_sum($notes) / count($notes) : 0;
-                    $moyenneUE = round($moyenneUE, 2);
-                    $ueValidee = $moyenneUE >= 10;
-
-                    if ($ueValidee) {
-                        $creditsValides += $ue->credits ?? 0;
-                    }
-                }
-
-                $moyennesUE[$ueId] = $moyenneUE;
-                $detailsUE[] = [
-                    'ue_id' => $ueId,
-                    'ue_nom' => $ue->nom,
-                    'ue_abr' => $ue->abr,
-                    'moyenne_ue' => $moyenneUE,
-                    'credits' => $ue->credits ?? 0,
-                    'validee' => $ueValidee,
-                    'eliminee' => $hasNoteZeroInUE,
-                    'notes_ec' => $notesUE->map(function($resultat) {
-                        return [
-                            'ec_nom' => $resultat->ec->nom,
-                            'note' => $resultat->note,
-                            'est_eliminatoire' => $resultat->note == 0
-                        ];
-                    })->toArray()
-                ];
-            }
-
-            $moyenneGenerale = count($moyennesUE) > 0 ?
-                array_sum($moyennesUE) / count($moyennesUE) : 0;
-
-            if ($hasNoteEliminatoire) {
-                $moyenneGenerale = 0;
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur lors du calcul académique médecine: ' . $e->getMessage());
-            $moyenneGenerale = 0;
-        }
-
-        return [
-            'moyennes_ue' => $moyennesUE,
-            'moyenne_generale' => round($moyenneGenerale, 2),
-            'credits_valides' => $creditsValides,
-            'total_credits' => $totalCredits,
-            'has_note_eliminatoire' => $hasNoteEliminatoire,
-            'details_ue' => $detailsUE
-        ];
-    }
-
-    private function determinerDecision($calculAcademique, $session)
-    {
-        $creditsValides = $calculAcademique['credits_valides'];
-        $hasNoteEliminatoire = $calculAcademique['has_note_eliminatoire'];
-
-        if ($session->type === 'Normale') {
-            // Session 1 - Logique médecine
-            if ($hasNoteEliminatoire) {
-                return ResultatFinal::DECISION_RATTRAPAGE;
-            }
-            if ($creditsValides >= 60) {
-                return ResultatFinal::DECISION_ADMIS;
-            }
-            return ResultatFinal::DECISION_RATTRAPAGE;
-        } else {
-            // Session 2 - Logique médecine
-            if ($hasNoteEliminatoire) {
-                return ResultatFinal::DECISION_EXCLUS;
-            }
-            return $creditsValides >= 40 ? ResultatFinal::DECISION_ADMIS : ResultatFinal::DECISION_REDOUBLANT;
         }
     }
 
@@ -910,38 +595,40 @@ class ResultatsFinale extends Component
             $juryValidated = array_sum(array_column($resultats, 'jury_validated'));
 
             $admis = $decisions[ResultatFinal::DECISION_ADMIS] ?? 0;
-            $rattrapage = $decisions[ResultatFinal::DECISION_RATTRAPAGE] ?? 0;
-            $redoublant = $decisions[ResultatFinal::DECISION_REDOUBLANT] ?? 0;
-            $exclus = $decisions[ResultatFinal::DECISION_EXCLUS] ?? 0;
 
             return [
                 'total_etudiants' => $total,
                 'admis' => $admis,
-                'rattrapage' => $rattrapage,
-                'redoublant' => $redoublant,
-                'exclus' => $exclus,
+                'rattrapage' => $decisions[ResultatFinal::DECISION_RATTRAPAGE] ?? 0,
+                'redoublant' => $decisions[ResultatFinal::DECISION_REDOUBLANT] ?? 0,
+                'exclus' => $decisions[ResultatFinal::DECISION_EXCLUS] ?? 0,
                 'moyenne_promo' => $total > 0 ? round(array_sum($moyennes) / $total, 2) : 0,
                 'credits_moyen' => $total > 0 ? round(array_sum($credits) / $total, 2) : 0,
                 'taux_reussite' => $total > 0 ? round(($admis / $total) * 100, 2) : 0,
                 'jury_validated' => $juryValidated
             ];
         } catch (\Exception $e) {
-            Log::error('Erreur lors du calcul des statistiques: ' . $e->getMessage());
-            return [
-                'total_etudiants' => 0,
-                'admis' => 0,
-                'rattrapage' => 0,
-                'redoublant' => 0,
-                'exclus' => 0,
-                'moyenne_promo' => 0,
-                'taux_reussite' => 0,
-                'credits_moyen' => 0,
-                'jury_validated' => 0
-            ];
+            Log::error('Erreur calcul statistiques: ' . $e->getMessage());
+            return [];
         }
     }
 
-    // ✅ MÉTHODES DE DÉLIBÉRATION
+
+    public function setActiveTab($tab)
+    {
+        $this->activeTab = $tab;
+        
+        if (in_array($tab, ['session1', 'session2'])) {
+            $session = $tab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+            if ($session) {
+                $this->deliberationParams['session_type'] = $tab;
+                $this->deliberationParams['session_id'] = $session->id;
+            }
+        }
+        
+    }
+
+
     public function ouvrirDeliberation($sessionType)
     {
         if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
@@ -950,139 +637,49 @@ class ResultatsFinale extends Component
         }
 
         $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
         if (!$session) {
             $this->addError('deliberation', 'Session non trouvée.');
             return;
         }
 
-        try {
-            $calculService = new CalculAcademiqueService();
-
-            // Charger configuration existante ou créer par défaut
-            $config = $calculService->getConfigurationDeliberation(
-                $this->selectedNiveau,
-                $this->selectedParcours,
-                $session->id
-            );
-
-            if ($config) {
-                $this->deliberationParams = [
-                    'session_type' => $sessionType,
-                    'session_id' => $session->id,
-                    'credits_admission_s1' => $config->credits_admission_s1,
-                    'credits_admission_s2' => $config->credits_admission_s2,
-                    'credits_redoublement_s2' => $config->credits_redoublement_s2,
-                    'note_eliminatoire_bloque_s1' => $config->note_eliminatoire_bloque_s1,
-                    'note_eliminatoire_exclusion_s2' => $config->note_eliminatoire_exclusion_s2
-                ];
-
-                $this->deliberationStatus = [
-                    'delibere' => $config->delibere,
-                    'date_deliberation' => $config->date_deliberation,
-                    'delibere_par' => $config->deliberePar?->name
-                ];
-            } else {
-                // Valeurs par défaut logique médecine
-                $this->deliberationParams = [
-                    'session_type' => $sessionType,
-                    'session_id' => $session->id,
-                    'credits_admission_s1' => 60,
-                    'credits_admission_s2' => 40,
-                    'credits_redoublement_s2' => 20,
-                    'note_eliminatoire_bloque_s1' => true,
-                    'note_eliminatoire_exclusion_s2' => true
-                ];
-
-                $this->deliberationStatus = [
-                    'delibere' => false,
-                    'date_deliberation' => null,
-                    'delibere_par' => null
-                ];
-            }
-
-            $this->showDeliberationModal = true;
-
-        } catch (\Exception $e) {
-            Log::error('Erreur ouverture modal délibération: ' . $e->getMessage());
-            $this->addError('deliberation', 'Erreur lors de l\'ouverture de la délibération.');
-        }
+        $this->deliberationParams['session_type'] = $sessionType;
+        $this->deliberationParams['session_id'] = $session->id;
+        $this->showDeliberationModal = true;
     }
-
 
     public function simulerDeliberation()
     {
         try {
-            // ✅ VÉRIFICATIONS PRÉALABLES (votre code existant...)
             if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                $this->addError('deliberation', 'Veuillez sélectionner un niveau et une année.');
+                $this->addError('deliberation', 'Configuration incomplète.');
                 return;
             }
 
-            // ✅ CORRECTION : S'assurer que session_id est défini
-            if (!isset($this->deliberationParams['session_id']) || !$this->deliberationParams['session_id']) {
-                $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-                $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-                if (!$session) {
-                    $this->addError('deliberation', 'Session non trouvée.');
-                    return;
-                }
-
-                $this->deliberationParams['session_id'] = $session->id;
-            }
-
-            // ✅ VALIDATION (votre code existant...)
-            $erreurs = $this->validerParametresDeliberation();
-            if (!empty($erreurs)) {
-                foreach ($erreurs as $erreur) {
-                    $this->addError('deliberation', $erreur);
-                }
-                return;
-            }
-
-            // ✅ CORRECTION PRINCIPALE : Récupérer et calculer les résultats avec informations étudiant
             $resultatsActuels = $this->deliberationParams['session_type'] === 'session1'
-                ? $this->resultatsSession1
-                : $this->resultatsSession2;
+                ? $this->resultatsSession1 : $this->resultatsSession2;
 
             if (empty($resultatsActuels)) {
-                $this->addError('deliberation', 'Aucun résultat disponible pour la simulation');
+                $this->addError('deliberation', 'Aucun résultat disponible.');
                 return;
             }
 
             $resultatsDetailles = [];
-            $statistiques = [
-                'admis' => 0,
-                'rattrapage' => 0,
-                'redoublant' => 0,
-                'exclus' => 0,
-                'changements' => 0
-            ];
+            $statistiques = ['admis' => 0, 'rattrapage' => 0, 'redoublant' => 0, 'exclus' => 0, 'changements' => 0];
 
             foreach ($resultatsActuels as $index => $resultat) {
-                // ✅ CORRECTION : Assurer que les informations étudiant sont complètes
                 $etudiant = $resultat['etudiant'] ?? null;
+                if (!$etudiant) continue;
 
-                if (!$etudiant) {
-                    continue; // Skip si pas d'étudiant
-                }
-
-                // Calculer la décision simulée selon les paramètres
                 $decisionSimulee = $this->calculerDecisionSelonParametres($resultat);
                 $decisionActuelle = $resultat['decision'] ?? 'rattrapage';
-
                 $changement = $decisionActuelle !== $decisionSimulee;
-                if ($changement) {
-                    $statistiques['changements']++;
-                }
 
+                if ($changement) $statistiques['changements']++;
                 $statistiques[$decisionSimulee]++;
 
-                // ✅ STRUCTURER CORRECTEMENT LES DONNÉES POUR LA VUE
                 $resultatsDetailles[] = [
                     'etudiant_id' => $etudiant->id,
-                    'etudiant' => $etudiant, // ✅ Objet Eloquent complet
+                    'etudiant' => $etudiant,
                     'nom' => $etudiant->nom,
                     'prenom' => $etudiant->prenom,
                     'matricule' => $etudiant->matricule,
@@ -1098,7 +695,6 @@ class ResultatsFinale extends Component
                 ];
             }
 
-            // ✅ STRUCTURE FINALE POUR LA VUE
             $this->simulationDeliberation = [
                 'success' => true,
                 'total_etudiants' => count($resultatsDetailles),
@@ -1107,22 +703,15 @@ class ResultatsFinale extends Component
                 'parametres_utilises' => $this->deliberationParams
             ];
 
-            // Message de succès
             $sessionName = $this->deliberationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
-            toastr()->info(
-                "🔍 Simulation {$sessionName} : {$statistiques['changements']} changements détectés. " .
-                "Nouveaux résultats : {$statistiques['admis']} admis, {$statistiques['rattrapage']} rattrapage, " .
-                "{$statistiques['redoublant']} redoublant, {$statistiques['exclus']} exclus"
-            );
+            toastr()->info("Simulation {$sessionName} : {$statistiques['changements']} changements détectés.");
 
         } catch (\Exception $e) {
-            Log::error('Erreur simulation délibération Livewire: ' . $e->getMessage());
-            $this->addError('deliberation', 'Erreur lors de la simulation: ' . $e->getMessage());
+            Log::error('Erreur simulation délibération: ' . $e->getMessage());
+            $this->addError('deliberation', 'Erreur simulation: ' . $e->getMessage());
         }
     }
 
-
-    // ✅ NOUVELLE MÉTHODE : Calculer la décision selon les paramètres
     private function calculerDecisionSelonParametres($resultat)
     {
         $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
@@ -1130,30 +719,22 @@ class ResultatsFinale extends Component
         $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
 
         if ($sessionType === 'session1') {
-            // ✅ LOGIQUE SESSION 1 (NORMALE)
             $creditsRequis = $this->deliberationParams['credits_admission_s1'] ?? 60;
             $bloquerSiNote0 = $this->deliberationParams['note_eliminatoire_bloque_s1'] ?? true;
 
-            // Si note éliminatoire et option activée
             if ($hasNoteEliminatoire && $bloquerSiNote0) {
                 return 'rattrapage';
             }
-
-            // Sinon, selon les crédits
             return $creditsValides >= $creditsRequis ? 'admis' : 'rattrapage';
-
         } else {
-            // ✅ LOGIQUE SESSION 2 (RATTRAPAGE)
             $creditsAdmission = $this->deliberationParams['credits_admission_s2'] ?? 40;
             $creditsRedoublement = $this->deliberationParams['credits_redoublement_s2'] ?? 20;
             $exclusionSiNote0 = $this->deliberationParams['note_eliminatoire_exclusion_s2'] ?? true;
 
-            // Si note éliminatoire et option activée
             if ($hasNoteEliminatoire && $exclusionSiNote0) {
                 return 'exclus';
             }
 
-            // Sinon, selon les crédits
             if ($creditsValides >= $creditsAdmission) {
                 return 'admis';
             } elseif ($creditsValides >= $creditsRedoublement) {
@@ -1164,545 +745,6 @@ class ResultatsFinale extends Component
         }
     }
 
-
-
-
-    /**
-     * Appliquer la délibération pour une session donnée
-     */
-    public function appliquerDeliberation(): void
-    {
-        try {
-            $this->validateDeliberationPrerequisites();
-            $session = $this->getTargetSession();
-            $this->validateStudentsAvailability($session);
-
-            $result = $this->executeDeliberation($session);
-
-            if ($result['success']) {
-                $this->handleDeliberationSuccess($result, $session);
-            } else {
-                $this->handleDeliberationFailure($result, $session);
-            }
-        } catch (\Exception $e) {
-            $this->handleDeliberationError($e);
-        }
-    }
-
-    /**
-     * Valider les prérequis pour la délibération
-     */
-    private function validateDeliberationPrerequisites(): void
-    {
-        if (!$this->calculAcademiqueService) {
-            $this->calculAcademiqueService = new CalculAcademiqueService();
-        }
-
-        if (empty($this->deliberationParams)) {
-            throw new \Exception('Paramètres de délibération manquants.');
-        }
-
-        if (!Auth::user()->can('resultats.validation')) {
-            throw new \Exception('Vous n\'avez pas l\'autorisation d\'appliquer une délibération.');
-        }
-    }
-
-    /**
-     * Récupérer la session cible pour la délibération
-     */
-    private function getTargetSession(): SessionExam
-    {
-        $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-        $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-        if (!$session) {
-            throw new \Exception("Session {$sessionType} non trouvée.");
-        }
-
-        return $session;
-    }
-
-    /**
-     * Valider la disponibilité des étudiants pour la session
-     */
-    private function validateStudentsAvailability(SessionExam $session): void
-    {
-        $countEtudiants = ResultatFinal::where('session_exam_id', $session->id)
-            ->whereHas('examen', function($q) {
-                $q->where('niveau_id', $this->selectedNiveau);
-                if ($this->selectedParcours) {
-                    $q->where('parcours_id', $this->selectedParcours);
-                }
-            })
-            ->where('statut', ResultatFinal::STATUT_PUBLIE)
-            ->distinct('etudiant_id')
-            ->count();
-
-        if ($countEtudiants === 0) {
-            $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-            throw new \Exception("Aucun étudiant trouvé pour la session {$sessionType} (ID: {$session->id}). Vérifiez que les résultats sont publiés.");
-        }
-    }
-
-    /**
-     * Exécuter la délibération
-     */
-    private function executeDeliberation(SessionExam $session): array
-    {
-        return $this->calculAcademiqueService->appliquerDeliberationAvecConfig(
-            $this->selectedNiveau,
-            $this->selectedParcours,
-            $session->id,
-            $this->deliberationParams
-        );
-    }
-
-    /**
-     * Gérer le succès de la délibération
-     */
-    private function handleDeliberationSuccess(array $result, SessionExam $session): void
-    {
-        $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-
-        // Message de succès
-        $statsMessage = collect($result['statistiques'])
-            ->map(fn($count, $decision) => ucfirst($decision) . ': ' . $count)
-            ->implode(', ');
-
-        toastr()->success('Délibération appliquée avec succès. Statistiques: ' . $statsMessage);
-
-        // Mise à jour du statut
-        $this->updateDeliberationStatus();
-
-        // Réinitialisation et rechargement
-        $this->resetAfterDeliberation($sessionType);
-    }
-
-    /**
-     * Gérer l'échec de la délibération
-     */
-    private function handleDeliberationFailure(array $result, SessionExam $session): void
-    {
-        $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-
-        $this->addError('deliberation', $result['message']);
-        toastr()->error($result['message']);
-    }
-
-    /**
-     * Gérer les erreurs de délibération
-     */
-    private function handleDeliberationError(\Exception $e): void
-    {
-
-        $this->addError('deliberation', 'Erreur lors de l\'application: ' . $e->getMessage());
-        toastr()->error('Erreur lors de l\'application de la délibération: ' . $e->getMessage());
-    }
-
-    /**
-     * Mettre à jour le statut de délibération
-     */
-    private function updateDeliberationStatus(): void
-    {
-        $this->deliberationStatus = [
-            'delibere' => true,
-            'date_deliberation' => now(),
-            'delibere_par' => Auth::user()->name
-        ];
-    }
-
-
-
-
-    /**
-     * ✅ MÉTHODE AMÉLIORÉE : Force le rechargement complet
-     */
-    public function forceReloadData()
-    {
-        try {
-
-            // ✅ ÉTAPE 1 : Vider complètement le cache
-            $this->resultatsSession1 = [];
-            $this->resultatsSession2 = [];
-            $this->statistiquesSession1 = [];
-            $this->statistiquesSession2 = [];
-
-            // ✅ ÉTAPE 2 : Vider le cache Eloquent
-            \Illuminate\Database\Eloquent\Model::clearBootedModels();
-
-            // ✅ ÉTAPE 3 : Recharger les sessions
-            $this->loadSessions();
-
-            // ✅ ÉTAPE 4 : Recharger avec requête SQL directe
-            if ($this->sessionNormale) {
-                $this->resultatsSession1 = $this->loadResultatsForSessionWithFreshQuery($this->sessionNormale);
-            }
-
-            if ($this->showSession2 && $this->sessionRattrapage) {
-                $this->resultatsSession2 = $this->loadResultatsForSessionWithFreshQuery($this->sessionRattrapage);
-            }
-
-            // ✅ ÉTAPE 5 : Recalculer les statistiques
-            $this->calculateStatistics();
-
-            // ✅ ÉTAPE 6 : Message de succès
-            toastr()->success('✅ Données rechargées avec succès');
-
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur force reload: ' . $e->getMessage());
-            toastr()->error('Erreur lors du rechargement des données');
-        }
-    }
-    /**
-     * ✅ SOLUTION 2 : Réinitialiser après délibération avec rechargement forcé
-     */
-    private function resetAfterDeliberation(string $sessionType): void
-    {
-        try {
-
-            // ✅ ÉTAPE 1 : Fermer les modals
-            $this->showDeliberationModal = false;
-            $this->simulationDeliberation = [];
-
-            // ✅ ÉTAPE 2 : Vider COMPLÈTEMENT les données
-            $this->reset([
-                'resultatsSession1',
-                'resultatsSession2',
-                'statistiquesSession1',
-                'statistiquesSession2'
-            ]);
-
-            // ✅ ÉTAPE 3 : Attendre que la transaction soit commitée
-            usleep(200000); // 200ms
-
-            // ✅ ÉTAPE 4 : Vider le cache Eloquent
-            \Illuminate\Database\Eloquent\Model::clearBootedModels();
-
-            // ✅ ÉTAPE 6 : Vérifier que les données ont bien changé
-            $this->verifierChangementsApresDeliberation($sessionType);
-
-            // ✅ ÉTAPE 7 : Dispatch des événements
-            $this->dispatch('force-page-refresh');
-            $this->dispatch('resultatsActualises', [
-                'session' => $sessionType,
-                'timestamp' => now()->timestamp,
-                'nouvelles_stats' => $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur reset après délibération: ' . $e->getMessage());
-            throw $e;
-        }
-    }
-
-    /**
-     * ✅ NOUVELLE MÉTHODE : Charge les résultats avec requête complètement fraîche
-     */
-    private function loadResultatsForSessionWithFreshQuery($session)
-    {
-        if (!$session) return [];
-
-        try {
-            $calculService = new CalculAcademiqueService();
-
-            // ✅ REQUÊTE COMPLÈTEMENT FRAÎCHE sans cache
-            $resultats = DB::table('resultats_finaux as rf')
-                ->join('etudiants as e', 'rf.etudiant_id', '=', 'e.id')
-                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
-                ->join('ues as ue', 'ec.ue_id', '=', 'ue.id')
-                ->join('examens as ex', 'rf.examen_id', '=', 'ex.id')
-                ->where('rf.session_exam_id', $session->id)
-                ->where('ex.niveau_id', $this->selectedNiveau)
-                ->when($this->selectedParcours, function($q) {
-                    $q->where('ex.parcours_id', $this->selectedParcours);
-                })
-                ->where('rf.statut', ResultatFinal::STATUT_PUBLIE)
-                ->select([
-                    'rf.*',
-                    'e.id as etudiant_id',
-                    'e.nom',
-                    'e.prenom',
-                    'e.matricule',
-                    'ec.nom as ec_nom',
-                    'ue.id as ue_id',
-                    'ue.nom as ue_nom'
-                ])
-                ->get();
-
-            if ($resultats->isEmpty()) {
-                return [];
-            }
-
-            // ✅ Reconstituer les objets Eloquent
-            $etudiantsData = $resultats->groupBy('etudiant_id');
-
-            $resultatsFinaux = $etudiantsData->map(function($resultatsEtudiant, $etudiantId) use ($session, $calculService) {
-
-                // Récupérer l'étudiant complet
-                $etudiant = Etudiant::find($etudiantId);
-
-                if (!$etudiant) {
-                    return null;
-                }
-
-                try {
-                    // ✅ RECALCUL COMPLET avec données fraîches
-                    $calculComplet = $calculService->calculerResultatsComplets($etudiantId, $session->id, true);
-
-                    // ✅ VÉRIFIER LA DÉCISION DEPUIS LA DB (pas le calcul)
-                    $decisionDB = $resultatsEtudiant->first()->decision;
-                    $juryValidatedDB = $resultatsEtudiant->first()->jury_validated;
-
-                    return [
-                        'etudiant' => $etudiant,
-                        'notes' => $resultatsEtudiant->keyBy('ec_id'),
-                        'moyennes_ue' => collect($calculComplet['resultats_ue'])->pluck('moyenne_ue', 'ue_id')->toArray(),
-                        'moyenne_generale' => $calculComplet['synthese']['moyenne_generale'],
-                        'credits_valides' => $calculComplet['synthese']['credits_valides'],
-                        'total_credits' => $calculComplet['synthese']['total_credits'],
-                        'has_note_eliminatoire' => $calculComplet['synthese']['a_note_eliminatoire'],
-                        'decision' => $decisionDB, // ✅ UTILISER LA DÉCISION DE LA DB
-                        'details_ue' => $calculComplet['resultats_ue'],
-                        'jury_validated' => $juryValidatedDB,
-                        'decision_details' => $calculComplet['decision']
-                    ];
-
-                } catch (\Exception $e) {
-                    Log::error('❌ Erreur calcul résultats étudiant FRESH', [
-                        'etudiant_id' => $etudiantId,
-                        'session_id' => $session->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    return null;
-                }
-            })
-            ->filter()
-            ->sortBy([
-                ['credits_valides', 'desc'],
-                ['moyenne_generale', 'desc']
-            ])
-            ->values()
-            ->toArray();
-
-            return $resultatsFinaux;
-
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur lors du chargement FRESH: ' . $e->getMessage());
-            return [];
-        }
-    }
-
-
-    /**
-     * ✅ NOUVELLE MÉTHODE : Vérifie que les changements sont bien appliqués
-     */
-    private function verifierChangementsApresDeliberation(string $sessionType)
-    {
-        try {
-            $resultats = $sessionType === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
-            $stats = $sessionType === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2;
-
-
-            // Vérifier en base directement
-            $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-            if ($session) {
-                $statsDB = DB::table('resultats_finaux as rf')
-                    ->join('examens as ex', 'rf.examen_id', '=', 'ex.id')
-                    ->where('rf.session_exam_id', $session->id)
-                    ->where('ex.niveau_id', $this->selectedNiveau)
-                    ->when($this->selectedParcours, function($q) {
-                        $q->where('ex.parcours_id', $this->selectedParcours);
-                    })
-                    ->where('rf.statut', ResultatFinal::STATUT_PUBLIE)
-                    ->selectRaw('
-                        rf.decision,
-                        COUNT(DISTINCT rf.etudiant_id) as nb,
-                        COUNT(CASE WHEN rf.jury_validated = 1 THEN 1 END) as nb_jury
-                    ')
-                    ->groupBy('rf.decision')
-                    ->get()
-                    ->keyBy('decision');
-            }
-
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur vérification changements: ' . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * ✅ NOUVELLE MÉTHODE : Actualise toutes les données après une délibération
-     */
-    private function actualiserDonneesApresDeliberation()
-    {
-        try {
-            // 1. Recharger les résultats avec les nouvelles décisions
-            $this->loadResultats();
-
-            // 2. Recalculer les statistiques avec les nouvelles données
-            $this->calculateStatistics();
-
-            // 3. Vérifier le statut de délibération pour les deux sessions
-            $this->rafraichirStatutsDeliberation();
-
-            // 4. Reset les simulations car les données ont changé
-            $this->simulationResults = [];
-            $this->simulationDeliberation = [];
-
-            // 5. Forcer la mise à jour de l'onglet actif si nécessaire
-            $this->dispatch('donneesDeliberationMisesAJour', [
-                'session' => $this->deliberationParams['session_type'],
-                'statistiques' => $this->activeTab === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Erreur actualisation après délibération: ' . $e->getMessage());
-            toastr()->warning('Données partiellement actualisées. Veuillez rafraîchir la page si nécessaire.');
-        }
-    }
-
-
-    /**
-     * ✅ NOUVELLE MÉTHODE : Rafraîchit les statuts de délibération
-     */
-    private function rafraichirStatutsDeliberation()
-    {
-        try {
-            $calculService = new CalculAcademiqueService();
-
-            // Vérifier session 1
-            if ($this->sessionNormale) {
-                $configS1 = $calculService->getConfigurationDeliberation(
-                    $this->selectedNiveau,
-                    $this->selectedParcours,
-                    $this->sessionNormale->id
-                );
-
-                if ($configS1) {
-                    $this->deliberationStatus['session1'] = [
-                        'delibere' => $configS1->delibere,
-                        'date_deliberation' => $configS1->date_deliberation,
-                        'delibere_par' => $configS1->deliberePar?->name
-                    ];
-                }
-            }
-
-            // Vérifier session 2
-            if ($this->sessionRattrapage) {
-                $configS2 = $calculService->getConfigurationDeliberation(
-                    $this->selectedNiveau,
-                    $this->selectedParcours,
-                    $this->sessionRattrapage->id
-                );
-
-                if ($configS2) {
-                    $this->deliberationStatus['session2'] = [
-                        'delibere' => $configS2->delibere,
-                        'date_deliberation' => $configS2->date_deliberation,
-                        'delibere_par' => $configS2->deliberePar?->name
-                    ];
-                }
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur rafraîchissement statuts délibération: ' . $e->getMessage());
-        }
-    }
-
-    public function annulerDeliberation($sessionType)
-    {
-        try {
-            $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-            if (!$session) {
-                $this->addError('deliberation', 'Session non trouvée.');
-                return;
-            }
-
-            $calculService = new CalculAcademiqueService();
-
-            $result = $calculService->annulerDeliberationAvecConfig(
-                $this->selectedNiveau,
-                $this->selectedParcours,
-                $session->id
-            );
-
-            if ($result['success']) {
-                toastr()->success('✅ Délibération annulée avec succès');
-
-                $this->deliberationStatus = [
-                    'delibere' => false,
-                    'date_deliberation' => null,
-                    'delibere_par' => null
-                ];
-
-                // ✅ AJOUT : Actualiser les données après annulation
-                $this->actualiserDonneesApresDeliberation();
-
-
-            } else {
-                $this->addError('deliberation', $result['message']);
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur annulation délibération Livewire: ' . $e->getMessage());
-            $this->addError('deliberation', 'Erreur lors de l\'annulation: ' . $e->getMessage());
-        }
-    }
-
-    public function checkDeliberationStatus($sessionType)
-    {
-        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-            return false;
-        }
-
-        $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-        if (!$session) {
-            return false;
-        }
-
-        try {
-            $calculService = new CalculAcademiqueService();
-            return $calculService->estDelibere(
-                $this->selectedNiveau,
-                $this->selectedParcours,
-                $session->id
-            );
-        } catch (\Exception $e) {
-            Log::error('Erreur vérification statut délibération: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    // ✅ VALIDATION DES PARAMÈTRES
-    private function validerParametresDeliberation()
-    {
-        $erreurs = [];
-
-        // Validation crédits session 1
-        if ($this->deliberationParams['credits_admission_s1'] < 40 ||
-            $this->deliberationParams['credits_admission_s1'] > 60) {
-            $erreurs[] = 'Les crédits session 1 doivent être entre 40 et 60.';
-        }
-
-        // Validation crédits session 2
-        if ($this->deliberationParams['credits_admission_s2'] < 30 ||
-            $this->deliberationParams['credits_admission_s2'] > 50) {
-            $erreurs[] = 'Les crédits session 2 doivent être entre 30 et 50.';
-        }
-
-        // Validation cohérence
-        if ($this->deliberationParams['credits_redoublement_s2'] >=
-            $this->deliberationParams['credits_admission_s2']) {
-            $erreurs[] = 'Les crédits de redoublement doivent être inférieurs aux crédits d\'admission.';
-        }
-
-        return $erreurs;
-    }
-
-    // ✅ FERMER MODAL
     public function fermerDeliberationModal()
     {
         $this->showDeliberationModal = false;
@@ -1710,86 +752,27 @@ class ResultatsFinale extends Component
         $this->resetErrorBag(['deliberation']);
     }
 
-    // ✅ RESET SIMULATION
-    public function resetSimulationDeliberation()
-    {
-        $this->simulationDeliberation = [];
-    }
-
-    // ✅ OBTENIR STATISTIQUES DÉLIBÉRATION
-    public function getStatistiquesDeliberation($sessionType)
-    {
-        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-            return null;
-        }
-
-        $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-        if (!$session) {
-            return null;
-        }
-
-        try {
-            $calculService = new CalculAcademiqueService();
-            return $calculService->getStatistiquesDeliberation(
-                $this->selectedNiveau,
-                $this->selectedParcours,
-                $session->id
-            );
-        } catch (\Exception $e) {
-            Log::error('Erreur récupération stats délibération: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    // ✅ MÉTHODES D'EXPORT
-    public function exportPDF()
+    // MÉTHODES D'EXPORT
+    public function exporterExcel()
     {
         try {
-            $this->validate();
-
+            $exportService = new ExportService();
+            
             $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
-            $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
+            
             if (empty($resultats)) {
                 toastr()->error('Aucun résultat à exporter.');
                 return;
             }
-
-            $niveau = Niveau::find($this->selectedNiveau);
-            $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
-            $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
-
-            $data = [
-                'resultats' => $resultats,
-                'niveau' => $niveau,
-                'parcours' => $parcours,
-                'session' => $session,
-                'annee_universitaire' => $anneeUniv,
-                'statistiques' => $this->activeTab === 'session1' ? $this->statistiquesSession1 : $this->statistiquesSession2,
-                'date_export' => now()->format('d/m/Y H:i'),
-                'export_par' => Auth::user()->name,
-                'ues_structure' => $this->uesStructure
-            ];
-
-            $pdf = Pdf::loadView('livewire.resultats.export-pdf', $data)
-                ->setPaper('a4', 'landscape');
-
-            $filename = sprintf(
-                'resultats_%s_%s_%s_%s.pdf',
-                $niveau->nom,
-                $parcours ? $parcours->nom : 'Tous',
-                $session->type,
-                $anneeUniv->libelle
-            );
-
-            return response()->streamDownload(function() use ($pdf) {
-                echo $pdf->output();
-            }, $filename);
-
+            
+            $excel = $exportService->exporterExcel($resultats, $this->uesStructure);
+            
+            toastr()->success('Export Excel généré avec succès (' . count($resultats) . ' étudiants)');
+            return $excel;
+            
         } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'export PDF: ' . $e->getMessage());
-            toastr()->error('Erreur lors de l\'export PDF: ' . $e->getMessage());
+            Log::error('Erreur export Excel: ' . $e->getMessage());
+            toastr()->error('Erreur lors de l\'export Excel: ' . $e->getMessage());
         }
     }
 
@@ -1824,26 +807,422 @@ class ResultatsFinale extends Component
             );
 
         } catch (\Exception $e) {
-            Log::error('Erreur lors de l\'export Excel: ' . $e->getMessage());
+            Log::error('Erreur export Excel: ' . $e->getMessage());
             toastr()->error('Erreur lors de l\'export Excel: ' . $e->getMessage());
         }
     }
 
-    // ✅ MÉTHODES D'ONGLETS
-    public function setActiveTab($tab)
+    public function exportPDF()
     {
-        $this->activeTab = $tab;
-        $this->simulationParams['session_type'] = $tab;
+        try {
+            $this->validate();
 
-        // ✅ CORRECTION : Mettre à jour aussi deliberationParams
-        $session = $tab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-        if ($session) {
-            $this->deliberationParams['session_type'] = $tab;
-            $this->deliberationParams['session_id'] = $session->id;
+            $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
+            $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+
+            if (empty($resultats)) {
+                toastr()->error('Aucun résultat à exporter.');
+                return;
+            }
+
+            $niveau = Niveau::find($this->selectedNiveau);
+            $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
+            $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
+
+            $pdfExporter = new AdmisDeliberationPDF(
+                $resultats,
+                $session,
+                $niveau,
+                $parcours,
+                []
+            );
+
+            $result = $pdfExporter->generateAndSaveToPublic();
+            
+            toastr()->success("PDF généré et sauvegardé ! URL : " . $result['url']);
+
+            return response()->streamDownload(function() use ($result) {
+                echo $result['pdf']->output();
+            }, $result['filename']);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur export PDF: ' . $e->getMessage());
+            toastr()->error('Erreur lors de l\'export PDF: ' . $e->getMessage());
         }
     }
 
-    // ✅ MÉTHODES UTILITAIRES
+    public function ouvrirModalExport($type = 'pdf', $source = 'simulation')
+    {
+        $donnees = $this->getDonneesExport($source);
+
+        if (empty($donnees)) {
+            toastr()->error("Aucune donnée disponible pour l'export.");
+            return;
+        }
+
+        $this->exportType = $type;
+        $this->exportData = $source;
+        $this->showExportModal = true;
+
+        $this->exportConfig['filtres'] = [
+            'decision_filter' => 'tous',
+            'moyenne_min' => null,
+            'moyenne_max' => null,
+        ];
+
+        toastr()->info("Configuration de l'export {$type}");
+    }
+
+    public function fermerModalExport()
+    {
+        $this->showExportModal = false;
+        $this->resetErrorBag(['export']);
+    }
+
+    private function getDonneesExport($source)
+    {
+        switch ($source) {
+            case 'simulation':
+                return $this->simulationDeliberation['resultats_detailles'] ?? [];
+            case 'deliberation':
+                $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
+                return $this->formatResultatsForExport($resultats);
+            default:
+                return [];
+        }
+    }
+
+    private function formatResultatsForExport($resultats)
+    {
+        $formatted = [];
+        $rang = 1;
+
+        foreach ($resultats as $resultat) {
+            $etudiant = $resultat['etudiant'];
+
+            $formatted[] = [
+                'rang' => $rang,
+                'etudiant_id' => $etudiant->id,
+                'etudiant' => $etudiant,
+                'nom' => $etudiant->nom,
+                'prenom' => $etudiant->prenom,
+                'matricule' => $etudiant->matricule,
+                'nom_complet' => $etudiant->nom . ' ' . $etudiant->prenom,
+                'moyenne_generale' => $resultat['moyenne_generale'] ?? 0,
+                'credits_valides' => $resultat['credits_valides'] ?? 0,
+                'total_credits' => $resultat['total_credits'] ?? 60,
+                'has_note_eliminatoire' => $resultat['has_note_eliminatoire'] ?? false,
+                'decision_actuelle' => $resultat['decision'] ?? 'non_definie',
+                'decision_simulee' => $resultat['decision'] ?? 'non_definie',
+                'changement' => false
+            ];
+            $rang++;
+        }
+
+        return $formatted;
+    }
+
+    public function exporterParDecisionSimulation($decision, $type = 'pdf')
+    {
+        try {
+            $this->exportConfig['filtres']['decision_filter'] = $decision;
+            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
+            $this->exportConfig['tri']['ordre'] = 'desc';
+
+            $this->exportType = $type;
+            $this->exportData = 'simulation';
+
+            return $this->genererExportAvecConfig();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur export par décision simulation', [
+                'decision' => $decision,
+                'error' => $e->getMessage()
+            ]);
+            toastr()->error('Erreur lors de l\'export : ' . $e->getMessage());
+        }
+    }
+
+    public function exporterAdmisRapide($type = 'pdf')
+    {
+        try {
+            $this->exportConfig['filtres']['decision_filter'] = 'admis';
+            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
+            $this->exportConfig['tri']['ordre'] = 'desc';
+
+            $this->exportType = $type;
+            $this->exportData = !empty($this->simulationDeliberation) ? 'simulation' : 'deliberation';
+
+            return $this->genererExportAvecConfig();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur export admis rapide', ['error' => $e->getMessage()]);
+            toastr()->error('Erreur lors de l\'export rapide des admis : ' . $e->getMessage());
+        }
+    }
+
+    public function exportRapideDepuisSimulation($type, $filtre = 'tous')
+    {
+        if (empty($this->simulationDeliberation)) {
+            toastr()->error('Aucune simulation disponible pour l\'export.');
+            return;
+        }
+
+        try {
+            $this->exportType = $type;
+            $this->exportData = 'simulation';
+            $this->exportConfig['filtres']['decision_filter'] = $filtre;
+            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
+            $this->exportConfig['tri']['ordre'] = 'desc';
+
+            $this->exportConfig['colonnes'] = [
+                'rang' => true,
+                'nom_complet' => true,
+                'matricule' => true,
+                'moyenne' => true,
+                'credits' => true,
+                'decision' => true,
+                'niveau' => false,
+            ];
+
+            return $this->genererExportAvecConfig();
+
+        } catch (\Exception $e) {
+            Log::error('Erreur export rapide simulation', [
+                'type' => $type,
+                'filtre' => $filtre,
+                'error' => $e->getMessage()
+            ]);
+            toastr()->error('Erreur lors de l\'export rapide : ' . $e->getMessage());
+        }
+    }
+
+    public function genererExportAvecConfig()
+    {
+        try {
+            if (!$this->validerColonnesExport()) {
+                return;
+            }
+
+            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+                $this->addError('export', 'Veuillez sélectionner un niveau et une année universitaire.');
+                return;
+            }
+
+            $donneesRaw = $this->getDonneesExport($this->exportData);
+
+            if (empty($donneesRaw)) {
+                $this->addError('export', "Aucune donnée disponible pour l'export.");
+                return;
+            }
+
+            $donneesFiltrees = $this->appliquerFiltresExport($donneesRaw);
+
+            if (empty($donneesFiltrees)) {
+                $this->addError('export', "Aucune donnée ne correspond aux filtres appliqués.");
+                return;
+            }
+
+            $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+
+            if ($this->exportData === 'simulation' && !empty($this->deliberationParams['session_type'])) {
+                $session = $this->deliberationParams['session_type'] === 'session1' ?
+                    $this->sessionNormale : $this->sessionRattrapage;
+            }
+
+            $niveau = Niveau::find($this->selectedNiveau);
+            $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
+            $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
+
+            if ($this->exportType === 'pdf') {
+                return $this->genererPDFAvecConfig($donneesFiltrees, $session, $niveau, $parcours, $anneeUniv);
+            } else {
+                return $this->genererExcelAvecConfig($donneesFiltrees, $session, $niveau, $parcours, $anneeUniv);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur génération export avec config', [
+                'type' => $this->exportType,
+                'source' => $this->exportData,
+                'error' => $e->getMessage()
+            ]);
+            $this->addError('export', 'Erreur lors de la génération : ' . $e->getMessage());
+        }
+    }
+
+    private function validerColonnesExport()
+    {
+        $colonnesSelectionnees = array_filter($this->exportConfig['colonnes']);
+
+        if (empty($colonnesSelectionnees)) {
+            $this->addError('export', 'Veuillez sélectionner au moins une colonne à exporter.');
+            return false;
+        }
+
+        if (!($this->exportConfig['colonnes']['nom_complet'] || $this->exportConfig['colonnes']['matricule'])) {
+            $this->addError('export', 'Veuillez sélectionner au moins le nom ou le matricule.');
+            return false;
+        }
+
+        return true;
+    }
+
+    private function appliquerFiltresExport($donnees)
+    {
+        $donneesCollection = collect($donnees);
+
+        if ($this->exportConfig['filtres']['decision_filter'] !== 'tous') {
+            $decisionFiltre = $this->exportConfig['filtres']['decision_filter'];
+            $champ = $this->exportData === 'simulation' ? 'decision_simulee' : 'decision_actuelle';
+            $donneesCollection = $donneesCollection->where($champ, $decisionFiltre);
+        }
+
+        if (!empty($this->exportConfig['filtres']['moyenne_min'])) {
+            $donneesCollection = $donneesCollection->where('moyenne_generale', '>=', $this->exportConfig['filtres']['moyenne_min']);
+        }
+
+        if (!empty($this->exportConfig['filtres']['moyenne_max'])) {
+            $donneesCollection = $donneesCollection->where('moyenne_generale', '<=', $this->exportConfig['filtres']['moyenne_max']);
+        }
+
+        $champ = $this->exportConfig['tri']['champ'];
+        $ordre = $this->exportConfig['tri']['ordre'];
+
+        if ($ordre === 'asc') {
+            $donneesCollection = $donneesCollection->sortBy($champ);
+        } else {
+            $donneesCollection = $donneesCollection->sortByDesc($champ);
+        }
+
+        $donneesFinales = [];
+        $rang = 1;
+        foreach ($donneesCollection->values() as $item) {
+            $item['rang'] = $rang;
+            $donneesFinales[] = $item;
+            $rang++;
+        }
+
+        return $donneesFinales;
+    }
+
+    private function genererPDFAvecConfig($donnees, $session, $niveau, $parcours, $anneeUniv)
+    {
+        try {
+            $pdfExporter = new AdmisDeliberationPDF(
+                $donnees,
+                $session,
+                $niveau,
+                $parcours,
+                $this->exportConfig['colonnes'] ?? []
+            );
+
+            $result = $pdfExporter->generateAndSaveToPublic();
+            
+            toastr()->success("PDF généré et sauvegardé ! URL : " . $result['url']);
+
+            return response()->streamDownload(function() use ($result) {
+                echo $result['pdf']->output();
+            }, $result['filename']);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur génération PDF: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    private function genererExcelAvecConfig($donnees, $session, $niveau, $parcours, $anneeUniv)
+    {
+        try {
+            $filename = $this->genererNomFichier('xlsx', $session, $niveau, $parcours, $anneeUniv);
+
+            $this->showExportModal = false;
+            toastr()->success("Export Excel généré avec succès ! (" . count($donnees) . " résultats)");
+
+            return Excel::download(
+                new AdmisDeliberationExport(
+                    $donnees,
+                    $session,
+                    $niveau,
+                    $parcours,
+                    $this->exportConfig['colonnes']
+                ),
+                $filename
+            );
+
+        } catch (\Exception $e) {
+            Log::error('Erreur génération Excel avec config', ['error' => $e->getMessage()]);
+            throw $e;
+        }
+    }
+
+    private function genererNomFichier($extension, $session, $niveau, $parcours, $anneeUniv)
+    {
+        $sessionType = $session->type === 'Normale' ? 'Session1' : 'Session2';
+        $niveauNom = str_replace(' ', '_', $niveau->nom);
+        $parcoursNom = $parcours ? '_' . str_replace(' ', '_', $parcours->nom) : '';
+        $anneeNom = str_replace(['/', ' '], ['_', '_'], $anneeUniv->libelle);
+        $source = ucfirst($this->exportData);
+        $date = now()->format('Ymd_His');
+
+        $filtreSuffix = '';
+        if ($this->exportConfig['filtres']['decision_filter'] !== 'tous') {
+            $filtreSuffix .= '_' . ucfirst($this->exportConfig['filtres']['decision_filter']);
+        }
+
+        return "{$source}_{$sessionType}_{$niveauNom}{$parcoursNom}_{$anneeNom}{$filtreSuffix}_{$date}.{$extension}";
+    }
+
+    public function checkDeliberationStatus($sessionType)
+    {
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            return false;
+        }
+
+        $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+        if (!$session) return false;
+
+        try {
+            // S'assurer que le service est initialisé
+            if (!$this->calculAcademiqueService) {
+                $this->calculAcademiqueService = new CalculAcademiqueService();
+            }
+            
+            return $this->calculAcademiqueService->estDelibere(
+                $this->selectedNiveau,
+                $this->selectedParcours,
+                $session->id
+            );
+        } catch (\Exception $e) {
+            Log::error('Erreur vérification délibération: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // PROPRIÉTÉS COMPUTED
+    public function getNomNiveauSelectionneProperty()
+    {
+        return $this->selectedNiveau ? 
+            $this->niveaux->where('id', $this->selectedNiveau)->first()?->nom : null;
+    }
+
+    public function getNomParcoursSelectionneProperty()
+    {
+        return $this->selectedParcours ? 
+            $this->parcours->where('id', $this->selectedParcours)->first()?->nom : 'Tous les parcours';
+    }
+
+    public function getNomAnneeSelectionneProperty()
+    {
+        return $this->selectedAnneeUniversitaire ? 
+            $this->anneesUniversitaires->where('id', $this->selectedAnneeUniversitaire)->first()?->libelle : null;
+    }
+
+    public function getDoisAfficherBoutonChargerProperty()
+    {
+        return $this->etape_actuelle === 'pret_charger' && $this->peut_charger_resultats;
+    }
+
+    // MÉTHODES UTILITAIRES
     public function getResultatNote($notes, $ecId)
     {
         return $notes->get($ecId)?->note ?? '-';
@@ -1851,23 +1230,13 @@ class ResultatsFinale extends Component
 
     public function getClasseNote($note)
     {
-        if ($note === '-' || $note === null) {
-            return 'text-gray-400';
-        }
-
+        if ($note === '-' || $note === null) return 'text-gray-400';
         $noteNum = (float) $note;
-
-        if ($noteNum == 0) {
-            return 'text-red-600 font-bold bg-red-50';
-        } elseif ($noteNum < 10) {
-            return 'text-red-500';
-        } elseif ($noteNum < 12) {
-            return 'text-orange-500';
-        } elseif ($noteNum < 14) {
-            return 'text-blue-500';
-        } else {
-            return 'text-green-600 font-semibold';
-        }
+        if ($noteNum == 0) return 'text-red-600 font-bold bg-red-50';
+        if ($noteNum < 10) return 'text-red-500';
+        if ($noteNum < 12) return 'text-orange-500';
+        if ($noteNum < 14) return 'text-blue-500';
+        return 'text-green-600 font-semibold';
     }
 
     public function getClasseDecision($decision)
@@ -1889,262 +1258,25 @@ class ResultatsFinale extends Component
     public function getLibelleDecision($decision)
     {
         switch ($decision) {
-            case ResultatFinal::DECISION_ADMIS:
-                return 'Admis';
-            case ResultatFinal::DECISION_RATTRAPAGE:
-                return 'Rattrapage';
-            case ResultatFinal::DECISION_REDOUBLANT:
-                return 'Redoublant';
-            case ResultatFinal::DECISION_EXCLUS:
-                return 'Exclu';
-            default:
-                return 'Indéterminé';
+            case ResultatFinal::DECISION_ADMIS: return 'Admis';
+            case ResultatFinal::DECISION_RATTRAPAGE: return 'Rattrapage';
+            case ResultatFinal::DECISION_REDOUBLANT: return 'Redoublant';
+            case ResultatFinal::DECISION_EXCLUS: return 'Exclu';
+            default: return 'Indéterminé';
         }
     }
 
-    // ✅ MÉTHODES DE SIMULATION (CONSERVATION DE L'EXISTANT)
-    public function simulerDecisions()
+    public function updatedSelectedAnneeUniversitaire()
     {
-        try {
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                toastr()->error('Veuillez sélectionner un niveau et une année universitaire.');
-                return;
-            }
-
-            $resultats = $this->simulationParams['session_type'] === 'session1' ?
-                $this->resultatsSession1 : $this->resultatsSession2;
-
-            if (empty($resultats)) {
-                toastr()->error('Aucun résultat à simuler.');
-                return;
-            }
-
-            $stats = [
-                'admis' => 0,
-                'rattrapage' => 0,
-                'redoublant' => 0,
-                'exclus' => 0,
-                'changements' => 0
-            ];
-
-            $this->simulationResults = [];
-
-            foreach ($resultats as $index => $resultat) {
-                $nouvelleDécision = $this->simulerDecisionEtudiant($resultat);
-                $changement = $resultat['decision'] !== $nouvelleDécision;
-
-                if ($changement) {
-                    $stats['changements']++;
-                }
-
-                $stats[$nouvelleDécision]++;
-
-                $this->simulationResults[] = [
-                    'etudiant' => $resultat['etudiant'],
-                    'decision_actuelle' => $resultat['decision'],
-                    'nouvelle_decision' => $nouvelleDécision,
-                    'changement' => $changement,
-                    'moyenne_generale' => $resultat['moyenne_generale'],
-                    'credits_valides' => $resultat['credits_valides']
-                ];
-            }
-
-            $sessionName = $this->simulationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
-
-            toastr()->info(
-                "🔍 Simulation {$sessionName}: {$stats['changements']} changements détectés. " .
-                "Nouveaux résultats: {$stats['admis']} admis, {$stats['rattrapage']} rattrapage, " .
-                "{$stats['redoublant']} redoublant, {$stats['exclus']} exclus"
-            );
-
-        } catch (\Exception $e) {
-            Log::error('Erreur lors de la simulation: ' . $e->getMessage());
-            toastr()->error('Erreur lors de la simulation: ' . $e->getMessage());
+        if ($this->selectedAnneeUniversitaire) {
+            $this->loadSessions();
+            $this->checkSession2Availability();
+            $this->resetResults(); // ✅ Reset seulement les résultats, pas les sélections
+            $this->updateNomsAffiches();
+            $this->updateEtapeActuelle();
+            $this->updatePeutChargerResultats();
         }
     }
-
-    private function simulerDecisionEtudiant($resultat)
-    {
-        $creditsValides = $resultat['credits_valides'];
-        $hasNoteEliminatoire = $resultat['has_note_eliminatoire'];
-        $sessionType = $this->simulationParams['session_type'];
-
-        if ($sessionType === 'session1') {
-            $creditsRequis = $this->simulationParams['credits_admission_session1'];
-            $appliquerEliminatoire = $this->simulationParams['appliquer_note_eliminatoire_s1'];
-
-            if ($appliquerEliminatoire && $hasNoteEliminatoire) {
-                return ResultatFinal::DECISION_RATTRAPAGE;
-            }
-
-            return $creditsValides >= $creditsRequis ?
-                ResultatFinal::DECISION_ADMIS : ResultatFinal::DECISION_RATTRAPAGE;
-        } else {
-            $creditsAdmission = $this->simulationParams['credits_admission_session2'];
-            $creditsRedoublement = $this->simulationParams['credits_redoublement_session2'];
-            $appliquerEliminatoire = $this->simulationParams['appliquer_note_eliminatoire_s2'];
-
-            if ($appliquerEliminatoire && $hasNoteEliminatoire) {
-                return ResultatFinal::DECISION_EXCLUS;
-            }
-
-            if ($creditsValides >= $creditsAdmission) {
-                return ResultatFinal::DECISION_ADMIS;
-            } elseif ($creditsValides >= $creditsRedoublement) {
-                return ResultatFinal::DECISION_REDOUBLANT;
-            } else {
-                return ResultatFinal::DECISION_EXCLUS;
-            }
-        }
-    }
-
-    public function resetSimulation()
-    {
-        $this->simulationResults = [];
-        $this->initializeSimulationParams();
-        toastr()->info('Simulation réinitialisée.');
-    }
-
-    public function appliquerSimulation()
-    {
-        try {
-            if (empty($this->simulationResults)) {
-                toastr()->error('Aucune simulation à appliquer. Veuillez d\'abord simuler les décisions.');
-                return;
-            }
-
-            $sessionId = $this->simulationParams['session_type'] === 'session1' ?
-                $this->sessionNormale->id : $this->sessionRattrapage->id;
-
-            $changementsAppliques = 0;
-
-            DB::beginTransaction();
-
-            foreach ($this->simulationResults as $simulation) {
-                if ($simulation['changement']) {
-                    $this->appliquerDecisionEtudiant(
-                        $simulation['etudiant']->id,
-                        $sessionId,
-                        $simulation['nouvelle_decision']
-                    );
-                    $changementsAppliques++;
-                }
-            }
-
-            DB::commit();
-
-            $sessionName = $this->simulationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
-
-            toastr()->success("✅ Simulation appliquée! {$changementsAppliques} décisions mises à jour en {$sessionName}.");
-
-            $this->simulationResults = [];
-            $this->loadResultats();
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Erreur lors de l\'application de la simulation: ' . $e->getMessage());
-            toastr()->error('Erreur lors de l\'application: ' . $e->getMessage());
-        }
-    }
-
-    private function appliquerDecisionEtudiant($etudiantId, $sessionId, $nouvelleDecision)
-    {
-        $resultats = ResultatFinal::where('session_exam_id', $sessionId)
-            ->where('etudiant_id', $etudiantId)
-            ->where('statut', ResultatFinal::STATUT_PUBLIE)
-            ->get();
-
-        foreach ($resultats as $resultat) {
-            $ancienneDecision = $resultat->decision;
-
-            $resultat->update([
-                'decision' => $nouvelleDecision,
-                'modifie_par' => Auth::id()
-            ]);
-
-            // ✅ CORRECTION : Utiliser la nouvelle méthode
-            if (class_exists('App\Models\ResultatFinalHistorique')) {
-                ResultatFinalHistorique::creerEntreeSimulationAppliquee(
-                    $resultat->id,
-                    $ancienneDecision,
-                    $nouvelleDecision,
-                    Auth::id(),
-                    $this->simulationParams
-                );
-            }
-        }
-    }
-
-    // ✅ MÉTHODES POUR APPLIQUER LA LOGIQUE MÉDECINE STANDARD
-    public function appliquerLogiqueStandard($sessionType)
-    {
-        try {
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                toastr()->error('Veuillez sélectionner un niveau et une année universitaire.');
-                return;
-            }
-
-            $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-            if (!$session) {
-                toastr()->error('Session non trouvée.');
-                return;
-            }
-
-            $calculService = new CalculAcademiqueService();
-
-            // Appliquer avec paramètres par défaut logique médecine
-            $result = $calculService->appliquerDecisionsSession($session->id, true, false);
-
-            if ($result['success']) {
-                $stats = $result['statistiques'];
-                $sessionName = $sessionType === 'session1' ? 'Session 1' : 'Session 2';
-
-                toastr()->success(
-                    "✅ Logique médecine standard appliquée en {$sessionName}! " .
-                    "Résultats : {$stats['decisions']['admis']} admis, {$stats['decisions']['rattrapage']} rattrapage, " .
-                    "{$stats['decisions']['redoublant']} redoublant, {$stats['decisions']['exclus']} exclus"
-                );
-
-                $this->loadResultats(); // Recharger les résultats
-
-            } else {
-                toastr()->error('Erreur lors de l\'application: ' . $result['message']);
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur application logique médecine standard: ' . $e->getMessage());
-            toastr()->error('Erreur lors de l\'application de la logique standard: ' . $e->getMessage());
-        }
-    }
-
-    // ✅ MÉTHODES DE RECALCUL
-    public function recalculerTout()
-    {
-        try {
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                toastr()->error('Veuillez sélectionner un niveau et une année universitaire.');
-                return;
-            }
-
-            // Recalculer Session 1
-            if ($this->sessionNormale) {
-                $this->appliquerLogiqueStandard('session1');
-            }
-
-            // Recalculer Session 2 si disponible
-            if ($this->showSession2 && $this->sessionRattrapage) {
-                $this->appliquerLogiqueStandard('session2');
-            }
-
-            toastr()->success('✅ Recalcul terminé pour toutes les sessions disponibles!');
-
-        } catch (\Exception $e) {
-            Log::error('Erreur recalcul tout: ' . $e->getMessage());
-            toastr()->error('Erreur lors du recalcul: ' . $e->getMessage());
-        }
-    }
-
 
     public function refreshData()
     {
@@ -2177,48 +1309,6 @@ class ResultatsFinale extends Component
         }
     }
 
-
-    // ✅ SOLUTION 4 : Méthode de refresh manuel améliorée
-    public function refreshResultats()
-    {
-        try {
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                toastr()->warning('Veuillez sélectionner un niveau et une année universitaire.');
-                return;
-            }
-
-            // ✅ VIDER COMPLÈTEMENT LE CACHE
-            $this->resultatsSession1 = [];
-            $this->resultatsSession2 = [];
-            $this->statistiquesSession1 = [];
-            $this->statistiquesSession2 = [];
-
-            // ✅ FORCER LE RECHARGEMENT
-            $this->forceReloadData();
-
-            toastr()->success('✅ Résultats actualisés avec succès');
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur rafraîchissement résultats: ' . $e->getMessage());
-            toastr()->error('Erreur lors du rafraîchissement des résultats.');
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE BONUS : Recharge les sessions
-     */
-    public function refreshSessions()
-    {
-        try {
-            $this->loadSessions();
-            $this->checkSession2Availability();
-            toastr()->info('Sessions actualisées');
-
-        } catch (\Exception $e) {
-            Log::error('Erreur rafraîchissement sessions: ' . $e->getMessage());
-            toastr()->error('Erreur lors du rafraîchissement des sessions.');
-        }
-    }
 
     /**
      * ✅ MÉTHODE BONUS : Reset complet du composant
@@ -2255,717 +1345,51 @@ class ResultatsFinale extends Component
         }
     }
 
-
-    /**
-     * ✅ MÉTHODE : Sélectionner toutes les colonnes
-     */
-    public function selectionnerToutesColonnes()
+    private function initializeSimulationParams()
     {
-        $this->exportConfig['colonnes'] = [
-            'rang' => true,
-            'nom_complet' => true,
-            'matricule' => true,
-            'moyenne' => true,
-            'credits' => true,
-            'decision' => true,
-            'niveau' => true,
+        $this->simulationParams = [
+            'session_type' => 'session1',
+            'credits_admission_session1' => 60,
+            'appliquer_note_eliminatoire_s1' => true,
+            'credits_admission_session2' => 40,
+            'credits_redoublement_session2' => 20,
+            'appliquer_note_eliminatoire_s2' => true,
         ];
 
-        toastr()->info('Toutes les colonnes sélectionnées');
-    }
-
-    /**
-     * ✅ MÉTHODE : Désélectionner toutes les colonnes
-     */
-    public function deselectionnerToutesColonnes()
-    {
-        $this->exportConfig['colonnes'] = [
-            'rang' => false,
-            'nom_complet' => false,
-            'matricule' => false,
-            'moyenne' => false,
-            'credits' => false,
-            'decision' => false,
-            'niveau' => false,
+        // ✅ NOUVEAU : Initialiser aussi deliberationParams avec pourcentages
+        $this->deliberationParams = [
+            'session_type' => 'session1',
+            'session_id' => null,
+            'credits_admission_s1' => 60,
+            'credits_admission_s2' => 40,
+            'credits_redoublement_s2' => 20,
+            'note_eliminatoire_bloque_s1' => true,
+            'note_eliminatoire_exclusion_s2' => true
         ];
-
-        toastr()->warning('Toutes les colonnes désélectionnées');
+        
+        // ✅ NOUVEAU : Initialiser avec pourcentages
+        $this->initialiserParametresAvecPourcentages();
     }
 
-
-    /**
-     * ✅ MÉTHODE : Validation des colonnes sélectionnées
-     */
-    private function validerColonnesExport()
+    // ✅ MÉTHODE 5 : Initialiser les paramètres avec pourcentages par défaut
+    private function initialiserParametresAvecPourcentages()
     {
-        $colonnesSelectionnees = array_filter($this->exportConfig['colonnes']);
-
-        if (empty($colonnesSelectionnees)) {
-            $this->addError('export', 'Veuillez sélectionner au moins une colonne à exporter.');
-            return false;
-        }
-
-        // Vérifier qu'on a au moins nom ou matricule pour identifier les étudiants
-        if (!($this->exportConfig['colonnes']['nom_complet'] || $this->exportConfig['colonnes']['matricule'])) {
-            $this->addError('export', 'Veuillez sélectionner au moins le nom ou le matricule pour identifier les étudiants.');
-            return false;
-        }
-
-        return true;
+        $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+        
+        // Ajouter les champs pourcentages aux paramètres existants
+        $this->deliberationParams['credits_totaux_disponibles'] = $creditsTotaux;
+        
+        // Calculer les pourcentages par défaut basés sur les crédits actuels
+        $this->deliberationParams['pourcentage_admission_s1'] = 
+            $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_admission_s1'] ?? 60);
+            
+        $this->deliberationParams['pourcentage_admission_s2'] = 
+            $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_admission_s2'] ?? 40);
+            
+        $this->deliberationParams['pourcentage_redoublement_s2'] = 
+            $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_redoublement_s2'] ?? 20);
+            
     }
-
-
-    /**
-     * ✅ MÉTHODE : Générer le PDF avec configuration
-     */
-    private function genererPDFAvecConfig($donnees, $session, $niveau, $parcours, $anneeUniv)
-    {
-        try {
-            $filename = $this->genererNomFichier('pdf', $session, $niveau, $parcours, $anneeUniv);
-
-            $this->showExportModal = false;
-            toastr()->success("Export PDF généré avec succès ! (" . count($donnees) . " résultats)");
-
-            $pdfExporter = new AdmisDeliberationPDF(
-                $donnees,
-                $session,
-                $niveau,
-                $parcours,
-                $this->exportConfig['colonnes']
-            );
-
-            $pdf = $pdfExporter->generate();
-
-            return response()->streamDownload(function() use ($pdf) {
-                echo $pdf->output();
-            }, $filename);
-
-        } catch (\Exception $e) {
-            Log::error('Erreur génération PDF avec config', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Exporter tous les résultats de simulation (raccourci)
-     */
-    public function exporterTousSimulation($type = 'pdf')
-    {
-        try {
-            // Configuration par défaut pour tous les résultats
-            $this->exportConfig['filtres']['decision_filter'] = 'tous';
-            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
-            $this->exportConfig['tri']['ordre'] = 'desc';
-
-            $this->exportType = $type;
-            $this->exportData = 'simulation';
-
-            return $this->genererExportAvecConfig();
-
-        } catch (\Exception $e) {
-            Log::error('Erreur export tous simulation', ['error' => $e->getMessage()]);
-            toastr()->error('Erreur lors de l\'export : ' . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Exporter par décision spécifique (depuis simulation)
-     */
-    public function exporterParDecisionSimulation($decision, $type = 'pdf')
-    {
-        try {
-            // Configuration pour une décision spécifique
-            $this->exportConfig['filtres']['decision_filter'] = $decision;
-            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
-            $this->exportConfig['tri']['ordre'] = 'desc';
-
-            $this->exportType = $type;
-            $this->exportData = 'simulation';
-
-            return $this->genererExportAvecConfig();
-
-        } catch (\Exception $e) {
-            Log::error('Erreur export par décision simulation', [
-                'decision' => $decision,
-                'error' => $e->getMessage()
-            ]);
-            toastr()->error('Erreur lors de l\'export : ' . $e->getMessage());
-        }
-    }
-
-
-        /**
-     * ✅ MÉTHODE : Générer l'export avec configuration (VERSION CORRIGÉE)
-     */
-    public function genererExportAvecConfig()
-    {
-        try {
-            // Validation des colonnes
-            if (!$this->validerColonnesExport()) {
-                return;
-            }
-
-            // Validation de base
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                $this->addError('export', 'Veuillez sélectionner un niveau et une année universitaire.');
-                return;
-            }
-
-            // Récupérer les données brutes
-            $donneesRaw = $this->getDonneesExport($this->exportData);
-
-            if (empty($donneesRaw)) {
-                $this->addError('export', "Aucune donnée disponible pour l'export.");
-                return;
-            }
-
-            // Appliquer filtres et tri
-            $donneesFiltrees = $this->appliquerFiltresExport($donneesRaw);
-
-            if (empty($donneesFiltrees)) {
-                $this->addError('export', "Aucune donnée ne correspond aux filtres appliqués.");
-                return;
-            }
-
-            // Récupérer les métadonnées
-            $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-            // ✅ CORRECTION : Si on est en simulation, utiliser la session du paramètre délibération
-            if ($this->exportData === 'simulation' && !empty($this->deliberationParams['session_type'])) {
-                $session = $this->deliberationParams['session_type'] === 'session1' ?
-                    $this->sessionNormale : $this->sessionRattrapage;
-            }
-
-            $niveau = Niveau::find($this->selectedNiveau);
-            $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
-            $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
-
-            // Générer selon le type
-            if ($this->exportType === 'pdf') {
-                return $this->genererPDFAvecConfig($donneesFiltrees, $session, $niveau, $parcours, $anneeUniv);
-            } else {
-                return $this->genererExcelAvecConfig($donneesFiltrees, $session, $niveau, $parcours, $anneeUniv);
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur génération export avec config', [
-                'type' => $this->exportType,
-                'source' => $this->exportData,
-                'error' => $e->getMessage()
-            ]);
-            $this->addError('export', 'Erreur lors de la génération : ' . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Actions rapides d'export depuis les boutons de simulation
-     */
-    public function exportRapideDepuisSimulation($type, $filtre = 'tous')
-    {
-        if (empty($this->simulationDeliberation)) {
-            toastr()->error('Aucune simulation disponible pour l\'export.');
-            return;
-        }
-
-        try {
-            // Configuration rapide
-            $this->exportType = $type;
-            $this->exportData = 'simulation';
-            $this->exportConfig['filtres']['decision_filter'] = $filtre;
-            $this->exportConfig['tri']['champ'] = 'moyenne_generale';
-            $this->exportConfig['tri']['ordre'] = 'desc';
-
-            // Colonnes par défaut
-            $this->exportConfig['colonnes'] = [
-                'rang' => true,
-                'nom_complet' => true,
-                'matricule' => true,
-                'moyenne' => true,
-                'credits' => true,
-                'decision' => true,
-                'niveau' => false,
-            ];
-
-            return $this->genererExportAvecConfig();
-
-        } catch (\Exception $e) {
-            Log::error('Erreur export rapide simulation', [
-                'type' => $type,
-                'filtre' => $filtre,
-                'error' => $e->getMessage()
-            ]);
-            toastr()->error('Erreur lors de l\'export rapide : ' . $e->getMessage());
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Obtenir les statistiques des données filtrées pour affichage (CORRIGÉE)
-     */
-    public function getStatistiquesExportPreview()
-    {
-        if (!$this->showExportModal) {
-            return null;
-        }
-
-        try {
-            $donneesRaw = $this->getDonneesExport($this->exportData);
-            if (empty($donneesRaw)) {
-                return null;
-            }
-
-            $donneesFiltrees = $this->appliquerFiltresExport($donneesRaw);
-
-            $stats = [
-                'total_initial' => count($donneesRaw),
-                'total_filtre' => count($donneesFiltrees),
-                'decisions' => []
-            ];
-
-            if (!empty($donneesFiltrees)) {
-                $champDecision = $this->exportData === 'simulation' ? 'decision_simulee' : 'decision_actuelle';
-                $decisions = collect($donneesFiltrees)->pluck($champDecision);
-
-                $stats['decisions'] = [
-                    'admis' => $decisions->filter(function($d) { return $d === 'admis'; })->count(),
-                    'rattrapage' => $decisions->filter(function($d) { return $d === 'rattrapage'; })->count(),
-                    'redoublant' => $decisions->filter(function($d) { return $d === 'redoublant'; })->count(),
-                    'exclus' => $decisions->filter(function($d) { return $d === 'exclus'; })->count(),
-                ];
-
-                $moyennes = collect($donneesFiltrees)->pluck('moyenne_generale');
-                $stats['moyenne_min'] = $moyennes->min();
-                $stats['moyenne_max'] = $moyennes->max();
-                $stats['moyenne_moyenne'] = round($moyennes->avg(), 2);
-            }
-
-            return $stats;
-
-        } catch (\Exception $e) {
-            Log::error('Erreur calcul stats export preview', ['error' => $e->getMessage()]);
-            return null;
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Preview des données avant export (CORRIGÉE)
-     */
-    public function previewDonneesExport()
-    {
-        try {
-            $donneesRaw = $this->getDonneesExport($this->exportData);
-            if (empty($donneesRaw)) {
-                return [];
-            }
-
-            $donneesFiltrees = $this->appliquerFiltresExport($donneesRaw);
-
-            // Retourner seulement les 10 premiers pour le preview
-            return array_slice($donneesFiltrees, 0, 10);
-
-        } catch (\Exception $e) {
-            Log::error('Erreur preview données export', ['error' => $e->getMessage()]);
-            return [];
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE : Toggle colonne export
-     */
-    public function toggleColonneExport($colonne)
-    {
-        $this->exportConfig['colonnes'][$colonne] = !$this->exportConfig['colonnes'][$colonne];
-    }
-
-
-    /**
-     * ✅ NOUVELLE MÉTHODE : Vérifie si les données doivent être rafraîchies
-     */
-    private function shouldRefreshData()
-    {
-        // Rafraîchir si on a des filtres mais pas de résultats
-        return ($this->selectedNiveau && $this->selectedAnneeUniversitaire) &&
-            (empty($this->resultatsSession1) && empty($this->resultatsSession2));
-    }
-
-
-    /**
-     * ✅ NOUVELLE MÉTHODE : Enrichit les résultats avec l'info de changement
-     */
-    private function enrichirResultatsAvecChangements($resultats, $sessionId)
-    {
-        if (empty($resultats)) return $resultats;
-
-        try {
-            // Récupérer l'historique des changements depuis status_history
-            $etudiantsIds = collect($resultats)->pluck('etudiant.id')->unique();
-
-            $historiqueChangements = DB::table('resultats_finaux')
-                ->whereIn('etudiant_id', $etudiantsIds)
-                ->where('session_exam_id', $sessionId)
-                ->where('jury_validated', true)
-                ->whereNotNull('status_history')
-                ->select('etudiant_id', 'status_history', 'decision', 'created_at', 'updated_at')
-                ->get()
-                ->groupBy('etudiant_id');
-
-            // Enrichir chaque résultat
-            foreach ($resultats as &$resultat) {
-                $etudiantId = $resultat['etudiant']->id;
-                $decisionActuelle = $resultat['decision'];
-                $juryValidated = $resultat['jury_validated'] ?? false;
-
-                // Initialiser les informations de changement
-                $resultat['decision_originale'] = null;
-                $resultat['a_change'] = false;
-                $resultat['date_changement'] = null;
-                $resultat['type_changement'] = 'aucun';
-
-                if ($juryValidated && isset($historiqueChangements[$etudiantId])) {
-                    $historique = $historiqueChangements[$etudiantId]->first();
-
-                    if ($historique->status_history) {
-                        $statusHistory = json_decode($historique->status_history, true);
-
-                        // Chercher la dernière délibération
-                        $derniereDeliberation = collect($statusHistory)
-                            ->filter(function($entry) {
-                                return in_array($entry['type_action'] ?? '', [
-                                    'deliberation_appliquee',
-                                    'decision_deliberation'
-                                ]);
-                            })
-                            ->sortByDesc('date_action')
-                            ->first();
-
-                        if ($derniereDeliberation) {
-                            $decisionPrecedente = $derniereDeliberation['decision_precedente'] ?? null;
-                            $decisionNouvelle = $derniereDeliberation['decision_nouvelle'] ?? $decisionActuelle;
-
-                            $resultat['decision_originale'] = $decisionPrecedente;
-                            $resultat['a_change'] = $decisionPrecedente !== $decisionNouvelle;
-                            $resultat['date_changement'] = $derniereDeliberation['date_action'] ?? null;
-
-                            // Analyser le type de changement
-                            if ($resultat['a_change']) {
-                                $resultat['type_changement'] = $this->determinerTypeChangement(
-                                    $decisionPrecedente,
-                                    $decisionNouvelle
-                                );
-                            } else {
-                                $resultat['type_changement'] = 'confirme';
-                            }
-                        }
-                    }
-                }
-
-                // Marquer les promotions exceptionnelles
-                $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
-                if ($decisionActuelle === 'admis' && $hasNoteEliminatoire && $juryValidated) {
-                    $resultat['promotion_exceptionnelle'] = true;
-                    if ($resultat['type_changement'] === 'aucun') {
-                        $resultat['type_changement'] = 'promotion_exceptionnelle';
-                    }
-                } else {
-                    $resultat['promotion_exceptionnelle'] = false;
-                }
-            }
-
-            return $resultats;
-
-        } catch (\Exception $e) {
-            Log::error('Erreur enrichissement changements', [
-                'session_id' => $sessionId,
-                'error' => $e->getMessage()
-            ]);
-
-            // En cas d'erreur, retourner les résultats sans enrichissement
-            return $resultats;
-        }
-    }
-
-
-    /**
-     * ✅ HELPER : Détermine le type de changement
-     */
-    private function determinerTypeChangement($ancienne, $nouvelle)
-    {
-        if ($ancienne === $nouvelle) {
-            return 'confirme';
-        }
-
-        // Promotions
-        if ($ancienne === 'rattrapage' && $nouvelle === 'admis') {
-            return 'promotion';
-        }
-        if ($ancienne === 'redoublant' && $nouvelle === 'admis') {
-            return 'promotion_majeure';
-        }
-        if ($ancienne === 'exclus' && in_array($nouvelle, ['admis', 'redoublant'])) {
-            return 'grace';
-        }
-
-        // Rétrogradations
-        if ($ancienne === 'admis' && $nouvelle === 'rattrapage') {
-            return 'retrogradation';
-        }
-        if ($ancienne === 'admis' && in_array($nouvelle, ['redoublant', 'exclus'])) {
-            return 'retrogradation_majeure';
-        }
-
-        // Changements latéraux
-        if ($ancienne === 'rattrapage' && $nouvelle === 'redoublant') {
-            return 'changement_lateral';
-        }
-
-        return 'autre';
-    }
-
-
-    // ✅ MÉTHODE RENDER FINALE
-    public function render()
-    {
-        // Fetch results, potentially restricted by role
-        $results = ResultatFinal::query();
-
-        if (!Auth::user()->hasRole('superadmin')) {
-            // Example restriction for enseignant/secretaire
-            $results->where('visible_to_enseignant', true); // Adjust based on your model
-        }
-
-        // ✅ AMÉLIORATION : Vérifier le statut de délibération pour chaque session
-        $deliberationStatus = [
-            'session1' => $this->checkDeliberationStatus('session1'),
-            'session2' => $this->checkDeliberationStatus('session2')
-        ];
-
-        // ✅ AMÉLIORATION : Récupérer les statistiques de délibération
-        $statistiquesDeliberation = [
-            'session1' => $this->getStatistiquesDeliberation('session1'),
-            'session2' => $this->getStatistiquesDeliberation('session2')
-        ];
-
-        // ✅ AJOUT : Forcer le rafraîchissement si nécessaire
-        if ($this->shouldRefreshData()) {
-            $this->loadResultats();
-        }
-
-        return view('livewire.resultats.resultats-finale', [
-            'deliberationStatus' => $deliberationStatus,
-            'statistiquesDeliberation' => $statistiquesDeliberation
-        ]);
-    }
-
-    /**
-     * ✅ MÉTHODE : Initialiser les paramètres avec les dernières valeurs
-     */
-    private function initialiserParametresDeliberation()
-    {
-        $dernieresValeurs = $this->getDernieresValeursDeliberation();
-
-        // ✅ Session 1 (Normale)
-        if ($dernieresValeurs['session1']) {
-            $config = $dernieresValeurs['session1'];
-            $this->deliberationParams['credits_admission_s1'] = $config['credits_admission_s1'];
-            $this->deliberationParams['note_eliminatoire_bloque_s1'] = $config['note_eliminatoire_bloque_s1'];
-        } else {
-            // Valeurs par défaut logique médecine
-            $this->deliberationParams['credits_admission_s1'] = 60;
-            $this->deliberationParams['note_eliminatoire_bloque_s1'] = true;
-        }
-
-        // ✅ Session 2 (Rattrapage)
-        if ($dernieresValeurs['session2']) {
-            $config = $dernieresValeurs['session2'];
-            $this->deliberationParams['credits_admission_s2'] = $config['credits_admission_s2'];
-            $this->deliberationParams['credits_redoublement_s2'] = $config['credits_redoublement_s2'];
-            $this->deliberationParams['note_eliminatoire_exclusion_s2'] = $config['note_eliminatoire_exclusion_s2'];
-        } else {
-            // Valeurs par défaut logique médecine
-            $this->deliberationParams['credits_admission_s2'] = 40;
-            $this->deliberationParams['credits_redoublement_s2'] = 20;
-            $this->deliberationParams['note_eliminatoire_exclusion_s2'] = true;
-        }
-
-        // ✅ Session type par défaut
-        if (!isset($this->deliberationParams['session_type'])) {
-            $this->deliberationParams['session_type'] = 'session1';
-        }
-    }
-
-
-
-    /**
-     * ✅ MÉTHODE CORRIGÉE : Récupérer les dernières valeurs de délibération
-     */
-    private function getDernieresValeursDeliberation()
-    {
-        try {
-            $sessionNormaleConfig = null;
-            $sessionRattrapageConfig = null;
-
-            // Récupérer config Session Normale
-            if ($this->sessionNormale) {
-                $sessionNormaleConfig = DeliberationConfig::where('niveau_id', $this->selectedNiveau)
-                    ->where('session_id', $this->sessionNormale->id)
-                    ->when($this->selectedParcours, function($q) {
-                        $q->where('parcours_id', $this->selectedParcours);
-                    }, function($q) {
-                        $q->whereNull('parcours_id');
-                    })
-                    ->first();
-            }
-
-            // Récupérer config Session Rattrapage
-            if ($this->sessionRattrapage) {
-                $sessionRattrapageConfig = DeliberationConfig::where('niveau_id', $this->selectedNiveau)
-                    ->where('session_id', $this->sessionRattrapage->id)
-                    ->when($this->selectedParcours, function($q) {
-                        $q->where('parcours_id', $this->selectedParcours);
-                    }, function($q) {
-                        $q->whereNull('parcours_id');
-                    })
-                    ->first();
-            }
-
-            // ✅ CORRECTION : Structure standardisée avec valeurs par défaut
-            return [
-                'session1' => $sessionNormaleConfig ? [
-                    'delibere' => $sessionNormaleConfig->delibere,
-                    'date_deliberation' => $sessionNormaleConfig->date_deliberation,
-                    'delibere_par' => $sessionNormaleConfig->delibere_par,
-                    'credits_admission_s1' => $sessionNormaleConfig->credits_admission_s1 ?? 60,
-                    'note_eliminatoire_bloque_s1' => $sessionNormaleConfig->note_eliminatoire_bloque_s1 ?? true,
-                    'config_id' => $sessionNormaleConfig->id
-                ] : [
-                    // ✅ Valeurs par défaut si aucune config
-                    'delibere' => false,
-                    'date_deliberation' => null,
-                    'delibere_par' => null,
-                    'credits_admission_s1' => 60,
-                    'note_eliminatoire_bloque_s1' => true,
-                    'config_id' => null
-                ],
-
-                'session2' => $sessionRattrapageConfig ? [
-                    'delibere' => $sessionRattrapageConfig->delibere,
-                    'date_deliberation' => $sessionRattrapageConfig->date_deliberation,
-                    'delibere_par' => $sessionRattrapageConfig->delibere_par,
-                    'credits_admission_s2' => $sessionRattrapageConfig->credits_admission_s2 ?? 40,
-                    'credits_redoublement_s2' => $sessionRattrapageConfig->credits_redoublement_s2 ?? 20,
-                    'note_eliminatoire_exclusion_s2' => $sessionRattrapageConfig->note_eliminatoire_exclusion_s2 ?? true,
-                    'config_id' => $sessionRattrapageConfig->id
-                ] : [
-                    // ✅ Valeurs par défaut si aucune config
-                    'delibere' => false,
-                    'date_deliberation' => null,
-                    'delibere_par' => null,
-                    'credits_admission_s2' => 40,
-                    'credits_redoublement_s2' => 20,
-                    'note_eliminatoire_exclusion_s2' => true,
-                    'config_id' => null
-                ]
-            ];
-
-        } catch (\Exception $e) {
-            Log::error('Erreur récupération config délibération: ' . $e->getMessage());
-
-            // ✅ Retourner des valeurs par défaut en cas d'erreur
-            return [
-                'session1' => [
-                    'delibere' => false,
-                    'date_deliberation' => null,
-                    'delibere_par' => null,
-                    'credits_admission_s1' => 60,
-                    'note_eliminatoire_bloque_s1' => true,
-                    'config_id' => null
-                ],
-                'session2' => [
-                    'delibere' => false,
-                    'date_deliberation' => null,
-                    'delibere_par' => null,
-                    'credits_admission_s2' => 40,
-                    'credits_redoublement_s2' => 20,
-                    'note_eliminatoire_exclusion_s2' => true,
-                    'config_id' => null
-                ]
-            ];
-        }
-    }
-
-    /**
-     * ✅ PROPRIÉTÉ COMPUTED : Dernières valeurs délibération
-     */
-    public function getDernieresValeursDeliberationProperty()
-    {
-           // ✅ Cache le résultat pour éviter les requêtes répétées
-        return once(function () {
-            return $this->getDernieresValeursDeliberation();
-        });
-    }
-
-    /**
-     * ✅ MÉTHODE : Restaurer les dernières valeurs de délibération
-     */
-    public function restaurerDernieresValeurs()
-    {
-        try {
-            $dernieresValeurs = $this->getDernieresValeursDeliberation();
-
-            // ✅ Restaurer les valeurs selon le type de session sélectionné
-            $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-
-            if ($sessionType === 'session1' && $dernieresValeurs['session1']) {
-                $config = $dernieresValeurs['session1'];
-                $this->deliberationParams['credits_admission_s1'] = $config['credits_admission_s1'];
-                $this->deliberationParams['note_eliminatoire_bloque_s1'] = $config['note_eliminatoire_bloque_s1'];
-
-                toastr()->success('Dernières valeurs de Session 1 restaurées');
-
-            } elseif ($sessionType === 'session2' && $dernieresValeurs['session2']) {
-                $config = $dernieresValeurs['session2'];
-                $this->deliberationParams['credits_admission_s2'] = $config['credits_admission_s2'];
-                $this->deliberationParams['credits_redoublement_s2'] = $config['credits_redoublement_s2'];
-                $this->deliberationParams['note_eliminatoire_exclusion_s2'] = $config['note_eliminatoire_exclusion_s2'];
-
-                toastr()->success('Dernières valeurs de Session 2 restaurées');
-
-            } else {
-                toastr()->warning('Aucune configuration précédente trouvée pour cette session');
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur restauration dernières valeurs: ' . $e->getMessage());
-            toastr()->error('Erreur lors de la restauration des dernières valeurs');
-        }
-    }
-
-
-
-    // ✅ NOUVELLE MÉTHODE : Watchers pour les pourcentages
-    public function updatedDeliberationParamsPourcentageAdmissionS1()
-    {
-        $this->deliberationParams['credits_admission_s1'] = 
-            $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s1']);
-    }
-
-    public function updatedDeliberationParamsPourcentageAdmissionS2()
-    {
-        $this->deliberationParams['credits_admission_s2'] = 
-            $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s2']);
-    }
-
-    public function updatedDeliberationParamsPourcentageRedoublementS2()
-    {
-        $this->deliberationParams['credits_redoublement_s2'] = 
-            $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_redoublement_s2']);
-    }
-
 
 
     // ✅ MÉTHODE 1 : Calculer les crédits totaux disponibles pour un niveau/parcours
@@ -2994,13 +1418,6 @@ class ResultatsFinale extends Component
         }
     }
 
-    // ✅ MÉTHODE 2 : Convertir pourcentage en crédits
-    private function convertirPourcentageEnCredits($pourcentage)
-    {
-        $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
-        return round(($pourcentage / 100) * $creditsTotaux);
-    }
-
     // ✅ MÉTHODE 3 : Convertir crédits en pourcentage
     private function convertirCreditsEnPourcentage($credits)
     {
@@ -3013,230 +1430,159 @@ class ResultatsFinale extends Component
         return round(($credits / $creditsTotaux) * 100, 1);
     }
 
-    // ✅ MÉTHODE 4 : Mise à jour des paramètres délibération avec pourcentages
-    public function mettreAJourParametresAvecPourcentages()
+    /**
+     * Appliquer la délibération pour une session donnée
+     */
+    public function appliquerDeliberation(): void
     {
-        try {
-            $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
-            
-            // Mettre à jour les paramètres avec les crédits réels
-            if (isset($this->deliberationParams['pourcentage_admission_s1'])) {
-                $this->deliberationParams['credits_admission_s1'] = 
-                    $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s1']);
-            }
-            
-            if (isset($this->deliberationParams['pourcentage_admission_s2'])) {
-                $this->deliberationParams['credits_admission_s2'] = 
-                    $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_admission_s2']);
-            }
-            
-            if (isset($this->deliberationParams['pourcentage_redoublement_s2'])) {
-                $this->deliberationParams['credits_redoublement_s2'] = 
-                    $this->convertirPourcentageEnCredits($this->deliberationParams['pourcentage_redoublement_s2']);
-            }
-            
-            
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur mise à jour paramètres pourcentages', [
-                'error' => $e->getMessage()
-            ]);
-        }
-    }
-
-    // ✅ MÉTHODE 5 : Initialiser les paramètres avec pourcentages par défaut
-    private function initialiserParametresAvecPourcentages()
-    {
-        $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
+        $this->showConfirmationModal = false;
         
-        // Ajouter les champs pourcentages aux paramètres existants
-        $this->deliberationParams['credits_totaux_disponibles'] = $creditsTotaux;
-        
-        // Calculer les pourcentages par défaut basés sur les crédits actuels
-        $this->deliberationParams['pourcentage_admission_s1'] = 
-            $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_admission_s1'] ?? 60);
-            
-        $this->deliberationParams['pourcentage_admission_s2'] = 
-            $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_admission_s2'] ?? 40);
-            
-        $this->deliberationParams['pourcentage_redoublement_s2'] = 
-            $this->convertirCreditsEnPourcentage($this->deliberationParams['credits_redoublement_s2'] ?? 20);
-            
-    }
-
-    // ✅ MÉTHODE 6 : Simulation délibération mise à jour avec logique dynamique
-    public function simulerDeliberationAvecPourcentages()
-    {
-        try {
-            // Vérifications préalables existantes...
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                $this->addError('deliberation', 'Veuillez sélectionner un niveau et une année.');
-                return;
-            }
-
-            // Mettre à jour les paramètres avec les pourcentages
-            $this->mettreAJourParametresAvecPourcentages();
-            
-            // S'assurer que session_id est défini
-            if (!isset($this->deliberationParams['session_id']) || !$this->deliberationParams['session_id']) {
-                $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-                $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-                if (!$session) {
-                    $this->addError('deliberation', 'Session non trouvée.');
-                    return;
-                }
-
-                $this->deliberationParams['session_id'] = $session->id;
-            }
-
-            // Récupérer les résultats actuels
-            $resultatsActuels = $this->deliberationParams['session_type'] === 'session1'
-                ? $this->resultatsSession1
-                : $this->resultatsSession2;
-
-            if (empty($resultatsActuels)) {
-                $this->addError('deliberation', 'Aucun résultat disponible pour la simulation');
-                return;
-            }
-
-            $resultatsDetailles = [];
-            $statistiques = [
-                'admis' => 0,
-                'rattrapage' => 0,
-                'redoublant' => 0,
-                'exclus' => 0,
-                'changements' => 0
-            ];
-
-            $creditsTotaux = $this->calculerCreditsTotauxDisponibles();
-
-            foreach ($resultatsActuels as $index => $resultat) {
-                $etudiant = $resultat['etudiant'] ?? null;
-
-                if (!$etudiant) {
-                    continue;
-                }
-
-                // ✅ UTILISER LA LOGIQUE DYNAMIQUE avec crédits réels
-                $decisionSimulee = $this->calculerDecisionSelonParametresDynamiques($resultat, $creditsTotaux);
-                $decisionActuelle = $resultat['decision'] ?? 'rattrapage';
-
-                $changement = $decisionActuelle !== $decisionSimulee;
-                if ($changement) {
-                    $statistiques['changements']++;
-                }
-
-                $statistiques[$decisionSimulee]++;
-
-                $resultatsDetailles[] = [
-                    'etudiant_id' => $etudiant->id,
-                    'etudiant' => $etudiant,
-                    'nom' => $etudiant->nom,
-                    'prenom' => $etudiant->prenom,
-                    'matricule' => $etudiant->matricule,
-                    'nom_complet' => $etudiant->nom . ' ' . $etudiant->prenom,
-                    'rang' => $index + 1,
-                    'moyenne_generale' => $resultat['moyenne_generale'] ?? 0,
-                    'credits_valides' => $resultat['credits_valides'] ?? 0,
-                    'total_credits' => $creditsTotaux,
-                    'pourcentage_credits' => $creditsTotaux > 0 ? 
-                        round(($resultat['credits_valides'] ?? 0) / $creditsTotaux * 100, 1) : 0,
-                    'has_note_eliminatoire' => $resultat['has_note_eliminatoire'] ?? false,
-                    'decision_actuelle' => $decisionActuelle,
-                    'decision_simulee' => $decisionSimulee,
-                    'changement' => $changement
-                ];
-            }
-
-            // Structure finale pour la vue
-            $this->simulationDeliberation = [
-                'success' => true,
-                'total_etudiants' => count($resultatsDetailles),
-                'credits_totaux_disponibles' => $creditsTotaux,
-                'statistiques' => $statistiques,
-                'resultats_detailles' => $resultatsDetailles,
-                'parametres_utilises' => $this->deliberationParams
-            ];
-
-            // Message de succès avec informations dynamiques
-            $sessionName = $this->deliberationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
-            $totalCreditsMessage = "Crédits disponibles: {$creditsTotaux}";
-            
-            toastr()->info(
-                "🔍 Simulation {$sessionName} ({$totalCreditsMessage}) : {$statistiques['changements']} changements détectés. " .
-                "Nouveaux résultats : {$statistiques['admis']} admis, {$statistiques['rattrapage']} rattrapage, " .
-                "{$statistiques['redoublant']} redoublant, {$statistiques['exclus']} exclus"
+        // ✅ VÉRIFICATION DE SÉCURITÉ
+        if (!$this->deliberationApplicationService) {
+            $this->deliberationApplicationService = new DeliberationApplicationService(
+                $this->calculAcademiqueService ?: new CalculAcademiqueService()
             );
-
-        } catch (\Exception $e) {
-            Log::error('Erreur simulation délibération avec pourcentages: ' . $e->getMessage());
-            $this->addError('deliberation', 'Erreur lors de la simulation: ' . $e->getMessage());
+        }
+        
+        // Le service gère TOUT
+        $result = $this->deliberationApplicationService->appliquerDeliberationComplete(
+            $this->selectedNiveau,
+            $this->selectedParcours,
+            $this->sessionNormale,
+            $this->sessionRattrapage,
+            $this->deliberationParams,
+            $this->simulationDeliberation
+        );
+        
+        if ($result['success']) {
+            // Succès
+            toastr()->success($result['message']);
+            $this->handleSuccess($result['result'], $result['session']);
+        } else {
+            // Erreur
+            toastr()->error($result['message']);
+            $this->addError('deliberation', $result['error']);
         }
     }
 
-    // ✅ MÉTHODE 7 : Calcul décision avec logique dynamique
-    private function calculerDecisionSelonParametresDynamiques($resultat, $creditsTotaux)
+
+    /**
+     * Gérer le succès (version simplifiée)
+     */
+    private function handleSuccess(array $resultData, SessionExam $session): void
     {
         $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-        $creditsValides = $resultat['credits_valides'] ?? 0;
-        $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
-
-        if ($sessionType === 'session1') {
-            // SESSION 1 - Logique dynamique
-            $bloquerSiNote0 = $this->deliberationParams['note_eliminatoire_bloque_s1'] ?? true;
-
-            // Si note éliminatoire et option activée
-            if ($hasNoteEliminatoire && $bloquerSiNote0) {
-                return 'rattrapage';
-            }
-
-            // ✅ LOGIQUE DYNAMIQUE : 100% des crédits disponibles requis
-            return $creditsValides >= $creditsTotaux ? 'admis' : 'rattrapage';
-
-        } else {
-            // SESSION 2 - Logique dynamique
-            $pourcentageAdmission = $this->deliberationParams['pourcentage_admission_s2'] ?? 67;
-            $pourcentageRedoublement = $this->deliberationParams['pourcentage_redoublement_s2'] ?? 33;
-            $exclusionSiNote0 = $this->deliberationParams['note_eliminatoire_exclusion_s2'] ?? true;
-
-            $creditsAdmission = $this->convertirPourcentageEnCredits($pourcentageAdmission);
-            $creditsRedoublement = $this->convertirPourcentageEnCredits($pourcentageRedoublement);
-
-            // Si note éliminatoire et option activée
-            if ($hasNoteEliminatoire && $exclusionSiNote0) {
-                return 'exclus';
-            }
-
-            // ✅ LOGIQUE DYNAMIQUE basée sur les pourcentages
-            if ($creditsValides >= $creditsAdmission) {
-                return 'admis';
-            } elseif ($creditsValides >= $creditsRedoublement) {
-                return 'redoublant';
-            } else {
-                return 'exclus';
-            }
-        }
+        
+        // Mise à jour du statut
+        $this->updateDeliberationStatus();
+        
+        // Reset et rechargement
+        $this->resetAfterDeliberation($sessionType);
     }
 
-        /**
-     * Export Excel simple
+
+    /**
+     * Mettre à jour le statut de délibération
      */
-    public function exporterExcel()
+    private function updateDeliberationStatus(): void
     {
         try {
-            $exportService = new ExportService();
-            
-            $excel = $exportService->exporterExcel(
-                $this->resultatsSession1,
-                $this->uesStructure
-            );
-            
-            session()->flash('export_success', 'Export Excel généré avec succès (' . count($this->resultatsSession1) . ' étudiants)');
-            return $excel;
-            
+            // Mettre à jour le statut pour les vues
+            $this->deliberationStatus = [
+                'session1' => $this->checkDeliberationStatus('session1'),
+                'session2' => $this->checkDeliberationStatus('session2')
+            ];
         } catch (\Exception $e) {
-            session()->flash('export_error', 'Erreur lors de la génération d\'Excel: ' . $e->getMessage());
+            Log::error('Erreur mise à jour statut délibération: ' . $e->getMessage());
+            
+            // Fallback simple
+            $this->deliberationStatus = [
+                'delibere' => true,
+                'date_deliberation' => now(),
+                'delibere_par' => Auth::user()->name ?? 'Utilisateur'
+            ];
         }
     }
 
+
+    /**
+     * Réinitialiser après délibération - Version simplifiée
+     */
+    private function resetAfterDeliberation(string $sessionType): void
+    {
+        try {
+            // Fermer les modals
+            $this->showDeliberationModal = false;
+            $this->showConfirmationModal = false;
+            $this->simulationDeliberation = [];
+
+            // Recharger les résultats pour afficher les changements
+            $this->loadResultats();
+            
+            // Recalculer les statistiques
+            $this->calculateStatistics();
+            
+            // Mettre à jour l'état de délibération
+            $this->updateDeliberationStatus();
+
+            // Message informatif
+            $sessionName = $sessionType === 'session1' ? 'Session 1' : 'Session 2';
+            toastr()->info("Données actualisées après délibération {$sessionName}");
+
+            // Dispatch événement simple pour d'éventuels listeners
+            $this->dispatch('deliberation-completed', [
+                'session_type' => $sessionType,
+                'timestamp' => now()->timestamp
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur reset après délibération: ' . $e->getMessage());
+            
+            // En cas d'erreur, forcer un rechargement complet
+            $this->refreshData();
+            
+            toastr()->warning('Données rechargées après délibération. Veuillez vérifier les résultats.');
+        }
+    }
+
+    /**
+     * Ouvrir le modal de confirmation de délibération
+     */
+    public function ouvrirConfirmationDeliberation(): void
+    {
+        // Vérifier qu'il y a des changements à appliquer
+        if (empty($this->simulationDeliberation) || ($this->simulationDeliberation['statistiques']['changements'] ?? 0) === 0) {
+            toastr()->warning('Aucun changement à appliquer. Veuillez d\'abord simuler la délibération.');
+            return;
+        }
+
+        // Vérifier les autorisations
+        if (!Auth::user()->can('resultats.validation')) {
+            toastr()->error('Vous n\'avez pas l\'autorisation d\'appliquer une délibération.');
+            return;
+        }
+
+        $this->showConfirmationModal = true;
+    }
+
+    /**
+     * Fermer le modal de confirmation
+     */
+    public function fermerConfirmationModal(): void
+    {
+        $this->showConfirmationModal = false;
+    }
+
+    public function render()
+    {
+        $deliberationStatus = [
+            'session1' => $this->checkDeliberationStatus('session1'),
+            'session2' => $this->checkDeliberationStatus('session2')
+        ];
+
+        return view('livewire.resultats.resultats-finale', [
+            'deliberationStatus' => $deliberationStatus,
+            'statistiquesDeliberation' => []
+        ]);
+    }
 }

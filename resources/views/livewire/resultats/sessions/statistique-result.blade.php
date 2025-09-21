@@ -235,16 +235,6 @@
         </div>
     </div>
 
-    {{-- Légende explicative --}}
-    <div class="p-3 mb-4 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
-        <div class="text-sm text-blue-800 dark:text-blue-200">
-            <em class="mr-2 ni ni-info-circle"></em>
-            <strong>Statistiques en temps réel :</strong>
-            Les chiffres reflètent les données actuelles de la base. 
-            Le badge "Simulé" indique les résultats temporaires avant application.
-        </div>
-    </div>
-
     {{-- Historique des délibérations --}}
     @if(($deliberationStatus['session1'] ?? false) || ($deliberationStatus['session2'] ?? false))
         <div class="p-3 mb-4 border border-green-200 rounded-lg bg-green-50 dark:bg-green-900/20 dark:border-green-800">

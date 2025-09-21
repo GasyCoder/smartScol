@@ -432,4 +432,100 @@ if (!function_exists('has_access_to_route')) {
         // Par défaut, autoriser l'accès si la route n'est pas dans la liste
         return true;
     }
+
+    // ========================================
+// DATE AND NUMBER HELPER FUNCTIONS
+// ========================================
+
+if (!function_exists('nombre_en_lettres')) {
+    /**
+     * Convertir un nombre en lettres françaises
+     *
+     * @param int $nombre
+     * @return string
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function nombre_en_lettres($nombre)
+    {
+        $unites = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
+        $dixaines = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingt', 'quatre-vingt-dix'];
+        $dizaines = ['dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+        
+        if ($nombre < 10) {
+            return $unites[$nombre];
+        } elseif ($nombre < 20) {
+            return $dizaines[$nombre - 10];
+        } elseif ($nombre < 100) {
+            $dix = intval($nombre / 10);
+            $unite = $nombre % 10;
+            if ($unite == 0) {
+                return $dixaines[$dix];
+            } else {
+                return $dixaines[$dix] . '-' . $unites[$unite];
+            }
+        } elseif ($nombre < 1000) {
+            $cent = intval($nombre / 100);
+            $reste = $nombre % 100;
+            $result = '';
+            if ($cent == 1) {
+                $result = 'cent';
+            } else {
+                $result = $unites[$cent] . ' cent';
+            }
+            if ($reste > 0) {
+                $result .= ' ' . nombre_en_lettres($reste);
+            }
+            return $result;
+        }
+        
+        return (string) $nombre;
+    }
+}
+
+if (!function_exists('mois_en_francais')) {
+    /**
+     * Convertir un numéro de mois en nom français
+     *
+     * @param string|int $numeroMois
+     * @return string
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function mois_en_francais($numeroMois)
+    {
+        $mois = [
+            '01' => 'Janvier', '02' => 'Février', '03' => 'Mars', '04' => 'Avril',
+            '05' => 'Mai', '06' => 'Juin', '07' => 'Juillet', '08' => 'Août',
+            '09' => 'Septembre', '10' => 'Octobre', '11' => 'Novembre', '12' => 'Décembre'
+        ];
+        
+        $numeroMois = str_pad($numeroMois, 2, '0', STR_PAD_LEFT);
+        return $mois[$numeroMois] ?? 'Mois invalide';
+    }
+}
+
+if (!function_exists('date_en_francais')) {
+    /**
+     * Formater une date en français
+     *
+     * @param mixed $date
+     * @return string
+     * @version 1.0.0
+     * @since 1.0
+     */
+    function date_en_francais($date = null)
+    {
+        $date = $date ?? now();
+        if (is_string($date)) {
+            $date = \Carbon\Carbon::parse($date);
+        }
+        
+        return $date->format('d') . ' ' . 
+               mois_en_francais($date->format('m')) . ' ' . 
+               $date->format('Y');
+    }
+}
+    
+
 }

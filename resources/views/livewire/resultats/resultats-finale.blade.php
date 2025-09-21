@@ -2,150 +2,87 @@
 <div class="p-6 bg-white rounded-lg shadow-sm dark:bg-gray-800">
     
     {{-- Header avec filtres (vue partielle) --}}
-    @include('livewire.resultats.sessons.header-result')
+    @include('livewire.resultats.sessions.header-result')
 
-    {{-- Statistiques compactes (vue partielle) --}}
-    @include('livewire.resultats.sessons.statistique-result')
+    {{-- Statistiques compactes - SEULEMENT SI ON A DES RÉSULTATS CHARGÉS --}}
+    @if((!empty($resultatsSession1) || !empty($resultatsSession2)))
+        @include('livewire.resultats.sessions.statistique-result')
+    @endif
 
-    {{-- Onglets modernes - SEULEMENT SI FILTRES SÉLECTIONNÉS ET DONNÉES DISPONIBLES --}}
-    @if($selectedNiveau && $selectedAnneeUniversitaire && (!empty($resultatsSession1) || (!empty($resultatsSession2) && $showSession2)))
-        <div class="mb-6">
-            <div class="inline-flex p-2 space-x-2 border shadow-inner bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800/80 dark:to-gray-700/80 rounded-2xl border-gray-200/50 dark:border-gray-600/50">
+    {{-- Onglets modernes - SEULEMENT SI DONNÉES CHARGÉES ET AFFICHABLES --}}
+    @if((!empty($resultatsSession1) || (!empty($resultatsSession2) && $showSession2)))
+        @include('livewire.resultats.sessions.partials.tabs-result')
 
-                {{-- Onglet Session 1 --}}
-                <button wire:click="$set('activeTab', 'session1')"
-                        class="group relative flex items-center px-6 py-3.5 text-sm font-medium rounded-xl transition-all duration-300 transform hover:scale-[1.02] {{ $activeTab === 'session1' ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-lg shadow-blue-500/20 ring-2 ring-blue-500/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-700/80' }}">
-
-                    @if($activeTab === 'session1')
-                        <div class="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-xl"></div>
-                    @endif
-
-                    <div class="relative flex items-center">
-                        <div class="mr-3 p-1.5 rounded-lg {{ $activeTab === 'session1' ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-gray-100 dark:bg-gray-600 group-hover:bg-gray-200 dark:group-hover:bg-gray-500' }} transition-colors">
-                            <em class="text-lg ni ni-check-round"></em>
-                        </div>
-                        <div class="flex flex-col items-start">
-                            <span class="font-semibold">Session 1</span>
-                            <span class="text-xs opacity-75">Session Normale</span>
-                        </div>
-
-                        @if(!empty($resultatsSession1))
-                            <span class="ml-3 px-2.5 py-1 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full font-medium border border-blue-200 dark:border-blue-700">
-                                {{ count($resultatsSession1) }}
-                            </span>
-                        @endif
-
-                        {{-- Indicateur de verrouillage --}}
-                        <div class="p-1 ml-2 bg-red-100 rounded-full dark:bg-red-900/30" title="Session verrouillée">
-                            <em class="text-xs text-red-500 ni ni-lock dark:text-red-400"></em>
-                        </div>
-                    </div>
-                </button>
-
-                {{-- Onglet Session 2 --}}
-                @if($showSession2)
-                    <button wire:click="$set('activeTab', 'session2')"
-                            class="group relative flex items-center px-6 py-3.5 text-sm font-medium rounded-xl transition-all duration-300 transform hover:scale-[1.02] {{ $activeTab === 'session2' ? 'bg-white dark:bg-gray-700 text-green-600 dark:text-green-400 shadow-lg shadow-green-500/20 ring-2 ring-green-500/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-700/80' }}">
-
-                        @if($activeTab === 'session2')
-                            <div class="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl"></div>
-                        @endif
-
-                        <div class="relative flex items-center">
-                            <div class="mr-3 p-1.5 rounded-lg {{ $activeTab === 'session2' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-600 group-hover:bg-gray-200 dark:group-hover:bg-gray-500' }} transition-colors">
-                                <em class="text-lg ni ni-repeat"></em>
-                            </div>
-                            <div class="flex flex-col items-start">
-                                <span class="font-semibold">Session 2</span>
-                                <span class="text-xs opacity-75">Rattrapage</span>
-                            </div>
-
-                            @if(!empty($resultatsSession2))
-                                <span class="ml-3 px-2.5 py-1 text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full font-medium border border-green-200 dark:border-green-700">
-                                    {{ count($resultatsSession2) }}
-                                </span>
-                            @endif
-
-                            {{-- Indicateur de verrouillage --}}
-                            <div class="p-1 ml-2 bg-red-100 rounded-full dark:bg-red-900/30" title="Session verrouillée">
-                                <em class="text-xs text-red-500 ni ni-lock dark:text-red-400"></em>
-                            </div>
-                        </div>
-                    </button>
-                @endif
-
-                {{-- Onglet Paramètres/Délibération --}}
-                @if(!empty($resultatsSession1) || !empty($resultatsSession2))
-                    <button wire:click="$set('activeTab', 'simulation')"
-                            class="group relative flex items-center px-6 py-3.5 text-sm font-medium rounded-xl transition-all duration-300 transform hover:scale-[1.02] {{ $activeTab === 'simulation' ? 'bg-white dark:bg-gray-700 text-purple-600 dark:text-purple-400 shadow-lg shadow-purple-500/20 ring-2 ring-purple-500/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-700/80' }}">
-
-                        @if($activeTab === 'simulation')
-                            <div class="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-violet-500/10 rounded-xl"></div>
-                        @endif
-
-                        <div class="relative flex items-center">
-                            <div class="mr-3 p-1.5 rounded-lg {{ $activeTab === 'simulation' ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-gray-100 dark:bg-gray-600 group-hover:bg-gray-200 dark:group-hover:bg-gray-500' }} transition-colors">
-                                <em class="text-lg ni ni-setting"></em>
-                            </div>
-                            <div class="flex flex-col items-start">
-                                <span class="font-semibold">Paramètres</span>
-                                <span class="text-xs opacity-75">Délibération</span>
-                            </div>
-
-                            {{-- Badge sessions disponibles --}}
-                            <span class="ml-3 px-2.5 py-1 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded-full font-medium border border-purple-200 dark:border-purple-700">
-                                @if(!empty($resultatsSession1) && !empty($resultatsSession2))
-                                    S1+S2
-                                @elseif(!empty($resultatsSession1))
-                                    S1
-                                @else
-                                    S2
-                                @endif
-                            </span>
-                        </div>
-                    </button>
-                @endif
-            </div>
-        </div>
-
-        {{-- Contenu des onglets --}}
+        {{-- Contenu des onglets - SEULEMENT SI ON A DES RÉSULTATS --}}
         <div class="tab-content">
             <div class="animate-fadeIn">
-                @include('livewire.resultats.sessons.normale')
-                @include('livewire.resultats.sessons.rattrapage')
-                @include('livewire.resultats.sessons.simulation')
+                @include('livewire.resultats.sessions.normale')
+                @include('livewire.resultats.sessions.rattrapage')
+                @include('livewire.resultats.sessions.simulation')
             </div>
         </div>
-    @else
-        {{-- Message d'instruction si filtres non sélectionnés --}}
-        <div class="py-12 text-center">
-            <div class="mx-auto mb-4 w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center dark:bg-gray-700">
-                <em class="text-2xl text-gray-400 ni ni-filter dark:text-gray-500"></em>
+    @endif
+
+    {{-- ✅ CORRECTION : Message d'information si pas de résultats après chargement --}}
+    @if($etape_actuelle === 'resultats' && empty($resultatsSession1) && empty($resultatsSession2))
+        <div class="p-8 text-center bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+            <div class="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
+                <em class="text-2xl text-yellow-600 dark:text-yellow-400 ni ni-alert-circle"></em>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                Sélectionnez vos filtres
+            <h3 class="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
+                Aucun résultat trouvé
             </h3>
-            <p class="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-                Choisissez une année universitaire et un niveau pour afficher les résultats des examens et accéder aux fonctionnalités de délibération.
+            <p class="text-yellow-700 dark:text-yellow-300 mb-4">
+                Aucun résultat d'examen n'a été trouvé pour les critères sélectionnés.
+                <br>
+                <strong>Niveau :</strong> {{ $nom_niveau_selectionne ?? 'Non défini' }}
+                <br>
+                <strong>Parcours :</strong> {{ $nom_parcours_selectionne ?? 'Non défini' }}
+                <br>
+                <strong>Année :</strong> {{ $nom_annee_selectionnee ?? 'Non définie' }}
             </p>
+            <div class="flex justify-center space-x-3">
+                <button wire:click="selectNiveau(null)" 
+                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-lg hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-700 dark:hover:bg-yellow-900/50 transition-colors">
+                    <em class="mr-2 ni ni-reload"></em>
+                    Modifier les critères
+                </button>
+                <button wire:click="chargerResultats" 
+                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 transition-colors">
+                    <em class="mr-2 ni ni-refresh"></em>
+                    Recharger
+                </button>
+            </div>
         </div>
     @endif
 </div>
 
-{{-- Styles CSS minimalistes --}}
-<style>
-.animate-fadeIn {
-    animation: fadeIn 0.3s ease-in-out;
-}
+@push('scripts')
+    {{-- Scripts pour améliorer l'UX --}}
+    <script>
+        // Animation de fade-in pour les onglets
+        document.addEventListener('livewire:navigated', function () {
+            const tabContent = document.querySelector('.tab-content');
+            if (tabContent) {
+                tabContent.style.opacity = '0';
+                setTimeout(() => {
+                    tabContent.style.transition = 'opacity 0.3s ease-in-out';
+                    tabContent.style.opacity = '1';
+                }, 100);
+            }
+        });
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-</style>
+        // Smooth scroll vers les résultats après chargement
+        window.addEventListener('resultatsActualises', function() {
+            setTimeout(() => {
+                const statsSection = document.querySelector('[data-section="statistiques"]');
+                if (statsSection) {
+                    statsSection.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start' 
+                    });
+                }
+            }, 500);
+        });
+    </script>
+@endpush

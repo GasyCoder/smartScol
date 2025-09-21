@@ -4,14 +4,15 @@ namespace App\Services;
 
 use App\Models\EC;
 use App\Models\UE;
+use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Etudiant;
 use App\Models\SessionExam;
 use App\Models\Deliberation;
 use App\Models\ResultatFinal;
 use App\Models\ResultatFusion;
-use App\Models\DeliberationConfig;
 use App\Config\ReglesDeliberation;
+use App\Models\DeliberationConfig;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -25,60 +26,70 @@ class CalculAcademiqueService
     const SEUIL_VALIDATION_UE = 10.0;
     const NOTE_ELIMINATOIRE = 0;
 
-
-
-    // ✅ MÉTHODE PRINCIPALE MANQUANTE : calculerResultatsComplets
-    public function calculerResultatsComplets($etudiantId, $sessionId, $useResultatFinal = true)
+    // ✅ CORRECTION : Filtrer par examen spécifique du niveau sélectionné
+    public function calculerResultatsComplets($etudiantId, $sessionId, $useResultatFinal = true, $niveauId = null, $parcoursId = null)
     {
         try {
             // 1. Récupérer la session
             $session = SessionExam::findOrFail($sessionId);
 
-            // 2. Récupérer les résultats de l'étudiant
+            // 2. Récupérer l'étudiant
+            $etudiant = Etudiant::findOrFail($etudiantId);
+
+            // 3. ✅ CORRECTION : Récupérer l'examen spécifique pour ce niveau/parcours
+            $examenQuery = Examen::where('niveau_id', $niveauId ?: $etudiant->niveau_id);
+            if ($parcoursId !== null || $etudiant->parcours_id) {
+                $examenQuery->where('parcours_id', $parcoursId ?: $etudiant->parcours_id);
+            }
+            
+            $examen = $examenQuery->first();
+            
+            if (!$examen) {
+                throw new \Exception("Aucun examen trouvé pour le niveau {$niveauId} et parcours {$parcoursId}");
+            }
+
+            // 4. ✅ CORRECTION : Filtrer strictement par cet examen spécifique
             $modelClass = $useResultatFinal ? ResultatFinal::class : ResultatFusion::class;
 
-            // ✅ CORRECTION : Ajouter session_exam_id dans la logique de filtrage
             $query = $modelClass::where('session_exam_id', $sessionId)
-                ->where('etudiant_id', $etudiantId);
+                ->where('etudiant_id', $etudiantId)
+                ->where('examen_id', $examen->id); // ✅ AJOUT CRUCIAL
 
             if ($useResultatFinal) {
-                // Pour ResultatFinal : accepter PUBLIE ET EN_ATTENTE
                 $query->whereIn('statut', [ResultatFinal::STATUT_PUBLIE, ResultatFinal::STATUT_EN_ATTENTE]);
             } else {
-                // Pour ResultatFusion : garder la logique existante
                 $query->where('statut', 'valide');
             }
 
-            $resultats = $query->with(['ec.ue', 'etudiant', 'codeAnonymat.sessionExam'])
+            $resultats = $query->with([
+                    'ec' => function($query) {
+                        $query->with(['ue' => function($subQuery) {
+                            $subQuery->whereNotNull('id');
+                        }]);
+                    },
+                    'etudiant', 
+                    'codeAnonymat.sessionExam'
+                ])
                 ->orderBy('ec_id')
                 ->get();
 
             if ($resultats->isEmpty()) {
-                throw new \Exception("Aucun résultat trouvé pour l'étudiant {$etudiantId} en session {$sessionId}");
+                throw new \Exception("Aucun résultat trouvé pour l'étudiant {$etudiantId} dans l'examen {$examen->id} de la session {$sessionId}");
             }
 
-            // ✅ VALIDATION : S'assurer que tous les résultats appartiennent à la bonne session
-            $invalidResults = $resultats->filter(function($resultat) use ($sessionId) {
-                return $resultat->codeAnonymat &&
-                    $resultat->codeAnonymat->session_exam_id !== $sessionId;
+            // ✅ Le reste du code reste identique...
+            $resultatsValides = $resultats->filter(function($resultat) {
+                return $resultat->ec && $resultat->ec->ue && $resultat->ec->ue->id;
             });
 
-            if ($invalidResults->isNotEmpty()) {
+            if ($resultatsValides->isEmpty()) {
+                throw new \Exception("Aucun résultat avec EC/UE valides pour l'étudiant {$etudiantId}");
             }
 
-            // ✅ LE RESTE DE VOTRE CODE RESTE IDENTIQUE
-            $etudiant = $resultats->first()->etudiant;
-
-            // 3. Calculer les résultats par UE selon logique médecine
-            $resultatsUE = $this->calculerResultatsUE_LogiqueMedecine($resultats);
-
-            // 4. Calculer la synthèse générale
+            $resultatsUE = $this->calculerResultatsUE_LogiqueMedecine($resultatsValides);
             $synthese = $this->calculerSyntheseGenerale($resultatsUE);
-
-            // 5. Déterminer la décision selon logique médecine
             $decision = $this->determinerDecision_LogiqueMedecine($synthese, $session);
 
-            // 6. Structurer la réponse complète
             return [
                 'etudiant' => [
                     'id' => $etudiant->id,
@@ -93,22 +104,30 @@ class CalculAcademiqueService
                     'nom' => $session->nom ?? "Session {$session->type}",
                     'annee' => $session->anneeUniversitaire->libelle ?? 'N/A'
                 ],
+                'examen' => [ // ✅ AJOUT
+                    'id' => $examen->id,
+                    'niveau_id' => $examen->niveau_id,
+                    'parcours_id' => $examen->parcours_id
+                ],
                 'resultats_ue' => $resultatsUE,
                 'synthese' => $synthese,
                 'decision' => $decision,
                 'metadonnees' => [
                     'date_calcul' => now()->format('Y-m-d H:i:s'),
-                    'methode' => 'logique_medecine_avec_session',
+                    'methode' => 'logique_medecine_avec_examen_specifique',
                     'nb_ue' => count($resultatsUE),
-                    'nb_ec' => $resultats->count(),
-                    'session_exam_id' => $sessionId
+                    'nb_ec' => $resultatsValides->count(),
+                    'session_exam_id' => $sessionId,
+                    'examen_id' => $examen->id // ✅ AJOUT
                 ]
             ];
 
         } catch (\Exception $e) {
-            Log::error('Erreur calcul résultats complets avec session', [
+            Log::error('Erreur calcul résultats complets avec examen spécifique', [
                 'etudiant_id' => $etudiantId,
                 'session_id' => $sessionId,
+                'niveau_id' => $niveauId,
+                'parcours_id' => $parcoursId,
                 'error' => $e->getMessage()
             ]);
 
@@ -126,29 +145,55 @@ class CalculAcademiqueService
         $resultatsParUE = $resultats->groupBy('ec.ue_id');
 
         foreach ($resultatsParUE as $ueId => $notesUE) {
-            $ue = $notesUE->first()->ec->ue;
+            // ✅ VÉRIFICATIONS DE SÉCURITÉ
+            if (!$ueId || $notesUE->isEmpty()) {
+                Log::warning('UE ID manquant ou notes vides', ['ue_id' => $ueId]);
+                continue;
+            }
 
-            if (!$ue) {
-                Log::warning('❌ UE introuvable', ['ue_id' => $ueId]);
+            $premierResultat = $notesUE->first();
+            if (!$premierResultat || !$premierResultat->ec) {
+                Log::warning('EC manquant pour UE', ['ue_id' => $ueId]);
+                continue;
+            }
+
+            $ue = $premierResultat->ec->ue;
+            if (!$ue || !$ue->id) {
+                Log::warning('UE manquante ou invalide', [
+                    'ue_id' => $ueId,
+                    'ec_id' => $premierResultat->ec_id,
+                    'ec_existe' => !is_null($premierResultat->ec),
+                    'ue_existe' => !is_null($ue)
+                ]);
                 continue;
             }
 
             // Récupérer toutes les notes de l'UE
             $notes = $notesUE->pluck('note')->toArray();
             $notesEC = $notesUE->map(function($resultat) {
+                if (!$resultat->ec) {
+                    return null;
+                }
+                
                 return [
                     'ec_id' => $resultat->ec_id,
-                    'ec_nom' => $resultat->ec->nom,
-                    'ec_abr' => $resultat->ec->abr ?? substr($resultat->ec->nom, 0, 10),
+                    'ec_nom' => $resultat->ec->nom ?? 'EC_' . $resultat->ec_id,
+                    'ec_abr' => $resultat->ec->abr ?? substr($resultat->ec->nom ?? 'EC', 0, 10),
                     'note' => $resultat->note,
                     'est_eliminatoire' => $resultat->note == self::NOTE_ELIMINATOIRE
                 ];
-            })->toArray();
+            })->filter()->toArray();
+
+            // Vérifier qu'on a des notes valides
+            if (empty($notes) || empty($notesEC)) {
+                Log::warning('Aucune note valide pour UE', ['ue_id' => $ueId]);
+                continue;
+            }
 
             // ✅ VÉRIFICATION : Est-ce qu'il y a une note éliminatoire (0)
             $hasNoteEliminatoire = in_array(self::NOTE_ELIMINATOIRE, $notes);
 
-            // ✅ CORRECTION : Calcul de la moyenne UE
+            // ✅ CALCUL de la moyenne UE
             if ($hasNoteEliminatoire) {
                 $moyenneUE = 0;
                 $ueValidee = false;
@@ -163,14 +208,14 @@ class CalculAcademiqueService
                 $statutUE = $ueValidee ? 'validee' : 'non_validee';
             }
 
-            // ✅ CALCUL CRÉDITS - CRUCIAL !
+            // ✅ CALCUL CRÉDITS
             $creditsUE = $ue->credits ?? 0;
             $creditsValides = $ueValidee ? $creditsUE : 0;
 
             $resultatsUE[] = [
                 'ue_id' => $ueId,
-                'ue_nom' => $ue->nom,
-                'ue_abr' => $ue->abr ?? substr($ue->nom, 0, 10),
+                'ue_nom' => $ue->nom ?? 'UE_' . $ueId,
+                'ue_abr' => $ue->abr ?? substr($ue->nom ?? 'UE', 0, 10),
                 'ue_credits' => $creditsUE,
                 'moyenne_ue' => $moyenneUE,
                 'validee' => $ueValidee,
@@ -182,11 +227,15 @@ class CalculAcademiqueService
             ];
         }
 
-        // 🔍 LOG RÉCAPITULATIF
-        $totalCreditsCalculés = array_sum(array_column($resultatsUE, 'credits_valides'));
+        if (empty($resultatsUE)) {
+            Log::warning('Aucun résultat UE calculé - vérifier les relations EC/UE');
+        }
 
         return $resultatsUE;
     }
+
+
+
 
     // ✅ MÉTHODE : Calcule la synthèse générale
     private function calculerSyntheseGenerale($resultatsUE)
@@ -324,6 +373,17 @@ class CalculAcademiqueService
         try {
             DB::beginTransaction();
 
+            // ✅ TROUVER L'EXAMEN SPÉCIFIQUE
+            $examenQuery = Examen::where('niveau_id', $niveauId);
+            if ($parcoursId) {
+                $examenQuery->where('parcours_id', $parcoursId);
+            }
+            
+            $examen = $examenQuery->first();
+            if (!$examen) {
+                throw new \Exception("Aucun examen trouvé pour le niveau {$niveauId} et parcours {$parcoursId}");
+            }
+
             // 1. Récupérer ou créer la configuration de délibération
             $config = DeliberationConfig::getOrCreateConfig($niveauId, $parcoursId, $sessionId);
 
@@ -335,14 +395,9 @@ class CalculAcademiqueService
             // 3. Récupérer la session pour déterminer le type
             $session = SessionExam::findOrFail($sessionId);
 
-            // 4. Récupérer tous les étudiants de cette session avec des résultats
+            // 4. ✅ FILTRER PAR EXAMEN SPÉCIFIQUE
             $etudiantsIds = ResultatFinal::where('session_exam_id', $sessionId)
-                ->whereHas('examen', function($q) use ($niveauId, $parcoursId) {
-                    $q->where('niveau_id', $niveauId);
-                    if ($parcoursId) {
-                        $q->where('parcours_id', $parcoursId);
-                    }
-                })
+                ->where('examen_id', $examen->id) // ✅ AJOUT CRUCIAL
                 ->where('statut', ResultatFinal::STATUT_PUBLIE)
                 ->distinct('etudiant_id')
                 ->pluck('etudiant_id');
@@ -357,34 +412,24 @@ class CalculAcademiqueService
 
             // 5. Appliquer les décisions selon la configuration
             foreach ($etudiantsIds as $etudiantId) {
-                $nouvelleDecision = $this->calculerDecisionAvecConfig($etudiantId, $sessionId, $config);
+                $nouvelleDecision = $this->calculerDecisionAvecConfig($etudiantId, $sessionId, $config, $niveauId, $parcoursId);
 
-                $this->mettreAJourResultatsEtudiantDeliberation($etudiantId, $sessionId, $nouvelleDecision, $config->id);
+                $this->mettreAJourResultatsEtudiantDeliberation($etudiantId, $sessionId, $nouvelleDecision, $config->id, $examen->id);
 
                 $statistiques[$nouvelleDecision]++;
             }
 
-
             // 6. Marquer la configuration comme délibérée
             $config->marquerDelibere(Auth::id());
 
-            // ✅ IMPORTANT : S'assurer que la transaction est bien commitée
             DB::commit();
-
-            // ✅ NOUVEAU : Attendre que la transaction soit réellement persistée
-            usleep(50000); // 50ms pour que les writes soient flushés
-
-            // ✅ NOUVEAU : Vérifier que les changements sont bien en base
-            $verificationCount = ResultatFinal::where('session_exam_id', $sessionId)
-                ->where('jury_validated', true)
-                ->count();
 
             return [
                 'success' => true,
                 'message' => 'Délibération appliquée avec succès',
                 'statistiques' => $statistiques,
                 'config' => $config,
-                'verification' => $verificationCount
+                'examen_id' => $examen->id
             ];
 
         } catch (\Exception $e) {
@@ -400,10 +445,10 @@ class CalculAcademiqueService
     }
 
     // ✅ NOUVELLE MÉTHODE : Calcule la décision selon la configuration
-    private function calculerDecisionAvecConfig($etudiantId, $sessionId, DeliberationConfig $config)
+    private function calculerDecisionAvecConfig($etudiantId, $sessionId, DeliberationConfig $config, $niveauId, $parcoursId)
     {
-        // Utiliser la logique existante calculerResultatsComplets
-        $resultat = $this->calculerResultatsComplets($etudiantId, $sessionId, true);
+        // Utiliser la logique existante avec les paramètres de niveau/parcours
+        $resultat = $this->calculerResultatsComplets($etudiantId, $sessionId, true, $niveauId, $parcoursId);
 
         $creditsValides = $resultat['synthese']['credits_valides'];
         $hasNoteEliminatoire = $resultat['synthese']['a_note_eliminatoire'];
@@ -438,12 +483,18 @@ class CalculAcademiqueService
     }
 
     // ✅ NOUVELLE MÉTHODE : Met à jour les résultats avec traçabilité délibération
-    private function mettreAJourResultatsEtudiantDeliberation($etudiantId, $sessionId, $nouvelleDecision, $configId)
+    private function mettreAJourResultatsEtudiantDeliberation($etudiantId, $sessionId, $nouvelleDecision, $configId, $examenId = null)
     {
-        $resultats = ResultatFinal::where('session_exam_id', $sessionId)
+        $query = ResultatFinal::where('session_exam_id', $sessionId)
             ->where('etudiant_id', $etudiantId)
-            ->where('statut', ResultatFinal::STATUT_PUBLIE)
-            ->get();
+            ->where('statut', ResultatFinal::STATUT_PUBLIE);
+        
+        // ✅ FILTRER PAR EXAMEN SI FOURNI
+        if ($examenId) {
+            $query->where('examen_id', $examenId);
+        }
+        
+        $resultats = $query->get();
 
         foreach ($resultats as $resultat) {
             $ancienneDecision = $resultat->decision;
@@ -451,24 +502,12 @@ class CalculAcademiqueService
             // ✅ MISE À JOUR avec force
             $updateData = [
                 'decision' => $nouvelleDecision,
-                'jury_validated' => true, // ✅ Marquer comme validé par le jury
+                'jury_validated' => true,
                 'modifie_par' => Auth::id(),
-                'updated_at' => now() // ✅ Forcer la mise à jour du timestamp
+                'updated_at' => now()
             ];
 
             $resultat->update($updateData);
-
-            // ✅ VÉRIFICATION : S'assurer que la mise à jour a bien eu lieu
-            $resultat->fresh();
-
-            Log::info('📝 Résultat mis à jour pour délibération', [
-                'resultat_id' => $resultat->id,
-                'etudiant_id' => $etudiantId,
-                'ancienne_decision' => $ancienneDecision,
-                'nouvelle_decision' => $nouvelleDecision,
-                'jury_validated' => $resultat->jury_validated,
-                'updated_at' => $resultat->updated_at
-            ]);
 
             // Ajouter à l'historique JSON
             $statusHistory = $resultat->status_history ?? [];
@@ -479,36 +518,12 @@ class CalculAcademiqueService
                 'user_id' => Auth::id(),
                 'date_action' => now()->toDateTimeString(),
                 'config_deliberation_id' => $configId,
+                'examen_id' => $examenId,
                 'source' => 'deliberation_avec_configuration'
             ];
 
             $resultat->update(['status_history' => $statusHistory]);
-
-            // ✅ Historique dans table dédiée si elle existe
-            if (class_exists('App\Models\ResultatFinalHistorique')) {
-                \App\Models\ResultatFinalHistorique::creerEntreeDeliberation(
-                    $resultat->id,
-                    $ancienneDecision,
-                    $nouvelleDecision,
-                    Auth::id(),
-                    $configId
-                );
-            }
         }
-
-        // ✅ DOUBLE VÉRIFICATION : Compter les résultats mis à jour pour cet étudiant
-        $countMisAJour = ResultatFinal::where('session_exam_id', $sessionId)
-            ->where('etudiant_id', $etudiantId)
-            ->where('decision', $nouvelleDecision)
-            ->where('jury_validated', true)
-            ->count();
-
-        Log::info('✅ Vérification mise à jour délibération étudiant', [
-            'etudiant_id' => $etudiantId,
-            'session_id' => $sessionId,
-            'nouvelle_decision' => $nouvelleDecision,
-            'count_mis_a_jour' => $countMisAJour
-        ]);
     }
 
 

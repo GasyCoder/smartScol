@@ -1,15 +1,11 @@
 <?php
 
 return [
-
+     // Site Information
     'name' => env('APP_NAME', 'Smart Scol'),
     'desc' => env('APP_DESC', 'Smart Scol - Faculté de Médecine Université de Mahajanga'),
     'version' => env('APP_VERSION', '1.0.0'),
-    'build' => env('APP_RELEASE', '12122024'),
-
-    // Site Information
-    'site_name' => env('SITE_NAME', 'DashWind'),
-    'site_email' => env('SITE_EMAIL', 'info@softnio.com'),
+    'doyen_nom' => env('DOYEN_NOM', 'RAKOTOMALALA Rivo'),
 
     /*
     |--------------------------------------------------------------------------

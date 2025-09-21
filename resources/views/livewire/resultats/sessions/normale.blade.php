@@ -147,15 +147,6 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                             <span wire:loading.remove wire:target="exporterExcel">Export tableau Excel</span>
                             <span wire:loading wire:target="exporterExcel">Export...</span>
                         </button>
-                        {{-- Bouton Actualiser existant (garder votre code) --}}
-                        <button wire:click="forceReloadData"
-                                wire:loading.attr="disabled"
-                                wire:loading.class="opacity-50"
-                                class="flex items-center px-4 py-2 text-sm text-blue-600 transition-colors bg-blue-100 rounded-lg hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-400 dark:hover:bg-blue-800/50">
-                            <em class="mr-2 ni ni-reload" wire:loading.class="animate-spin" wire:target="forceReloadData,refreshResultats"></em>
-                            <span wire:loading.remove wire:target="forceReloadData,refreshResultats">Actualiser</span>
-                            <span wire:loading wire:target="forceReloadData,refreshResultats">Actualisation...</span>
-                        </button>
                     </div>
 
                     {{-- ✅ Indicateur de dernière délibération --}}
@@ -174,37 +165,49 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                         <strong>{{ count($resultatsSession1) }}</strong> étudiant(s) affiché(s)
                     </span>
 
-                    {{-- ✅ Stats avec mise à jour temps réel --}}
-                    @if(isset($statistiquesSession1) && !empty($statistiquesSession1))
-                        <div class="flex items-center space-x-2 text-sm" id="stats-display">
-                            <span class="px-2 py-1 font-medium text-green-700 bg-green-100 rounded-full dark:bg-green-900/50 dark:text-green-300">
-                                ✅ {{ $statistiquesSession1['admis'] ?? 0 }} admis
-                            </span>
-                            <span class="px-2 py-1 font-medium text-orange-700 bg-orange-100 rounded-full dark:bg-orange-900/50 dark:text-orange-300">
-                                📚 {{ $statistiquesSession1['rattrapage'] ?? 0 }} rattrapage
-                            </span>
-                            @if(isset($statistiquesSession1['redoublant']) && $statistiquesSession1['redoublant'] > 0)
-                                <span class="px-2 py-1 font-medium text-red-700 bg-red-100 rounded-full dark:bg-red-900/50 dark:text-red-300">
-                                    🔄 {{ $statistiquesSession1['redoublant'] }} redoublant
-                                </span>
-                            @endif
-                            @if(isset($statistiquesSession1['exclus']) && $statistiquesSession1['exclus'] > 0)
-                                <span class="px-2 py-1 font-medium text-gray-700 bg-gray-100 rounded-full dark:bg-gray-900/50 dark:text-gray-300">
-                                    ❌ {{ $statistiquesSession1['exclus'] }} exclus
-                                </span>
-                            @endif
+                {{-- Stats avec mise à jour temps réel --}}
+                @if(isset($statistiquesSession1) && !empty($statistiquesSession1))
+                    <div class="flex items-center flex-wrap gap-3 text-sm" id="stats-display">
+                        {{-- Admis --}}
+                        <span class="flex items-center space-x-2 px-3 py-2 font-medium text-green-700 bg-green-100 rounded-full border border-green-200 dark:bg-green-900/50 dark:text-green-300 dark:border-green-700 shadow-sm">
+                            <em class="text-sm ni ni-users text-green-600 dark:text-green-400"></em>
+                            <span>{{ $statistiquesSession1['admis'] ?? 0 }} admis</span>
+                        </span>
 
-                            {{-- ✅ Taux de réussite calculé en temps réel --}}
-                            @php
-                                $totalEtudiants = $statistiquesSession1['total_etudiants'] ?? count($resultatsSession1);
-                                $admis = $statistiquesSession1['admis'] ?? 0;
-                                $tauxReussite = $totalEtudiants > 0 ? round(($admis / $totalEtudiants) * 100, 1) : 0;
-                            @endphp
-                            <span class="px-2 py-1 font-medium text-blue-700 bg-blue-100 rounded-full dark:bg-blue-900/50 dark:text-blue-300">
-                                📊 {{ $tauxReussite }}% réussite
+                        {{-- Rattrapage --}}
+                        <span class="flex items-center space-x-2 px-3 py-2 font-medium text-orange-700 bg-orange-100 rounded-full border border-orange-200 dark:bg-orange-900/50 dark:text-orange-300 dark:border-orange-700 shadow-sm">
+                            <em class="text-sm ni ni-book text-orange-600 dark:text-orange-400"></em>
+                            <span>{{ $statistiquesSession1['rattrapage'] ?? 0 }} rattrapage</span>
+                        </span>
+
+                        {{-- Redoublant --}}
+                        @if(isset($statistiquesSession1['redoublant']) && $statistiquesSession1['redoublant'] > 0)
+                            <span class="flex items-center space-x-2 px-3 py-2 font-medium text-red-700 bg-red-100 rounded-full border border-red-200 dark:bg-red-900/50 dark:text-red-300 dark:border-red-700 shadow-sm">
+                                <em class="text-sm ni ni-reload text-red-600 dark:text-red-400"></em>
+                                <span>{{ $statistiquesSession1['redoublant'] }} redoublant</span>
                             </span>
-                        </div>
-                    @endif
+                        @endif
+
+                        {{-- Exclus --}}
+                        @if(isset($statistiquesSession1['exclus']) && $statistiquesSession1['exclus'] > 0)
+                            <span class="flex items-center space-x-2 px-3 py-2 font-medium text-gray-700 bg-gray-100 rounded-full border border-gray-200 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700 shadow-sm">
+                                <em class="text-sm ni ni-cross-circle text-gray-600 dark:text-gray-400"></em>
+                                <span>{{ $statistiquesSession1['exclus'] }} exclus</span>
+                            </span>
+                        @endif
+
+                        {{-- Taux de réussite calculé en temps réel --}}
+                        @php
+                            $totalEtudiants = $statistiquesSession1['total_etudiants'] ?? count($resultatsSession1);
+                            $admis = $statistiquesSession1['admis'] ?? 0;
+                            $tauxReussite = $totalEtudiants > 0 ? round(($admis / $totalEtudiants) * 100, 1) : 0;
+                        @endphp
+                        <span class="flex items-center space-x-2 px-3 py-2 font-medium text-blue-700 bg-blue-100 rounded-full border border-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700 shadow-sm">
+                            <em class="text-sm ni ni-bar-chart text-blue-600 dark:text-blue-400"></em>
+                            <span>{{ $tauxReussite }}% réussite</span>
+                        </span>
+                    </div>
+                @endif
                 </div>
             </div>
 

@@ -139,7 +139,7 @@ class FusionService
 
         // CORRECTION : Filtrer explicitement par session
         $resultats = ResultatFusion::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionActive->id) // IMPORTANT : session spécifique
+            ->where('session_exam_id', $sessionActive->id)
             ->select('id', 'etudiant_id', 'ec_id', 'note', 'statut')
             ->with(['etudiant', 'ec'])
             ->get();
@@ -160,23 +160,36 @@ class FusionService
             $etudiantsAvecNote = $resultatsEc->whereNotNull('note')->count();
             $etudiantsAvecResult = $resultatsEc->pluck('etudiant_id')->unique()->count();
 
-            // NOUVEAU : Calculer selon le type de session
-            $expectedStudents = $totalEtudiants;
-            if ($sessionActive->type === 'Rattrapage') {
-                // Pour le rattrapage, calculer le nombre d'étudiants éligibles
-                $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionActive->annee_universitaire_id)
-                    ->where('type', 'Normale')
-                    ->first();
+            // ✅ CORRECTION PRINCIPALE : Utiliser les données de présence réelles
+            $donneesPresence = $this->getPresenceDataForEC($examenId, $sessionActive, $ec->id);
+            $expectedStudents = $donneesPresence['etudiants_presents'];
+            
+            // ✅ FALLBACK : Si pas de données de présence, utiliser la logique par type de session
+            if ($expectedStudents === 0) {
+                if ($sessionActive->type === 'Rattrapage') {
+                    // Pour le rattrapage, calculer le nombre d'étudiants éligibles
+                    $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionActive->annee_universitaire_id)
+                        ->where('type', 'Normale')
+                        ->first();
 
-                if ($sessionNormale) {
-                    $examen = Examen::find($examenId);
-                    if ($examen) {
-                        $expectedStudents = Etudiant::eligiblesRattrapage(
-                            $examen->niveau_id,
-                            $examen->parcours_id,
-                            $sessionNormale->id
-                        )->count();
+                    if ($sessionNormale) {
+                        $examen = Examen::find($examenId);
+                        if ($examen) {
+                            $expectedStudents = Etudiant::eligiblesRattrapage(
+                                $examen->niveau_id,
+                                $examen->parcours_id,
+                                $sessionNormale->id
+                            )->count();
+                        }
                     }
+                    
+                    // Si toujours 0, utiliser le nombre d'étudiants avec résultats
+                    if ($expectedStudents === 0) {
+                        $expectedStudents = max($etudiantsAvecResult, $etudiantsAvecNote);
+                    }
+                } else {
+                    // Session normale : utiliser totalEtudiants ou le nombre avec résultats
+                    $expectedStudents = max($totalEtudiants, $etudiantsAvecResult, $etudiantsAvecNote);
                 }
             }
 
@@ -187,12 +200,18 @@ class FusionService
                 'ec_nom' => $ec->nom,
                 'ec_abr' => $ec->abr ?? $ec->code ?? 'N/A',
                 'total_etudiants' => $expectedStudents,
+                
+                // ✅ CORRECTION : Utiliser les vraies données de présence
+                'etudiants_presents' => $expectedStudents,
+                'etudiants_attendus_theorique' => $donneesPresence['total_inscrits'],
+                'source_presence' => $donneesPresence['source'],
+                
                 'etudiants_avec_note' => $etudiantsAvecNote,
                 'manchettes_count' => $etudiantsAvecResult,
                 'copies_count' => $etudiantsAvecNote,
                 'codes_count' => $etudiantsAvecResult,
                 'complet' => $complet,
-                'etudiants_sans_manchette' => $expectedStudents - $etudiantsAvecResult,
+                'etudiants_sans_manchette' => max(0, $expectedStudents - $etudiantsAvecResult),
                 'codes_sans_manchettes' => ['count' => 0, 'codes' => []],
                 'codes_sans_copies' => ['count' => 0, 'codes' => []],
                 'issues' => [],
@@ -200,7 +219,7 @@ class FusionService
             ];
         }
 
-        \Log::info('Analyse des résultats existants par session', [
+        \Log::info('Analyse des résultats existants par session CORRIGÉE', [
             'examen_id' => $examenId,
             'session_id' => $sessionActive->id,
             'session_type' => $sessionActive->type,
@@ -210,7 +229,6 @@ class FusionService
 
         return $rapport;
     }
-
 
     /**
      * Analyse les données avant fusion
@@ -521,7 +539,7 @@ class FusionService
             ->where('ec_id', $ecId)
             ->first();
 
-        if ($presenceSpecifique) {
+        if ($presenceSpecifique && $presenceSpecifique->etudiants_presents > 0) {
             return [
                 'etudiants_presents' => $presenceSpecifique->etudiants_presents,
                 'total_inscrits' => $presenceSpecifique->total_attendu ?: $presenceSpecifique->total_etudiants,
@@ -535,7 +553,7 @@ class FusionService
             ->whereNull('ec_id') // Présence globale
             ->first();
 
-        if ($presenceGlobale) {
+        if ($presenceGlobale && $presenceGlobale->etudiants_presents > 0) {
             return [
                 'etudiants_presents' => $presenceGlobale->etudiants_presents,
                 'total_inscrits' => $presenceGlobale->total_attendu ?: $presenceGlobale->total_etudiants,
@@ -543,7 +561,32 @@ class FusionService
             ];
         }
 
-        // 3. Fallback : compter les manchettes existantes pour cette EC
+        // ✅ 3. AMÉLIORATION : Calculer à partir des résultats fusion s'ils existent
+        $etudiantsAvecResultats = ResultatFusion::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionActive->id)
+            ->where('ec_id', $ecId)
+            ->distinct('etudiant_id')
+            ->count();
+
+        if ($etudiantsAvecResultats > 0) {
+            // Estimer le total théorique
+            $examen = Examen::find($examenId);
+            $totalTheorique = 0;
+            if ($examen) {
+                $totalTheorique = Etudiant::where('niveau_id', $examen->niveau_id)
+                    ->where('parcours_id', $examen->parcours_id)
+                    ->where('is_active', true)
+                    ->count();
+            }
+
+            return [
+                'etudiants_presents' => $etudiantsAvecResultats,
+                'total_inscrits' => $totalTheorique,
+                'source' => 'calcule_resultats_fusion'
+            ];
+        }
+
+        // 4. Fallback : compter les manchettes existantes pour cette EC
         $manchettesCount = Manchette::where('examen_id', $examenId)
             ->where('session_exam_id', $sessionActive->id)
             ->whereHas('codeAnonymat', function($q) use ($ecId) {
@@ -563,7 +606,7 @@ class FusionService
         }
 
         return [
-            'etudiants_presents' => $manchettesCount,
+            'etudiants_presents' => max($manchettesCount, 0),
             'total_inscrits' => $totalTheorique,
             'source' => 'calcule_manchettes'
         ];
