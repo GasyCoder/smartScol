@@ -2,23 +2,21 @@
 @if(auth()->user()->hasRole('secretaire'))
     @livewire('secretaire-dashboard')
 @else
-<div class="min-h-screen bg-gray-50 dark:bg-gray-950 font-body">
+<div class="font-body">
     <!-- Header -->
-    <div class="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-800">
-        <div class="container mx-auto px-6 py-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-heading font-bold text-gray-800 dark:text-gray-100">Dashboard</h1>
-                    <p class="text-gray-600 dark:text-gray-400 mt-1 text-sm">Vue d'ensemble des performances académiques</p>
-                </div>
-                <button wire:click="refresh" 
-                        class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 {{ $refreshing ? 'opacity-75' : '' }}">
-                    <svg class="w-4 h-4 mr-2 {{ $refreshing ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    {{ $refreshing ? 'Actualisation...' : 'Actualiser' }}
-                </button>
+    <div class="container mx-auto px-6 py-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-heading font-bold text-gray-800 dark:text-gray-100">Dashboard</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-1 text-sm">Vue d'ensemble des performances académiques</p>
             </div>
+            <button wire:click="refresh" 
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 {{ $refreshing ? 'opacity-75' : '' }}">
+                <svg class="w-4 h-4 mr-2 {{ $refreshing ? 'animate-spin' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                {{ $refreshing ? 'Actualisation...' : 'Actualiser' }}
+            </button>
         </div>
     </div>
 
