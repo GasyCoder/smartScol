@@ -30,7 +30,7 @@
         "@fullcalendar/timegrid": "^6.1.17",
         "@popperjs/core": "^2.11.8",
         "@yaireo/tagify": "^4.34.0",
-        "chart.js": "^4.4.8",
+        "chart.js": "^4.5.0",
         "choices.js": "^10.2.0",
         "clipboard": "^2.0.11",
         "dropzone": "^5.9.3",

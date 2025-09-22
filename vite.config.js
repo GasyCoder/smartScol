@@ -8,6 +8,7 @@ export default defineConfig({
             input: [
                 'resources/css/app.css',
                 'resources/js/app.js',
+                'resources/js/dashboard-charts.js',
                 'resources/dashwin/css/app.css',
                 'resources/dashwin/js/scripts.js',
                 'resources/dashwin/js/apps.js',
