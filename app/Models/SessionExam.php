@@ -13,20 +13,61 @@ class SessionExam extends Model
     protected $table = 'session_exams';
 
     protected $fillable = [
+        'type',
+        'annee_universitaire_id', 
         'is_active',
         'is_current',
-        'annee_universitaire_id',
-        'type',
         'date_start',
-        'date_end'
+        'date_end',
+        // ✅ NOUVEAUX CHAMPS
+        'deliberation_appliquee',
+        'date_deliberation',
+        'delibere_par',
+        'parametres_deliberation',
+        'observations_deliberation'
     ];
 
     protected $casts = [
+        'is_active' => 'boolean',
+        'is_current' => 'boolean',
         'date_start' => 'date',
         'date_end' => 'date',
-        'is_active' => 'boolean',
-        'is_current' => 'boolean'
+        'deliberation_appliquee' => 'boolean',
+        'date_deliberation' => 'datetime', 
+        'parametres_deliberation' => 'array'
     ];
+
+    // ✅ NOUVELLES RELATIONS ET MÉTHODES
+    public function deliberateur()
+    {
+        return $this->belongsTo(User::class, 'delibere_par');
+    }
+
+    public function estDeliberee(): bool
+    {
+        return (bool) $this->deliberation_appliquee;
+    }
+
+    public function marquerDeliberee(int $userId, array $parametres = [], ?string $observations = null): void
+    {
+        $this->update([
+            'deliberation_appliquee' => true,
+            'date_deliberation' => now(),
+            'delibere_par' => $userId,
+            'parametres_deliberation' => $parametres,
+            'observations_deliberation' => $observations
+        ]);
+    }
+
+    public function annulerDeliberation(int $userId, ?string $motif = null): void
+    {
+        $this->update([
+            'deliberation_appliquee' => false,
+            'date_deliberation' => null,
+            'delibere_par' => $userId,
+            'observations_deliberation' => $motif ? "Annulée : {$motif}" : 'Délibération annulée'
+        ]);
+    }
 
     /**
      * Récupère la session normale correspondante à cette session de rattrapage

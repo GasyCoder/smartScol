@@ -28,10 +28,11 @@ class SessionExamSeeder extends Seeder
             $sessions[] = [
                 'annee_universitaire_id' => $annee->id,
                 'type' => 'Normale',
-                'is_active' => $isActiveAnnee,      // activée uniquement si l'année est active
-                'is_current' => $isActiveAnnee,     // current seulement pour l'année active
+                'is_active' => $isActiveAnnee,
+                'is_current' => $isActiveAnnee,
                 'date_start' => $debut->copy()->addMonths(3)->format('Y-m-d'),
                 'date_end' => $debut->copy()->addMonths(4)->format('Y-m-d'),
+                'deliberation_appliquee' => false,   // ✅ ajouté
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
@@ -43,6 +44,7 @@ class SessionExamSeeder extends Seeder
                 'is_current' => $isActiveAnnee,
                 'date_start' => $debut->copy()->addMonths(9)->format('Y-m-d'),
                 'date_end' => $debut->copy()->addMonths(10)->format('Y-m-d'),
+                'deliberation_appliquee' => false,   // ✅ ajouté
                 'created_at' => now(),
                 'updated_at' => now(),
             ];

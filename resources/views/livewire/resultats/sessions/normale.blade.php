@@ -145,7 +145,7 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                 class="flex items-center px-4 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
                             <em class="mr-2 ni ni-file-excel" wire:loading.class="animate-spin" wire:target="exporterExcel"></em>
                             <span wire:loading.remove wire:target="exporterExcel">Export tableau Excel</span>
-                            <span wire:loading wire:target="exporterExcel">Export...</span>
+                            <span wire:loading wire:target="exporterExcel">Ecours d'exporter le fichier excel...</span>
                         </button>
                     </div>
 
@@ -256,15 +256,15 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                             </th>
                                         @endforeach
                                         
-                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-l-2 border-r border-l-gray-400 dark:text-gray-100 dark:border-gray-700 dark:border-l-gray-500">
+                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
+                                            Crédits
+                                        </th>
+                                       <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-l-2 border-r border-l-gray-400 dark:text-gray-100 dark:border-gray-700 dark:border-l-gray-500">
                                             <div class="flex flex-col items-center">
                                                 <span class="hidden sm:inline">Moyenne</span>
                                                 <span class="hidden sm:inline">Générale</span>
                                                 <span class="sm:hidden">Moy.</span>
                                             </div>
-                                        </th>
-                                        <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b border-r dark:text-gray-100 dark:border-gray-700">
-                                            Crédits
                                         </th>
                                         <th rowspan="2" class="px-2 sm:px-4 py-2 sm:py-3 text-xs font-medium tracking-wider text-center text-gray-900 uppercase border-b dark:text-gray-100 dark:border-gray-700">
                                             Décision
@@ -365,45 +365,109 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                                         @endif
                                                     </td>
                                                 @endforeach
-                                                {{-- Moyenne UE --}}
+                                                {{-- ✅ CORRECTION : Moyenne UE TOUJOURS VRAIE --}}
                                                 <td class="px-1 sm:px-2 py-2 sm:py-3 text-center border-r whitespace-nowrap dark:border-gray-700">
                                                     @php
-                                                        // Logique académique exacte
-                                                        if ($hasNoteZeroInUE) {
-                                                            $moyenneUE = 0;
-                                                            $moyenneDisplay = '0.00';
-                                                            $ueValidee = false;
-                                                            $moyenneClass = 'text-red-600 dark:text-red-400 font-bold';
-                                                        } elseif (!empty($notesUE)) {
+                                                        // ✅ NOUVELLE LOGIQUE : Toujours calculer et afficher la vraie moyenne
+                                                        if (!empty($notesUE)) {
                                                             $moyenneUE = array_sum($notesUE) / count($notesUE);
-                                                            $ueValidee = $moyenneUE >= 10;
                                                             $moyenneDisplay = number_format($moyenneUE, 2);
-                                                            $moyenneClass = $ueValidee ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-orange-600 dark:text-orange-400';
+                                                            
+                                                            // ✅ NOUVEAU : Calculer les crédits validés pour cette UE
+                                                            $creditsECValides = 0;
+                                                            $creditsECTotaux = 0;
+                                                            $detailsCreditsEC = [];
+                                                            
+                                                            foreach($ueStructure['ecs'] as $ecData) {
+                                                                if(isset($resultat['notes'][$ecData['ec']->id])) {
+                                                                    $noteEC = $resultat['notes'][$ecData['ec']->id]->note;
+                                                                    $creditsEC = $ecData['ec']->credits ?? 0;
+                                                                    $ecValidee = ($noteEC >= 10) && ($noteEC != 0);
+                                                                    
+                                                                    if ($ecValidee) {
+                                                                        $creditsECValides += $creditsEC;
+                                                                    }
+                                                                    $creditsECTotaux += $creditsEC;
+                                                                    
+                                                                    $detailsCreditsEC[] = [
+                                                                        'nom' => $ecData['ec']->abr,
+                                                                        'note' => $noteEC,
+                                                                        'credits' => $creditsEC,
+                                                                        'validee' => $ecValidee
+                                                                    ];
+                                                                }
+                                                            }
+                                                            
+                                                            // ✅ LOGIQUE DE VALIDATION : Note 0 empêche la validation, pas l'affichage
+                                                            $ueValidee = ($moyenneUE >= 10) && (!$hasNoteZeroInUE);
+                                                            $creditsUEValides = $ueValidee ? $ueStructure['ue']->credits : 0;
+                                                            
+                                                            // ✅ COULEURS : Basées sur validation, pas sur moyenne
+                                                            if ($hasNoteZeroInUE) {
+                                                                // Rouge si note éliminatoire (mais affiche vraie moyenne)
+                                                                $moyenneClass = 'text-red-600 dark:text-red-400 font-bold';
+                                                            } elseif ($ueValidee) {
+                                                                // Vert si validée
+                                                                $moyenneClass = 'text-green-600 dark:text-green-400 font-semibold';
+                                                            } else {
+                                                                // Orange si moyenne < 10 sans note éliminatoire
+                                                                $moyenneClass = 'text-orange-600 dark:text-orange-400';
+                                                            }
                                                         } else {
-                                                            $moyenneUE = 0;
                                                             $moyenneDisplay = '-';
                                                             $ueValidee = false;
                                                             $moyenneClass = 'text-gray-500 dark:text-gray-400';
+                                                            $creditsECValides = 0;
+                                                            $creditsECTotaux = 0;
+                                                            $creditsUEValides = 0;
+                                                            $detailsCreditsEC = [];
                                                         }
                                                     @endphp
-                                                    <div class="flex flex-col items-center justify-center">
-                                                        <span class="text-xs sm:text-sm font-bold {{ $moyenneClass }}">
-                                                            {{ $moyenneDisplay }}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                            @endforeach
-                                            {{-- Moyenne générale --}}
-                                            <td class="px-2 sm:px-4 py-2 sm:py-3 text-center border-l-2 border-r whitespace-nowrap border-l-gray-400 dark:border-gray-700 dark:border-l-gray-500">
-                                                <div class="flex flex-col items-center">
-                                                    <span class="text-xs sm:text-sm font-bold {{ $resultat['moyenne_generale'] >= 10 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
-                                                        {{ number_format($resultat['moyenne_generale'], 2) }}
+                                                <div class="flex flex-col items-center justify-center">
+                                                    {{-- Moyenne UE --}}
+                                                    <span class="text-xs sm:text-sm font-bold {{ $moyenneClass }}">
+                                                        {{ $moyenneDisplay }}
                                                     </span>
-                                                    @if(isset($resultat['has_note_eliminatoire']) && $resultat['has_note_eliminatoire'])
-                                                        <span class="mt-1 text-xs text-red-500" title="Présence de note(s) éliminatoire(s)">⚠️</span>
+                                                    
+                                                    {{-- ✅ NOUVEAU : Affichage détails crédits --}}
+                                                    @if(!empty($detailsCreditsEC))
+                                                        <div class="mt-1 text-xs">
+                                                            {{-- Crédits UE validés/totaux --}}
+                                                            <div class="font-semibold {{ $ueValidee ? 'text-green-600' : 'text-gray-600' }}">
+                                                                {{ $creditsUEValides }}/{{ $ueStructure['ue']->credits }}
+                                                            </div>
+                                                            
+                                                            {{-- Détail crédits EC (affiché au survol) --}}
+                                                            <div class="hidden group-hover:block absolute z-10 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg p-2 mt-1"
+                                                                style="min-width: 150px;">
+                                                                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                                    Détails {{ $ueStructure['ue']->abr }} :
+                                                                </div>
+                                                                @foreach($detailsCreditsEC as $detailEC)
+                                                                    <div class="flex justify-between items-center text-xs">
+                                                                        <span>{{ $detailEC['nom'] }}</span>
+                                                                        <span class="{{ $detailEC['validee'] ? 'text-green-600' : 'text-red-600' }}">
+                                                                            {{ $detailEC['credits'] }}cr
+                                                                            {{ $detailEC['validee'] ? '✓' : '✗' }}
+                                                                        </span>
+                                                                    </div>
+                                                                @endforeach
+                                                                <div class="border-t pt-1 mt-1 font-semibold">
+                                                                    EC: {{ $creditsECValides }}/{{ $creditsECTotaux }}cr
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    @endif
+
+                                                    {{-- ✅ Indicateur visuel pour notes éliminatoires --}}
+                                                    @if($hasNoteZeroInUE && !empty($notesUE))
+                                                        <span class="text-xs text-red-500" title="UE non validée (note éliminatoire)">❌</span>
+                                                    @elseif($ueValidee)
+                                                        <span class="text-xs text-green-500" title="UE validée">✅</span>
                                                     @endif
                                                 </div>
                                             </td>
+                                            @endforeach
                                             {{-- Crédits --}}
                                             <td class="px-2 sm:px-4 py-2 sm:py-4 text-center border-r whitespace-nowrap dark:border-gray-700">
                                                 <div class="flex flex-col items-center">
@@ -424,6 +488,25 @@ class="p-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:borde
                                                 </div>
                                             </td>
                                             
+                                            {{-- ✅ CORRECTION : Moyenne générale TOUJOURS VRAIE --}}
+                                            <td class="px-2 sm:px-4 py-2 sm:py-3 text-center border-l-2 border-r whitespace-nowrap border-l-gray-400 dark:border-gray-700 dark:border-l-gray-500">
+                                                <div class="flex flex-col items-center">
+                                                    {{-- ✅ Afficher la vraie moyenne générale --}}
+                                                    <span class="text-xs sm:text-sm font-bold {{ $resultat['moyenne_generale'] >= 10 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400' }}">
+                                                        {{ number_format($resultat['moyenne_generale'], 2) }}
+                                                    </span>
+                                                    {{-- ✅ Indicateurs visuels améliorés --}}
+                                                    @if(isset($resultat['has_note_eliminatoire']) && $resultat['has_note_eliminatoire'])
+                                                        <div class="flex items-center mt-1">
+                                                            <span class="text-xs text-red-500 mr-1" title="Présence de note(s) éliminatoire(s)">⚠️</span>
+                                                            <span class="text-xs text-red-600 dark:text-red-400 font-medium">ÉLIM</span>
+                                                        </div>
+                                                    @elseif($resultat['moyenne_generale'] >= 10)
+                                                        <span class="mt-1 text-xs text-green-500" title="Moyenne suffisante">✅</span>
+                                                    @endif
+                                                </div>
+                                            </td>
+
                                             {{-- Décision avec indicateur jury --}}
                                             <td class="px-2 sm:px-4 py-2 sm:py-3 text-center whitespace-nowrap">
                                                 @php

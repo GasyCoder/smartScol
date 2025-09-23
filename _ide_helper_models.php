@@ -832,9 +832,15 @@ namespace App\Models{
  * @property bool $is_current
  * @property \Illuminate\Support\Carbon $date_start
  * @property \Illuminate\Support\Carbon $date_end
+ * @property bool $deliberation_appliquee
+ * @property \Illuminate\Support\Carbon|null $date_deliberation
+ * @property int|null $delibere_par
+ * @property array<array-key, mixed>|null $parametres_deliberation
+ * @property string|null $observations_deliberation
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\AnneeUniversitaire $anneeUniversitaire
+ * @property-read \App\Models\User|null $deliberateur
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Examen> $examens
  * @property-read int|null $examens_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam activeInActiveYear()
@@ -846,11 +852,16 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam rattrapage()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereAnneeUniversitaireId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDateDeliberation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDateEnd($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDateStart($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDeliberationAppliquee($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDeliberePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereIsActive($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereIsCurrent($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereObservationsDeliberation($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereParametresDeliberation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereUpdatedAt($value)
  */

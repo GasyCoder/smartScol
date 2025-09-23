@@ -1733,15 +1733,7 @@ class ResultatFinal extends Model
                 return null;
             }
 
-            // LOGIQUE MÉDECINE 1 : Vérifier s'il y a une note éliminatoire (0)
-            $hasNoteZero = $resultats->contains('note', 0);
-
-            if ($hasNoteZero) {
-                // LOGIQUE MÉDECINE 2 : Si note 0, UE éliminée = moyenne 0
-                return 0;
-            }
-
-            // LOGIQUE MÉDECINE 3 : Moyenne UE = somme notes / nombre EC
+            // ✅ CORRECTION : Toujours calculer la vraie moyenne arithmétique
             return round($resultats->avg('note'), 2);
 
         } catch (\Exception $e) {
@@ -1754,7 +1746,6 @@ class ResultatFinal extends Model
             return null;
         }
     }
-
 
     /**
      * MÉTHODE MISE À JOUR : Vérifie si un étudiant valide une UE selon logique médecine
@@ -1773,8 +1764,18 @@ class ResultatFinal extends Model
                 return false;
             }
 
-            // LOGIQUE MÉDECINE : UE validée si moyenne >= 10 ET pas de note 0
-            return $moyenneUE >= 10 && $moyenneUE > 0;
+            // ✅ Vérifier s'il y a des notes éliminatoires dans cette UE
+            $hasNoteEliminatoire = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.ue_id', $ueId)
+                ->where('rf.note', 0)
+                ->exists();
+
+            // ✅ LOGIQUE MÉDECINE : UE validée si moyenne >= 10 ET pas de note éliminatoire
+            return $moyenneUE >= 10 && !$hasNoteEliminatoire;
 
         } catch (\Exception $e) {
             Log::error('Erreur lors de la vérification de validation UE médecine', [
@@ -1813,33 +1814,19 @@ class ResultatFinal extends Model
                 return 0;
             }
 
-            // LOGIQUE MÉDECINE : Grouper par UE
+            // ✅ CORRECTION : Grouper par UE et toujours calculer la vraie moyenne
             $resultatsParUE = $resultats->groupBy('ue_id');
             $moyennesUE = [];
-            $hasNoteEliminatoire = false;
 
             foreach ($resultatsParUE as $ueId => $notesUE) {
-                // LOGIQUE MÉDECINE 1 : Vérifier s'il y a une note éliminatoire (0) dans cette UE
-                $hasNoteZeroInUE = $notesUE->contains('note', 0);
-
-                if ($hasNoteZeroInUE) {
-                    $hasNoteEliminatoire = true;
-                    $moyennesUE[] = 0; // UE éliminée
-                } else {
-                    // LOGIQUE MÉDECINE 2 : Moyenne UE = somme notes / nombre EC
-                    $moyenneUE = $notesUE->avg('note');
-                    $moyennesUE[] = $moyenneUE;
-                }
+                // ✅ CALCUL : Toujours la vraie moyenne UE
+                $moyenneUE = $notesUE->avg('note');
+                $moyennesUE[] = $moyenneUE;
             }
 
-            // LOGIQUE MÉDECINE 3 : Moyenne générale = somme moyennes UE / nombre UE
+            // ✅ MOYENNE GÉNÉRALE : Somme moyennes UE / nombre UE (VRAIE MOYENNE)
             $moyenneGenerale = count($moyennesUE) > 0 ?
                 array_sum($moyennesUE) / count($moyennesUE) : 0;
-
-            // LOGIQUE MÉDECINE 4 : Si note éliminatoire, moyenne générale = 0
-            if ($hasNoteEliminatoire) {
-                $moyenneGenerale = 0;
-            }
 
             return round($moyenneGenerale, 2);
 
@@ -1852,7 +1839,6 @@ class ResultatFinal extends Model
             return 0;
         }
     }
-
     /**
      * MÉTHODE MISE À JOUR : Détermine automatiquement la décision première session selon logique médecine
      *
@@ -2118,7 +2104,7 @@ class ResultatFinal extends Model
                 throw new \Exception('Aucun résultat trouvé pour cet étudiant');
             }
 
-            // Analyser selon logique médecine
+            // Analyser selon logique médecine AVEC vraies moyennes
             $resultatsParUE = $resultats->groupBy('ec.ue_id');
             $resultatsUE = [];
             $creditsValides = 0;
@@ -2131,24 +2117,23 @@ class ResultatFinal extends Model
                 $ue = $notesUE->first()->ec->ue;
                 $totalCredits += $ue->credits ?? 0;
 
-                // LOGIQUE MÉDECINE : Analyser l'UE
+                // ✅ VRAIES moyennes et logique d'élimination
                 $notes = $notesUE->pluck('note')->toArray();
                 $hasNoteZeroInUE = in_array(0, $notes);
+                
+                // ✅ CORRECTION : Toujours calculer la vraie moyenne
+                $moyenneUE = round(array_sum($notes) / count($notes), 2);
+                $moyennesUE[] = $moyenneUE;
 
                 if ($hasNoteZeroInUE) {
                     $hasNoteEliminatoire = true;
                     $uesEliminees[] = $ue->nom;
-                    $moyenneUE = 0;
-                    $ueValidee = false;
+                    $ueValidee = false; // UE non validée à cause de la note éliminatoire
                 } else {
-                    $moyenneUE = round(array_sum($notes) / count($notes), 2);
                     $ueValidee = $moyenneUE >= 10;
-
                     if ($ueValidee) {
                         $creditsValides += $ue->credits ?? 0;
                     }
-
-                    $moyennesUE[] = $moyenneUE;
                 }
 
                 $resultatsUE[] = [
@@ -2160,22 +2145,19 @@ class ResultatFinal extends Model
                             'est_eliminatoire' => $resultat->note == 0
                         ];
                     }),
-                    'moyenne_ue' => $moyenneUE,
+                    'moyenne_ue' => $moyenneUE, // ✅ VRAIE MOYENNE
+                    'moyenne_reelle' => $moyenneUE, // ✅ Pour compatibilité
                     'validee' => $ueValidee,
                     'eliminee' => $hasNoteZeroInUE,
                     'credits' => $ue->credits ?? 0
                 ];
             }
 
-            // LOGIQUE MÉDECINE : Moyenne générale
+            // ✅ MOYENNE GÉNÉRALE : Toujours la vraie moyenne
             $moyenneGenerale = count($moyennesUE) > 0 ?
                 round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
 
-            if ($hasNoteEliminatoire) {
-                $moyenneGenerale = 0;
-            }
-
-            // LOGIQUE MÉDECINE : Décision
+            // ✅ DÉCISION : Basée sur crédits et notes éliminatoires, pas sur moyenne
             if ($session->type === 'Rattrapage') {
                 $decision = self::determinerDecisionRattrapage_LogiqueMedecine($etudiantId, $sessionId);
             } else {
@@ -2190,7 +2172,8 @@ class ResultatFinal extends Model
                 ],
                 'resultats_detailles' => $resultatsUE,
                 'synthese' => [
-                    'moyenne_generale' => $moyenneGenerale,
+                    'moyenne_generale' => $moyenneGenerale, // ✅ VRAIE MOYENNE
+                    'moyenne_reelle' => $moyenneGenerale, // ✅ Pour compatibilité
                     'credits_valides' => $creditsValides,
                     'total_credits' => $totalCredits,
                     'pourcentage_credits' => $totalCredits > 0 ?
@@ -2208,11 +2191,11 @@ class ResultatFinal extends Model
                     $session->type
                 ),
                 'methode_calcul' => [
-                    'moyenne_ue' => 'Somme des notes EC / Nombre d\'EC',
+                    'moyenne_ue' => 'Somme des notes EC / Nombre d\'EC (VRAIE moyenne toujours affichée)',
                     'validation_ue' => 'Moyenne UE >= 10 ET aucune note = 0',
-                    'moyenne_generale' => 'Somme des moyennes UE / Nombre d\'UE',
-                    'note_eliminatoire' => 'Une note de 0 élimine toute l\'UE',
-                    'decision_session1' => 'Admis si 60 crédits, sinon Rattrapage',
+                    'moyenne_generale' => 'Somme des moyennes UE / Nombre d\'UE (VRAIE moyenne toujours affichée)',
+                    'note_eliminatoire' => 'Une note de 0 empêche la validation de l\'UE mais n\'affecte pas l\'affichage de la moyenne',
+                    'decision_session1' => 'Admis si tous crédits validés ET pas de note 0, sinon Rattrapage',
                     'decision_session2' => 'Exclu si note 0, Admis si >= 40 crédits, sinon Redoublant'
                 ]
             ];
@@ -2301,6 +2284,50 @@ class ResultatFinal extends Model
 
         return $observations;
     }
+
+
+        /**
+     * ✅ NOUVELLE MÉTHODE : Obtient les informations complètes d'une UE avec vraie moyenne
+     */
+    public static function getInfosCompletes_UE($etudiantId, $ueId, $sessionId)
+    {
+        try {
+            $moyenneReelle = self::calculerMoyenneUE_LogiqueMedecine($etudiantId, $ueId, $sessionId);
+            
+            if ($moyenneReelle === null) {
+                return null;
+            }
+
+            // Vérifier les notes éliminatoires
+            $hasNoteEliminatoire = DB::table('resultats_finaux as rf')
+                ->join('ecs as ec', 'rf.ec_id', '=', 'ec.id')
+                ->where('rf.session_exam_id', $sessionId)
+                ->where('rf.etudiant_id', $etudiantId)
+                ->where('rf.statut', self::STATUT_PUBLIE)
+                ->where('ec.ue_id', $ueId)
+                ->where('rf.note', 0)
+                ->exists();
+
+            $ueValidee = self::etudiantValideUE_LogiqueMedecine($etudiantId, $ueId, $sessionId);
+
+            return [
+                'moyenne_reelle' => $moyenneReelle,
+                'has_note_eliminatoire' => $hasNoteEliminatoire,
+                'ue_validee' => $ueValidee,
+                'statut' => $hasNoteEliminatoire ? 'eliminee' : ($ueValidee ? 'validee' : 'non_validee')
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Erreur getInfosCompletes_UE', [
+                'etudiant_id' => $etudiantId,
+                'ue_id' => $ueId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
 
     /**
      * NOUVELLE MÉTHODE : Valide la cohérence des calculs médecine pour une session

@@ -19,6 +19,13 @@ return new class extends Migration
             $table->boolean('is_current')->default(false);
             $table->date('date_start');
             $table->date('date_end');
+            $table->boolean('deliberation_appliquee')->default(false);
+            $table->timestamp('date_deliberation')->nullable();
+            $table->unsignedBigInteger('delibere_par')->nullable();
+            $table->json('parametres_deliberation')->nullable();
+            $table->text('observations_deliberation')->nullable();
+            
+            $table->foreign('delibere_par')->references('id')->on('users');
             $table->timestamps();
 
             $table->foreign('annee_universitaire_id')->references('id')->on('annees_universitaires')->onDelete('cascade');

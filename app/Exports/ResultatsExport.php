@@ -56,19 +56,16 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
     {
         $data = [];
 
-        // ✅ LIGNE 1: En-têtes UE - Utilisation directe de la colonne abr
+        // LIGNE 1: En-têtes UE
         $headerRow1 = ['', '', '', ''];
         $columnIndex = 5;
 
         foreach ($this->uesStructure as $index => $ueStructure) {
             $ue = $ueStructure['ue'];
             $nbEcs = count($ueStructure['ecs']);
-            $nbColonnesUE = $nbEcs + 1;
+            $nbColonnesUE = $nbEcs + 2;
 
-            // ✅ Utilisation directe de l'abr de la table
             $ueAbr = $ue->abr ?? 'UE' . ($index + 1);
-            
-            // ✅ Nettoyage simple du nom UE
             $nomUE = $this->cleanUEName($ue->nom);
             
             $this->ueColumns[$ue->id] = [
@@ -80,88 +77,131 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
                 'abr' => $ueAbr
             ];
 
-            // ✅ Construction header UE
             $ueHeader = strtoupper($ueAbr) . '. ' . strtoupper($nomUE) . ' (' . ($ue->credits ?? 0) . ' CRÉDITS)';
             $headerRow1[] = $ueHeader;
 
-            // Colonnes vides pour merger
             for ($i = 1; $i < $nbColonnesUE; $i++) {
                 $headerRow1[] = '';
             }
-
             $columnIndex += $nbColonnesUE;
         }
 
-        $headerRow1[] = 'MOYENNE GÉNÉRALE';
-        $headerRow1[] = 'CRÉDITS';
-        $headerRow1[] = 'DÉCISION';
-
+        $headerRow1[] = '';
+        $headerRow1[] = '';
+        $headerRow1[] = '';
         $data[0] = $headerRow1;
 
-        // ✅ LIGNE 2: Sous-en-têtes EC - Utilisation directe de la colonne abr
+        // LIGNE 2: Sous-en-têtes EC
         $headerRow2 = ['ORDRE', 'MATRICULE', 'NOM', 'PRÉNOM'];
 
         foreach ($this->uesStructure as $index => $ueStructure) {
-            $ue = $ueStructure['ue'];
-
-            foreach ($ueStructure['ecs'] as $ecIndex => $ecData) {
+            foreach ($ueStructure['ecs'] as $ecData) {
                 $ec = $ecData['ec'];
-                
-                // ✅ Utilisation directe de l'abr de la table EC
-                $ecAbr = $ec->abr ?? 'EC' . ($ecIndex + 1);
-                
-                // ✅ Nettoyage simple du nom EC
+                $ecAbr = $ec->abr ?? 'EC';
                 $nomEC = $this->cleanECName($ec->nom);
                 
-                // ✅ Construction header EC (sans préfixe UE)
-                $ecHeader = strtoupper($ecAbr) . '. ' . strtoupper($nomEC);
+                // ✅ RÉCUPÉRATION DIRECTE des crédits EC depuis la base
+                $creditsEC = $this->getCreditsECDirectement($ec->id);
                 
-                // Ajout de l'enseignant si disponible
+                $ecHeader = strtoupper($ecAbr) . '. ' . strtoupper($nomEC);
                 if (!empty($ec->enseignant)) {
                     $ecHeader .= ' [' . trim($ec->enseignant) . ']';
                 }
-                
                 $headerRow2[] = $ecHeader;
             }
 
-            $headerRow2[] = 'MOYENNE';
+            $headerRow2[] = 'MOYENNE UE';
+            $headerRow2[] = 'CRÉDITS EC VALIDÉS';
         }
 
-        $headerRow2[] = '';
-        $headerRow2[] = '';
-        $headerRow2[] = '';
-
+        $headerRow2[] = 'MOYENNE GÉNÉRALE';
+        $headerRow2[] = 'CRÉDITS TOTAUX';
+        $headerRow2[] = 'DÉCISION';
         $data[1] = $headerRow2;
 
-        // ✅ DONNÉES ÉTUDIANTS (commencent maintenant à la ligne 3)
+        // TRI PAR ORDRE DE MÉRITE ACADÉMIQUE COHÉRENT
+        $this->resultats = $this->resultats->sort(function($a, $b) {
+            // 1. PRIORITÉ ABSOLUE : Décision académique
+            $prioriteDecisions = [
+                'admis' => 1,        // Admis en premier
+                'rattrapage' => 2,   
+                'redoublant' => 3,
+                'exclus' => 4
+            ];
+            
+            $decisionA = $prioriteDecisions[$a['decision'] ?? 'rattrapage'] ?? 5;
+            $decisionB = $prioriteDecisions[$b['decision'] ?? 'rattrapage'] ?? 5;
+            
+            if ($decisionA !== $decisionB) {
+                return $decisionA <=> $decisionB;
+            }
+            
+            // 2. DANS CHAQUE GROUPE : Moyenne générale décroissante
+            $moyenneA = $a['moyenne_generale'] ?? 0;
+            $moyenneB = $b['moyenne_generale'] ?? 0;
+            
+            if (abs($moyenneA - $moyenneB) >= 0.01) {
+                return $moyenneB <=> $moyenneA; // Meilleure moyenne en premier
+            }
+            
+            // 3. Puis crédits décroissants
+            $creditsA = $a['credits_valides'] ?? 0;
+            $creditsB = $b['credits_valides'] ?? 0;
+            
+            return $creditsB <=> $creditsA;
+            
+        })->values();
+
+
+        // DONNÉES ÉTUDIANTS avec calculs corrects
         foreach ($this->resultats as $index => $resultat) {
             $etudiant = $resultat['etudiant'];
             
             $row = [
                 $index + 1,
                 $etudiant->matricule ?? '',
-                strtoupper($etudiant->nom ?? ''),
-                ucfirst(strtolower($etudiant->prenom ?? '')),
+                (empty($etudiant->nom) || $etudiant->nom === '0') ? '' : strtoupper($etudiant->nom),
+                (empty($etudiant->prenom) || $etudiant->prenom === '0') ? '' : ucfirst(strtolower($etudiant->prenom)),
             ];
 
             foreach ($this->uesStructure as $ueStructure) {
                 $ue = $ueStructure['ue'];
                 $notesUE = [];
                 $hasNoteZero = false;
+                $detailsCreditsEC = [];
+                $creditsECValides = 0;
+                $creditsECTotauxUE = 0;
 
+                // ✅ TRAITEMENT CORRECT par EC avec récupération directe des crédits
                 foreach ($ueStructure['ecs'] as $ecData) {
                     $ec = $ecData['ec'];
+                    
+                    // ✅ RÉCUPÉRATION DIRECTE des crédits
+                    $creditsEC = $this->getCreditsECDirectement($ec->id);
+                    $creditsECTotauxUE += $creditsEC;
+
                     if (isset($resultat['notes'][$ec->id])) {
                         $note = $resultat['notes'][$ec->id]->note;
                         $row[] = number_format($note, 2);
                         $notesUE[] = $note;
+                        
+                        // ✅ LOGIQUE VALIDATION EC
+                        $ecValidee = ($note >= 10) && ($note != 0);
+                        if ($ecValidee) {
+                            $creditsECValides += $creditsEC;
+                        }
+                        
+                        $statut = ($note == 0) ? '✗' : ($ecValidee ? '✓' : '✗');
+                        $detailsCreditsEC[] = ($ec->abr ?? 'EC') . ':' . $statut . '(' . $creditsEC . ')';
+                        
                         if ($note == 0) $hasNoteZero = true;
                     } else {
                         $row[] = '-';
+                        $detailsCreditsEC[] = ($ec->abr ?? 'EC') . ':-(' . $creditsEC . ')';
                     }
                 }
 
-                // Calcul moyenne UE
+                // Moyenne UE
                 if ($hasNoteZero) {
                     $row[] = '0.00';
                 } elseif (!empty($notesUE)) {
@@ -170,15 +210,35 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
                 } else {
                     $row[] = '-';
                 }
+                
+                // ✅ COLONNE CRÉDITS EC VALIDÉS avec logique correcte
+                $resumeCredits = implode(' | ', $detailsCreditsEC);
+                
+                // ✅ TOTAL = crédits EC validés / crédits totaux de l'UE (pas seulement EC)
+                $creditsUETotaux = $ue->credits ?? 0;
+
+                // Formatage sans décimales inutiles
+                $creditsECValidesTxt = $creditsECValides == (int)$creditsECValides ? (int)$creditsECValides : $creditsECValides;
+                $creditsUETotauxTxt = $creditsUETotaux == (int)$creditsUETotaux ? (int)$creditsUETotaux : $creditsUETotaux;
+
+                $resumeCredits = "{$creditsECValidesTxt}/{$creditsUETotauxTxt}";
+
+                if ($creditsUETotaux > 0) {
+                    $pourcentage = round(($creditsECValides / $creditsUETotaux) * 100, 1);
+                    // $resumeCredits .= " ({$pourcentage}%)";
+                }
+
+                $row[] = $resumeCredits;
             }
 
+            // Colonnes finales
             $row[] = number_format($resultat['moyenne_generale'] ?? 0, 2);
             $row[] = ($resultat['credits_valides'] ?? 0) . '/' . ($resultat['total_credits'] ?? 60);
 
             $decision = $resultat['decision'] ?? 'non_definie';
             $decisionLibelle = match($decision) {
                 'admis' => 'Admis',
-                'rattrapage' => 'Rattrapage',
+                'rattrapage' => 'Rattrapage', 
                 'redoublant' => 'Redoublant',
                 'exclus' => 'Exclus',
                 default => 'Non définie'
@@ -191,6 +251,66 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
         $this->totalColumns = count($headerRow2);
         $this->data = $data;
     }
+
+
+    private function getCreditsECDirectement($ecId)
+    {
+        try {
+            // Requête directe vers la table EC
+            $ec = \DB::table('ecs')->where('id', $ecId)->first();
+            
+            if ($ec) {
+                // Essayer différents noms de colonnes possibles
+                if (isset($ec->credits) && $ec->credits > 0) {
+                    return (int) $ec->credits;
+                }
+                if (isset($ec->credit) && $ec->credit > 0) {
+                    return (int) $ec->credit;
+                }
+                if (isset($ec->nb_credits) && $ec->nb_credits > 0) {
+                    return (int) $ec->nb_credits;
+                }
+            }
+            
+            // ✅ FALLBACK: Calculer proportionnellement par rapport à l'UE
+            return $this->calculerCreditsECProportionnel($ecId);
+            
+        } catch (\Exception $e) {
+            \Log::error('Erreur récupération crédits EC: ' . $e->getMessage());
+            return 1; // Valeur par défaut
+        }
+    }
+
+    // ✅ MÉTHODE pour calculer crédits EC proportionnellement
+    private function calculerCreditsECProportionnel($ecId)
+    {
+        try {
+            // Récupérer l'UE de cet EC
+            $ec = \DB::table('ecs')->where('id', $ecId)->first();
+            if (!$ec || !$ec->ue_id) {
+                return 1;
+            }
+            
+            // Récupérer l'UE et compter ses EC
+            $ue = \DB::table('ues')->where('id', $ec->ue_id)->first();
+            $nbECsUE = \DB::table('ecs')->where('ue_id', $ec->ue_id)->where('is_active', true)->count();
+            
+            if ($ue && $nbECsUE > 0) {
+                $creditsUE = $ue->credits ?? 0;
+                
+                // ✅ RÉPARTITION PROPORTIONNELLE
+                $creditsParEC = round($creditsUE / $nbECsUE, 1);
+                return $creditsParEC > 0 ? $creditsParEC : 1;
+            }
+            
+            return 1;
+            
+        } catch (\Exception $e) {
+            \Log::error('Erreur calcul crédits proportionnel: ' . $e->getMessage());
+            return 1;
+        }
+    }
+
 
     /**
      * Nettoie le nom de l'UE en supprimant les préfixes répétitifs
@@ -346,18 +466,24 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
                 $widths[$columnLetter] = 15;
                 $columnLetter++;
             }
+            
             // Colonne moyenne UE
-            $widths[$columnLetter] = 10;
+            $widths[$columnLetter] = 12;
+            $columnLetter++;
+            
+            // ✅ NOUVELLE COLONNE: Crédits EC validés (plus large)
+            $widths[$columnLetter] = 25;
             $columnLetter++;
         }
 
         // Colonnes finales
         $widths[$columnLetter++] = 12; // Moyenne générale
-        $widths[$columnLetter++] = 10; // Crédits
+        $widths[$columnLetter++] = 30; // Crédits totaux (plus large pour détails)
         $widths[$columnLetter++] = 14; // Décision
 
         return $widths;
     }
+
 
     public function title(): string
     {
@@ -386,7 +512,7 @@ class ResultatsExport implements FromArray, WithStyles, WithColumnWidths, WithTi
             $sheet->mergeCells($startCol . '1:' . $endCol . '1');
         }
 
-        // Fusion des colonnes finales
+        // Fusion des colonnes finales (3 colonnes au lieu de 2)
         $totalCols = $this->totalColumns;
         $beforeLastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols - 2);
         $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols);

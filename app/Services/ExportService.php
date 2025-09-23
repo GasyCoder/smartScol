@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Niveau;
 use App\Models\Parcour;
+use App\Models\SessionExam;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Exports\ResultatsExport;
 use App\Models\AnneeUniversitaire;
@@ -97,21 +98,24 @@ class ExportService
     /**
      * ✅ Export Excel avec le nouveau format de l'image
      */
-    public function exporterExcel($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null)
+    public function exporterExcel($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null, $deliberationParams = [])
     {
         try {
             if (empty($resultats)) {
                 throw new \Exception('Aucun résultat disponible pour l\'export.');
             }
 
-            // ✅ Générer nom de fichier descriptif
-            $nomFichier = $this->genererNomFichierExcel($niveau, $parcours, $session, $anneeUniv);
+            // ✅ NOUVEAU : Vérifier si la délibération a été appliquée
+            $deliberationAppliquee = $this->verifierDeliberationAppliquee($session);
             
-            // ✅ Utiliser la nouvelle classe d'export avec tous les paramètres
-            return Excel::download(
-                new ResultatsExport($resultats, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
-                $nomFichier
-            );
+            // ✅ LOGIQUE DIFFÉRENTE selon la délibération
+            if ($deliberationAppliquee) {
+                // 🔥 DÉLIBÉRATION APPLIQUÉE : Exporter avec les corrections académiques
+                return $this->exporterAvecDeliberation($resultats, $uesStructure, $niveau, $parcours, $anneeUniv, $session, $deliberationParams);
+            } else {
+                // 📊 DÉLIBÉRATION NON APPLIQUÉE : Exporter les résultats bruts
+                return $this->exporterSansDeliberation($resultats, $uesStructure, $niveau, $parcours, $anneeUniv, $session);
+            }
             
         } catch (\Exception $e) {
             Log::error('Erreur export Excel: ' . $e->getMessage());
@@ -119,25 +123,139 @@ class ExportService
         }
     }
 
+
+
+    /**
+     * ✅ Export AVEC délibération appliquée (résultats corrigés)
+     */
+    private function exporterAvecDeliberation($resultats, $uesStructure, $niveau, $parcours, $anneeUniv, $session, $deliberationParams)
+    {
+        Log::info('🔔 Export AVEC délibération appliquée', [
+            'session_id' => $session->id ?? null,
+            'session_type' => $session->type ?? 'inconnue',
+            'nb_resultats' => count($resultats)
+        ]);
+
+        // ✅ RÉCUPÉRER le seuil dynamiquement
+        $seuilCredits = $this->determinerSeuilCredits($session, $deliberationParams);
+        
+        // ✅ VALIDATION et correction automatique des résultats
+        $resultatsCorrigés = $this->validerEtCorrigerResultats($resultats, $seuilCredits);
+        
+        // ✅ ORDRE crédits avant moyenne
+        $resultatsFinaux = $this->corrigerResultatsPourExport($resultatsCorrigés['resultats_corriges']);
+
+        $nomFichier = $this->genererNomFichierExcel($niveau, $parcours, $session, $anneeUniv, 'Delibere');
+        
+        // ✅ LOGGER les corrections appliquées
+        if (!$resultatsCorrigés['coherent']) {
+            Log::info('📝 Corrections appliquées lors de l\'export délibéré', [
+                'nb_corrections' => count($resultatsCorrigés['erreurs']),
+                'seuil_credits' => $seuilCredits,
+                'session_type' => $session->type ?? 'Normale'
+            ]);
+        }
+        
+        return Excel::download(
+            new ResultatsExport($resultatsFinaux, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
+            $nomFichier
+        );
+    }
+
+
+    /**
+     * ✅ Export SANS délibération (résultats bruts)
+     */
+    private function exporterSansDeliberation($resultats, $uesStructure, $niveau, $parcours, $anneeUniv, $session)
+    {
+        Log::info('📋 Export SANS délibération (résultats bruts)', [
+            'session_id' => $session->id ?? null,
+            'session_type' => $session->type ?? 'inconnue',
+            'nb_resultats' => count($resultats)
+        ]);
+
+        // ❌ PAS de correction académique - résultats bruts
+        $resultatsBruts = collect($resultats)->map(function($resultat) {
+            return array_merge($resultat, [
+                'decision_origine' => 'brute', // Marquer comme résultat brut
+                'decision_corrigee' => false
+            ]);
+        })->toArray();
+
+        $nomFichier = $this->genererNomFichierExcel($niveau, $parcours, $session, $anneeUniv, 'Brut');
+        
+        return Excel::download(
+            new ResultatsExport($resultatsBruts, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
+            $nomFichier
+        );
+    }
+
+
+    private function verifierDeliberationAppliquee($session): bool
+    {
+        try {
+            if (!$session || !$session->id) {
+                return false;
+            }
+
+            // Charger la session avec les données de délibération
+            $sessionComplete = SessionExam::with('deliberateur')
+                ->find($session->id);
+
+            return $sessionComplete && $sessionComplete->deliberation_appliquee;
+            
+        } catch (\Exception $e) {
+            Log::warning('Erreur vérification délibération: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    
     /**
      * ✅ Export Excel admis uniquement
      */
-    public function exporterExcelAdmis($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null)
+    public function exporterExcelAdmis($resultats, $uesStructure = [], $niveau = null, $parcours = null, $anneeUniv = null, $session = null, $deliberationParams = [])
     {
         try {
-            // Filtrer pour ne garder que les admis
-            $resultatsAdmis = collect($resultats)->filter(function($resultat) {
-                return ($resultat['decision'] ?? '') === 'admis';
+            // ✅ Vérifier si la délibération a été appliquée
+            $deliberationAppliquee = $this->verifierDeliberationAppliquee($session);
+            
+            if (!$deliberationAppliquee) {
+                throw new \Exception('❌ Impossible d\'exporter la liste des admis : la délibération n\'a pas encore été appliquée à cette session.');
+            }
+
+            // ✅ RÉCUPÉRER le seuil dynamiquement (seulement si délibération appliquée)
+            $seuilCredits = $this->determinerSeuilCredits($session, $deliberationParams);
+            
+            // ✅ VALIDATION préalable
+            $resultatsValidés = $this->validerEtCorrigerResultats($resultats, $seuilCredits);
+            
+            // ✅ FILTRAGE strict : seulement les vrais admis (après délibération)
+            $resultatsAdmis = collect($resultatsValidés['resultats_corriges'])->filter(function($resultat) {
+                $decision = $resultat['decision'] ?? '';
+                $moyenneGenerale = $resultat['moyenne_generale'] ?? 0;
+                $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
+                
+                // ✅ CRITÈRES STRICTS pour être dans la liste des admis
+                return $decision === 'admis' && 
+                       $moyenneGenerale >= 10.00 && 
+                       !$hasNoteEliminatoire;
             })->values()->toArray();
 
             if (empty($resultatsAdmis)) {
-                throw new \Exception('Aucun étudiant admis à exporter.');
+                throw new \Exception('Aucun étudiant véritablement admis selon les critères académiques (moyenne ≥ 10 ET crédits suffisants ET pas de note éliminatoire).');
             }
 
+            $resultatsCorrigés = $this->corrigerResultatsPourExport($resultatsAdmis);
             $nomFichier = $this->genererNomFichierExcel($niveau, $parcours, $session, $anneeUniv, 'Admis');
             
+            Log::info('✅ Export liste admis après délibération', [
+                'nb_admis' => count($resultatsAdmis),
+                'session' => $session->type ?? 'inconnue'
+            ]);
+            
             return Excel::download(
-                new ResultatsExport($resultatsAdmis, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
+                new ResultatsExport($resultatsCorrigés, $uesStructure, $session, $niveau, $parcours, $anneeUniv), 
                 $nomFichier
             );
             
@@ -145,6 +263,246 @@ class ExportService
             Log::error('Erreur export Excel admis: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+
+    private function determinerSeuilCredits($session = null, $deliberationParams = [])
+    {
+        try {
+            // ✅ 1. PRIORITÉ : Paramètres de délibération passés
+            if (!empty($deliberationParams)) {
+                $sessionType = $session->type ?? 'Normale';
+                
+                if ($sessionType === 'Normale') {
+                    return $deliberationParams['credits_admission_s1'] ?? 60;
+                } else {
+                    return $deliberationParams['credits_admission_s2'] ?? 40;
+                }
+            }
+            
+            // ✅ 2. FALLBACK : Basé sur le type de session
+            if ($session) {
+                if ($session->type === 'Rattrapage') {
+                    return 40; // Session 2 généralement plus permissive
+                }
+                return 60; // Session 1 normale
+            }
+            
+            // ✅ 3. FALLBACK ultime : Valeur par défaut directe
+            return 60;
+            
+        } catch (\Exception $e) {
+            Log::warning('Erreur détermination seuil crédits, utilisation valeur par défaut', [
+                'error' => $e->getMessage(),
+                'session_type' => $session->type ?? 'inconnue'
+            ]);
+            
+            // ✅ Valeur sécurisée par défaut
+            return 60;
+        }
+    }
+
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Validation et correction des résultats
+     */
+    private function validerEtCorrigerResultats($resultats, $seuilCredits = 45)
+    {
+        $erreurs = [];
+        $corrections = [];
+
+        foreach ($resultats as $index => $resultat) {
+            $etudiant = $resultat['etudiant'];
+            $moyenneGenerale = $resultat['moyenne_generale'] ?? 0;
+            $creditsValides = $resultat['credits_valides'] ?? 0;
+            $totalCredits = $resultat['total_credits'] ?? 60;
+            $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
+            $decisionActuelle = $resultat['decision'] ?? null;
+
+            // ✅ CALCUL de la décision correcte selon la logique académique
+            $decisionCorrecte = $this->calculerDecisionCorrecte(
+                $moyenneGenerale, 
+                $creditsValides, 
+                $totalCredits, 
+                $hasNoteEliminatoire, 
+                $seuilCredits
+            );
+
+            // ✅ DÉTECTION des incohérences
+            if ($decisionActuelle !== $decisionCorrecte) {
+                $erreurs[] = [
+                    'ligne' => $index + 1,
+                    'etudiant' => $etudiant->matricule ?? 'N/A',
+                    'nom' => $etudiant->nom ?? 'N/A',
+                    'decision_actuelle' => $decisionActuelle,
+                    'decision_correcte' => $decisionCorrecte,
+                    'moyenne' => $moyenneGenerale,
+                    'credits' => "{$creditsValides}/{$totalCredits}",
+                    'has_eliminatoire' => $hasNoteEliminatoire
+                ];
+
+                // ✅ APPLIQUER la correction
+                $corrections[] = array_merge($resultat, [
+                    'decision' => $decisionCorrecte,
+                    'decision_corrigee' => true,
+                    'decision_originale' => $decisionActuelle
+                ]);
+            } else {
+                $corrections[] = $resultat;
+            }
+        }
+
+        return [
+            'coherent' => empty($erreurs),
+            'erreurs' => $erreurs,
+            'resultats_corriges' => $corrections,
+            'nb_corrections' => count($erreurs)
+        ];
+    }
+
+    
+
+    /**
+     * ✅ LOGIQUE DE DÉCISION ACADÉMIQUE (identique à celle du composant Livewire)
+     */
+    private function calculerDecisionCorrecte($moyenneGenerale, $creditsValides, $totalCredits, $hasNoteEliminatoire, $seuilCredits)
+    {
+        // ✅ PRIORITÉ 1 : Note éliminatoire = jamais admis
+        if ($hasNoteEliminatoire) {
+            return 'rattrapage';
+        }
+        
+        // ✅ PRIORITÉ 2 : RÈGLE STRICTE pour être admis
+        // Il faut TOUJOURS moyenne >= 10 ET crédits >= seuil
+        if ($moyenneGenerale >= 10.0 && $creditsValides >= $seuilCredits) {
+            return 'admis';
+        }
+        
+        // ✅ PRIORITÉ 3 : Si moyenne < 10, jamais admis
+        if ($moyenneGenerale < 10.0) {
+            if ($moyenneGenerale < 8.0) {
+                return 'redoublant';
+            }
+            return 'rattrapage';
+        }
+        
+        // ✅ PRIORITÉ 4 : Si moyenne >= 10 mais crédits insuffisants
+        if ($creditsValides < $seuilCredits) {
+            return 'rattrapage';
+        }
+        
+        // ✅ Par défaut
+        return 'rattrapage';
+    }
+    /**
+     * ✅ NOUVELLE MÉTHODE : Corriger l'ordre d'affichage crédits avant moyenne
+     */
+   private function corrigerResultatsPourExport($resultats)
+    {
+        return collect($resultats)->map(function($resultat) {
+            $creditsValides = $resultat['credits_valides'] ?? 0;
+            $totalCredits = $resultat['total_credits'] ?? 60;
+            $moyenneGenerale = $resultat['moyenne_generale'] ?? 0;
+            
+            // ✅ NOUVEAU : Calculer détails crédits par UE
+            $detailsCreditsUE = $this->calculerDetailsCreditsUE($resultat);
+            
+            return array_merge($resultat, [
+                // ✅ ORDRE : Crédits avant moyenne pour l'export Excel
+                'credits_valides' => $creditsValides,
+                'total_credits' => $totalCredits,
+                'moyenne_generale' => $moyenneGenerale,
+                'tous_credits_valides' => $creditsValides >= $totalCredits,
+                
+                // ✅ NOUVEAU : Détails crédits par UE pour Excel
+                'details_credits_ue' => $detailsCreditsUE['resume'],
+                'credits_ue_detailles' => $detailsCreditsUE['details'],
+                'nb_ue_validees' => $detailsCreditsUE['stats']['nb_ue_validees'],
+                'nb_ue_totales' => $detailsCreditsUE['stats']['nb_ue_totales'],
+                
+                'rang' => null
+            ]);
+        })
+        ->sortBy([
+            ['tous_credits_valides', 'desc'], // Priorité : tous crédits validés
+            ['moyenne_generale', 'desc']      // Puis par moyenne décroissante
+        ])
+        ->values()
+        ->map(function($resultat, $index) {
+            $resultat['rang'] = $index + 1;
+            return $resultat;
+        })
+        ->toArray();
+    }
+
+
+    private function calculerDetailsCreditsUE($resultat)
+    {
+        $detailsUE = $resultat['details_ue'] ?? [];
+        $resume = [];
+        $details = [];
+        $nbUEValidees = 0;
+        $nbUETotales = 0;
+        
+        foreach ($detailsUE as $ueDetail) {
+            $nbUETotales++;
+            $ueNom = $ueDetail['ue_abr'] ?? $ueDetail['ue_nom'] ?? 'UE';
+            $creditsUE = $ueDetail['ue_credits'] ?? 0;
+            $ueValidee = $ueDetail['validee'] ?? false;
+            $creditsUEValides = $ueValidee ? $creditsUE : 0;
+            
+            if ($ueValidee) {
+                $nbUEValidees++;
+            }
+            
+            // ✅ Calculer crédits EC pour cette UE
+            $creditsECValides = 0;
+            $creditsECTotaux = 0;
+            $detailsEC = [];
+            
+            foreach ($ueDetail['notes_ec'] ?? [] as $noteEC) {
+                $creditsEC = $noteEC['credits_ec'] ?? 0;
+                $ecValidee = $noteEC['ec_validee'] ?? false;
+                
+                if ($ecValidee) {
+                    $creditsECValides += $creditsEC;
+                }
+                $creditsECTotaux += $creditsEC;
+                
+                $detailsEC[] = [
+                    'nom' => $noteEC['ec_abr'] ?? $noteEC['ec_nom'] ?? 'EC',
+                    'note' => $noteEC['note'] ?? 0,
+                    'credits' => $creditsEC,
+                    'validee' => $ecValidee
+                ];
+            }
+            
+            // ✅ Résumé pour affichage simple
+            $resume[] = "{$ueNom}:{$creditsUEValides}/{$creditsUE}";
+            
+            // ✅ Détails complets pour export Excel
+            $details[] = [
+                'ue_nom' => $ueNom,
+                'ue_moyenne' => $ueDetail['moyenne_ue'] ?? 0,
+                'ue_validee' => $ueValidee,
+                'credits_ue_valides' => $creditsUEValides,
+                'credits_ue_totaux' => $creditsUE,
+                'credits_ec_valides' => $creditsECValides,
+                'credits_ec_totaux' => $creditsECTotaux,
+                'details_ec' => $detailsEC,
+                'has_note_eliminatoire' => $ueDetail['has_note_eliminatoire'] ?? false
+            ];
+        }
+        
+        return [
+            'resume' => implode(' | ', $resume), // Format: "UE1:6/6 | UE2:4/6 | UE3:0/6"
+            'details' => $details,
+            'stats' => [
+                'nb_ue_validees' => $nbUEValidees,
+                'nb_ue_totales' => $nbUETotales,
+                'taux_validation_ue' => $nbUETotales > 0 ? round(($nbUEValidees / $nbUETotales) * 100, 1) : 0
+            ]
+        ];
     }
 
     /**

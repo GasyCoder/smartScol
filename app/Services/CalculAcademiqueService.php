@@ -162,26 +162,51 @@ class CalculAcademiqueService
             if (!$ue || !$ue->id) {
                 Log::warning('UE manquante ou invalide', [
                     'ue_id' => $ueId,
-                    'ec_id' => $premierResultat->ec_id,
-                    'ec_existe' => !is_null($premierResultat->ec),
-                    'ue_existe' => !is_null($ue)
+                    'ec_id' => $premierResultat->ec_id
                 ]);
                 continue;
             }
 
-            // Récupérer toutes les notes de l'UE
+            // Récupérer toutes les notes et détails EC de l'UE
             $notes = $notesUE->pluck('note')->toArray();
-            $notesEC = $notesUE->map(function($resultat) {
+            $detailsEC = [];
+            $creditsECValides = 0;
+            $creditsECTotaux = 0;
+            
+            $notesEC = $notesUE->map(function($resultat) use (&$detailsEC, &$creditsECValides, &$creditsECTotaux) {
                 if (!$resultat->ec) {
                     return null;
                 }
                 
+                $noteEC = $resultat->note;
+                $creditsEC = $resultat->ec->credits ?? 0;
+                $ecValidee = ($noteEC >= 10) && ($noteEC != 0); // EC validée si >= 10 et pas éliminatoire
+                
+                // ✅ NOUVEAU : Calculer crédits EC validés
+                if ($ecValidee) {
+                    $creditsECValides += $creditsEC;
+                }
+                $creditsECTotaux += $creditsEC;
+                
+                // ✅ NOUVEAU : Détail pour affichage
+                $detailsEC[] = [
+                    'ec_id' => $resultat->ec_id,
+                    'ec_nom' => $resultat->ec->nom ?? 'EC_' . $resultat->ec_id,
+                    'ec_abr' => $resultat->ec->abr ?? substr($resultat->ec->nom ?? 'EC', 0, 10),
+                    'note' => $noteEC,
+                    'credits_ec' => $creditsEC,
+                    'ec_validee' => $ecValidee,
+                    'est_eliminatoire' => $noteEC == self::NOTE_ELIMINATOIRE
+                ];
+
                 return [
                     'ec_id' => $resultat->ec_id,
                     'ec_nom' => $resultat->ec->nom ?? 'EC_' . $resultat->ec_id,
                     'ec_abr' => $resultat->ec->abr ?? substr($resultat->ec->nom ?? 'EC', 0, 10),
-                    'note' => $resultat->note,
-                    'est_eliminatoire' => $resultat->note == self::NOTE_ELIMINATOIRE
+                    'note' => $noteEC,
+                    'credits_ec' => $creditsEC,
+                    'ec_validee' => $ecValidee,
+                    'est_eliminatoire' => $noteEC == self::NOTE_ELIMINATOIRE
                 ];
             })->filter()->toArray();
 
@@ -191,40 +216,54 @@ class CalculAcademiqueService
                 continue;
             }
 
+            // ✅ CORRECTION : Toujours calculer la vraie moyenne
+            $moyenneUE = count($notes) > 0 ? array_sum($notes) / count($notes) : 0;
+            $moyenneUE = round($moyenneUE, 2);
+
             // ✅ VÉRIFICATION : Est-ce qu'il y a une note éliminatoire (0)
             $hasNoteEliminatoire = in_array(self::NOTE_ELIMINATOIRE, $notes);
 
-            // ✅ CALCUL de la moyenne UE
+            // ✅ VALIDATION UE : Une UE avec note éliminatoire n'est jamais validée
             if ($hasNoteEliminatoire) {
-                $moyenneUE = 0;
                 $ueValidee = false;
                 $statutUE = 'eliminee';
+                $creditsUEValides = 0; // UE éliminée = 0 crédit validé pour l'UE
             } else {
-                // Moyenne arithmétique des EC
-                $moyenneUE = count($notes) > 0 ? array_sum($notes) / count($notes) : 0;
-                $moyenneUE = round($moyenneUE, 2);
-
                 // ✅ VALIDATION UE selon seuil (10.0)
                 $ueValidee = $moyenneUE >= self::SEUIL_VALIDATION_UE;
                 $statutUE = $ueValidee ? 'validee' : 'non_validee';
+                
+                // ✅ NOUVEAU : Crédits UE validés
+                if ($ueValidee) {
+                    $creditsUEValides = $ue->credits ?? 0; // Tous les crédits UE si UE validée
+                } else {
+                    $creditsUEValides = 0; // Aucun crédit UE si UE non validée
+                }
             }
-
-            // ✅ CALCUL CRÉDITS
-            $creditsUE = $ue->credits ?? 0;
-            $creditsValides = $ueValidee ? $creditsUE : 0;
 
             $resultatsUE[] = [
                 'ue_id' => $ueId,
                 'ue_nom' => $ue->nom ?? 'UE_' . $ueId,
                 'ue_abr' => $ue->abr ?? substr($ue->nom ?? 'UE', 0, 10),
-                'ue_credits' => $creditsUE,
+                'ue_credits' => $ue->credits ?? 0,
                 'moyenne_ue' => $moyenneUE,
                 'validee' => $ueValidee,
-                'credits_valides' => $creditsValides,
+                'credits_valides' => $creditsUEValides,
                 'statut' => $statutUE,
                 'has_note_eliminatoire' => $hasNoteEliminatoire,
                 'notes_ec' => $notesEC,
-                'nb_ec' => count($notesEC)
+                'nb_ec' => count($notesEC),
+                
+                // ✅ NOUVEAU : Détails crédits par EC
+                'details_credits' => [
+                    'credits_ec_valides' => $creditsECValides,
+                    'credits_ec_totaux' => $creditsECTotaux,
+                    'credits_ue_valides' => $creditsUEValides,
+                    'credits_ue_totaux' => $ue->credits ?? 0,
+                    'pourcentage_ec_valides' => $creditsECTotaux > 0 ? 
+                        round(($creditsECValides / $creditsECTotaux) * 100, 1) : 0,
+                    'details_ec' => $detailsEC
+                ]
             ];
         }
 
@@ -235,9 +274,6 @@ class CalculAcademiqueService
         return $resultatsUE;
     }
 
-
-
-
     // ✅ MÉTHODE : Calcule la synthèse générale
     private function calculerSyntheseGenerale($resultatsUE)
     {
@@ -247,16 +283,11 @@ class CalculAcademiqueService
         // Vérifier s'il y a des notes éliminatoires
         $hasNoteEliminatoire = collect($resultatsUE)->contains('has_note_eliminatoire', true);
 
-        // Calcul moyenne générale selon logique médecine
-        if ($hasNoteEliminatoire) {
-            // En médecine : note éliminatoire = moyenne générale à 0
-            $moyenneGenerale = 0;
-        } else {
-            $moyennesUE = array_column($resultatsUE, 'moyenne_ue');
-            $moyenneGenerale = count($moyennesUE) > 0 ?
-                array_sum($moyennesUE) / count($moyennesUE) : 0;
-            $moyenneGenerale = round($moyenneGenerale, 2);
-        }
+        // ✅ CORRECTION : Toujours calculer la vraie moyenne générale
+        $moyennesUE = array_column($resultatsUE, 'moyenne_ue');
+        $moyenneGenerale = count($moyennesUE) > 0 ?
+            array_sum($moyennesUE) / count($moyennesUE) : 0;
+        $moyenneGenerale = round($moyenneGenerale, 2);
 
         // Statistiques UE
         $nbUE = count($resultatsUE);
@@ -264,7 +295,8 @@ class CalculAcademiqueService
         $nbUEEliminees = count(array_filter($resultatsUE, fn($ue) => $ue['has_note_eliminatoire']));
 
         return [
-            'moyenne_generale' => $moyenneGenerale,
+            'moyenne_generale' => $moyenneGenerale, // ✅ VRAIE MOYENNE TOUJOURS
+            'moyenne_generale_reelle' => $moyenneGenerale, // ✅ AJOUT : Moyenne réelle
             'credits_valides' => $creditsValides,
             'total_credits' => $totalCredits,
             'pourcentage_credits' => $totalCredits > 0 ?
@@ -282,90 +314,145 @@ class CalculAcademiqueService
     private function determinerDecision_LogiqueMedecine($synthese, $session)
     {
         $creditsValides = $synthese['credits_valides'];
-        $totalCreditsDisponibles = $synthese['total_credits']; // ✅ UTILISEZ LES CRÉDITS RÉELS
+        $totalCreditsDisponibles = $synthese['total_credits'];
         $hasNoteEliminatoire = $synthese['a_note_eliminatoire'];
-        $moyenneGenerale = $synthese['moyenne_generale'];
+        $moyenneGenerale = $synthese['moyenne_generale']; // Vraie moyenne
 
         if ($session['type'] === 'Normale') {
-            // ✅ SESSION NORMALE : Logique dynamique
+            // ✅ SESSION NORMALE : Logique stricte académique
 
-            // 1. Si TOUS les crédits disponibles sont validés ET pas de note éliminatoire → ADMIS
-            if ($creditsValides >= $totalCreditsDisponibles && $totalCreditsDisponibles > 0 && !$hasNoteEliminatoire) {
-                return [
-                    'code' => 'admis',
-                    'libelle' => 'Admis(e)',
-                    'motif' => 'Validation de tous les crédits disponibles',
-                    'credits_requis' => $totalCreditsDisponibles,
-                    'credits_obtenus' => $creditsValides
-                ];
-            }
-
-            // 2. Si note éliminatoire → RATTRAPAGE (même avec tous les crédits)
+            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = RATTRAPAGE (même avec tous les crédits)
             if ($hasNoteEliminatoire) {
                 return [
                     'code' => 'rattrapage',
                     'libelle' => 'Autorisé(e) au rattrapage',
                     'motif' => 'Présence de note(s) éliminatoire(s)',
                     'credits_requis' => $totalCreditsDisponibles,
-                    'credits_obtenus' => $creditsValides
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => false
                 ];
             }
 
-            // 3. Si crédits insuffisants → RATTRAPAGE
+            // 2. ✅ RÈGLE ACADÉMIQUE STRICTE : Moyenne >= 10.0 ET tous les crédits = ADMIS
+            if ($moyenneGenerale >= 10.0 && $creditsValides >= $totalCreditsDisponibles && $totalCreditsDisponibles > 0) {
+                return [
+                    'code' => 'admis',
+                    'libelle' => 'Admis(e)',
+                    'motif' => 'Moyenne suffisante et validation de tous les crédits',
+                    'credits_requis' => $totalCreditsDisponibles,
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => true
+                ];
+            }
 
+            // 3. ✅ NOUVEAU : Si moyenne < 10.0, TOUJOURS rattrapage (même avec tous les crédits)
+            if ($moyenneGenerale < 10.0) {
+                return [
+                    'code' => 'rattrapage',
+                    'libelle' => 'Autorisé(e) au rattrapage',
+                    'motif' => 'Moyenne générale insuffisante (' . $moyenneGenerale . ' < 10.0)',
+                    'credits_requis' => $totalCreditsDisponibles,
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => false
+                ];
+            }
+
+            // 4. Moyenne >= 10 mais crédits insuffisants = RATTRAPAGE
             return [
                 'code' => 'rattrapage',
                 'libelle' => 'Autorisé(e) au rattrapage',
-                'motif' => 'Crédits insuffisants',
+                'motif' => 'Crédits insuffisants (' . $creditsValides . '/' . $totalCreditsDisponibles . ')',
                 'credits_requis' => $totalCreditsDisponibles,
-                'credits_obtenus' => $creditsValides
+                'credits_obtenus' => $creditsValides,
+                'moyenne_reelle' => $moyenneGenerale,
+                'conforme_criteres' => false
             ];
 
         } else {
-            // ✅ SESSION 2 (rattrapage) - Logique adaptative aussi
+            // ✅ SESSION 2 (rattrapage) - Logique stricte également
             
+            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = EXCLUSION
             if ($hasNoteEliminatoire) {
                 return [
                     'code' => 'exclus',
                     'libelle' => 'Exclu(e)',
                     'motif' => 'Note éliminatoire en session de rattrapage',
                     'credits_requis' => $totalCreditsDisponibles,
-                    'credits_obtenus' => $creditsValides
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => false
                 ];
             }
 
-            // ✅ LOGIQUE ADAPTATIVE : Utiliser des seuils proportionnels
+            // ✅ LOGIQUE ADAPTATIVE avec seuils proportionnels
             $seuilAdmission = $totalCreditsDisponibles; // 100% des crédits disponibles
             $seuilRedoublement = round($totalCreditsDisponibles * 0.67); // 67% des crédits disponibles
 
-            if ($creditsValides >= $seuilAdmission) {
+            // 2. ✅ ADMISSION S2 : Moyenne >= 10.0 ET tous les crédits
+            if ($moyenneGenerale >= 10.0 && $creditsValides >= $seuilAdmission) {
                 return [
                     'code' => 'admis',
                     'libelle' => 'Admis(e)',
-                    'motif' => 'Validation de tous les crédits en rattrapage',
+                    'motif' => 'Moyenne suffisante et validation complète en rattrapage',
                     'credits_requis' => $seuilAdmission,
-                    'credits_obtenus' => $creditsValides
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => true
                 ];
-            } elseif ($creditsValides >= $seuilRedoublement) {
+            }
+            
+            // 3. ✅ NOUVEAU : Si moyenne < 10.0, pas d'admission possible
+            if ($moyenneGenerale < 10.0) {
+                if ($creditsValides >= $seuilRedoublement) {
+                    return [
+                        'code' => 'redoublant',
+                        'libelle' => 'Autorisé(e) à redoubler',
+                        'motif' => 'Moyenne insuffisante (' . $moyenneGenerale . ' < 10.0) mais crédits partiels',
+                        'credits_requis' => $seuilAdmission,
+                        'credits_obtenus' => $creditsValides,
+                        'moyenne_reelle' => $moyenneGenerale,
+                        'conforme_criteres' => false
+                    ];
+                } else {
+                    return [
+                        'code' => 'excluss',
+                        'libelle' => 'Exclu(e)',
+                        'motif' => 'Moyenne et crédits insuffisants en rattrapage',
+                        'credits_requis' => $seuilRedoublement,
+                        'credits_obtenus' => $creditsValides,
+                        'moyenne_reelle' => $moyenneGenerale,
+                        'conforme_criteres' => false
+                    ];
+                }
+            }
+            
+            // 4. Moyenne >= 10 mais crédits insuffisants pour admission complète
+            if ($creditsValides >= $seuilRedoublement) {
                 return [
                     'code' => 'redoublant',
                     'libelle' => 'Autorisé(e) à redoubler',
-                    'motif' => 'Crédits partiels en rattrapage - redoublement autorisé',
+                    'motif' => 'Moyenne suffisante mais crédits incomplets pour admission',
                     'credits_requis' => $seuilAdmission,
-                    'credits_obtenus' => $creditsValides
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => false
                 ];
             } else {
                 return [
-                    'code' => 'exclus',
+                    'code' => 'excluss',
                     'libelle' => 'Exclu(e)',
-                    'motif' => 'Crédits insuffisants en rattrapage',
+                    'motif' => 'Crédits très insuffisants en rattrapage',
                     'credits_requis' => $seuilRedoublement,
-                    'credits_obtenus' => $creditsValides
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => false
                 ];
             }
         }
     }
-
 
 
     // ✅ NOUVELLE MÉTHODE : Applique la délibération selon la configuration
@@ -445,43 +532,156 @@ class CalculAcademiqueService
         }
     }
 
-    // ✅ NOUVELLE MÉTHODE : Calcule la décision selon la configuration
+
     private function calculerDecisionAvecConfig($etudiantId, $sessionId, DeliberationConfig $config, $niveauId, $parcoursId)
     {
-        // Utiliser la logique existante avec les paramètres de niveau/parcours
         $resultat = $this->calculerResultatsComplets($etudiantId, $sessionId, true, $niveauId, $parcoursId);
 
         $creditsValides = $resultat['synthese']['credits_valides'];
         $hasNoteEliminatoire = $resultat['synthese']['a_note_eliminatoire'];
-
-        // Déterminer le type de session
+        $moyenneGenerale = $resultat['synthese']['moyenne_generale'];
         $session = $resultat['session'];
 
         if ($session['type'] === 'Normale') {
-            // Session 1 - Utiliser config
-            if ($config->note_eliminatoire_bloque_s1 && $hasNoteEliminatoire) {
+            // SESSION 1 - RÈGLE ACADÉMIQUE STRICTE
+            
+            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = rattrapage
+            if ($hasNoteEliminatoire) {
                 return 'rattrapage';
             }
 
-            return $creditsValides >= $config->credits_admission_s1
-                ? 'admis'
-                : 'rattrapage';
+            // 2. ✅ RÈGLE STRICTE : Moyenne >= 10.0 ET crédits >= seuil = ADMIS
+            if ($moyenneGenerale >= 10.0 && $creditsValides >= $config->credits_admission_s1) {
+                return 'admis';
+            }
+            
+            // 3. ✅ NOUVEAU : Si moyenne < 10.0, TOUJOURS rattrapage
+            if ($moyenneGenerale < 10.0) {
+                return 'rattrapage';
+            }
+
+            // 4. Moyenne >= 10 mais crédits insuffisants = rattrapage
+            return 'rattrapage';
 
         } else {
-            // Session 2 - Utiliser config
-            if ($config->note_eliminatoire_exclusion_s2 && $hasNoteEliminatoire) {
-                return 'exclus';
+            // SESSION 2 - RÈGLE ACADÉMIQUE STRICTE
+            
+            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = exclusion
+            if ($hasNoteEliminatoire) {
+                return 'excluss';
             }
 
-            if ($creditsValides >= $config->credits_admission_s2) {
+            // 2. ✅ RÈGLE STRICTE : Moyenne >= 10.0 ET crédits >= seuil = admis
+            if ($moyenneGenerale >= 10.0 && $creditsValides >= $config->credits_admission_s2) {
                 return 'admis';
-            } elseif ($creditsValides >= $config->credits_redoublement_s2) {
-                return 'redoublant';
-            } else {
-                return 'exclus';
             }
+            
+            // 3. ✅ NOUVEAU : Si moyenne < 10.0, pas d'admission possible
+            if ($moyenneGenerale < 10.0) {
+                // Mais peut être redoublant si assez de crédits
+                if ($creditsValides >= $config->credits_redoublement_s2) {
+                    return 'redoublant';
+                } else {
+                    return 'excluss';
+                }
+            }
+            
+            // 4. Moyenne >= 10 mais crédits insuffisants pour admission
+            if ($creditsValides >= $config->credits_redoublement_s2) {
+                return 'redoublant';
+            }
+            
+            // 5. Sinon = exclusion
+            return 'excluss';
         }
     }
+
+
+
+    // ✅ NOUVELLE MÉTHODE : Validation stricte des critères d'admission
+    public function validerCriteresAdmission($etudiantId, $sessionId, $configDeliberation, $niveauId = null, $parcoursId = null)
+    {
+        try {
+            $resultat = $this->calculerResultatsComplets($etudiantId, $sessionId, true, $niveauId, $parcoursId);
+            
+            $moyenneGenerale = $resultat['synthese']['moyenne_generale'];
+            $creditsValides = $resultat['synthese']['credits_valides'];
+            $hasNoteEliminatoire = $resultat['synthese']['a_note_eliminatoire'];
+            $sessionType = $resultat['session']['type'];
+            
+            $erreurs = [];
+            $avertissements = [];
+            
+            // Critères selon le type de session
+            if ($sessionType === 'Normale') {
+                $moyenneRequise = 10.0;
+                $creditsRequis = $configDeliberation->credits_admission_s1 ?? 60;
+                
+                // Validation moyenne
+                if ($moyenneGenerale < $moyenneRequise) {
+                    $erreurs[] = "Moyenne insuffisante: {$moyenneGenerale} < {$moyenneRequise}";
+                }
+                
+                // Validation crédits
+                if ($creditsValides < $creditsRequis) {
+                    $erreurs[] = "Crédits insuffisants: {$creditsValides} < {$creditsRequis}";
+                }
+                
+                // Validation note éliminatoire
+                if ($hasNoteEliminatoire) {
+                    $erreurs[] = "Présence de note(s) éliminatoire(s)";
+                }
+                
+            } else {
+                // Session 2
+                $moyenneRequise = 10.0;
+                $creditsRequis = $configDeliberation->credits_admission_s2 ?? 40;
+                
+                if ($moyenneGenerale < $moyenneRequise) {
+                    $erreurs[] = "Moyenne insuffisante: {$moyenneGenerale} < {$moyenneRequise}";
+                }
+                
+                if ($creditsValides < $creditsRequis) {
+                    $erreurs[] = "Crédits insuffisants: {$creditsValides} < {$creditsRequis}";
+                }
+                
+                if ($hasNoteEliminatoire) {
+                    $erreurs[] = "Note éliminatoire en session de rattrapage";
+                }
+            }
+            
+            $peutEtreAdmis = empty($erreurs);
+            
+            return [
+                'peut_etre_admis' => $peutEtreAdmis,
+                'erreurs' => $erreurs,
+                'avertissements' => $avertissements,
+                'details' => [
+                    'moyenne' => $moyenneGenerale,
+                    'moyenne_requise' => $moyenneRequise ?? 10.0,
+                    'credits' => $creditsValides,
+                    'credits_requis' => $creditsRequis ?? 60,
+                    'has_eliminatoire' => $hasNoteEliminatoire,
+                    'session_type' => $sessionType
+                ]
+            ];
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur validation critères admission', [
+                'etudiant_id' => $etudiantId,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'peut_etre_admis' => false,
+                'erreurs' => ['Erreur lors de la validation: ' . $e->getMessage()],
+                'avertissements' => [],
+                'details' => []
+            ];
+        }
+    }
+
 
     // ✅ NOUVELLE MÉTHODE : Met à jour les résultats avec traçabilité délibération
     private function mettreAJourResultatsEtudiantDeliberation($etudiantId, $sessionId, $nouvelleDecision, $configId, $examenId = null)
@@ -509,16 +709,6 @@ class CalculAcademiqueService
             ];
 
             $resultat->update($updateData);
-
-            // Log pour traçabilité
-            Log::info('📝 Résultat mis à jour pour délibération', [
-                'resultat_id' => $resultat->id,
-                'etudiant_id' => $etudiantId,
-                'examen_id' => $examenId,
-                'ancienne_decision' => $ancienneDecision,
-                'nouvelle_decision' => $nouvelleDecision,
-                'jury_validated' => $resultat->jury_validated
-            ]);
 
             // Ajouter à l'historique JSON
             $statusHistory = $resultat->status_history ?? [];

@@ -35,12 +35,21 @@ class DeliberationApplicationService
             // Récupération session
             $session = $this->getTargetSession($deliberationParams['session_type'], $sessionNormale, $sessionRattrapage);
             
+            // ✅ VÉRIFICATION SIMPLE
+            if ($session->estDeliberee()) {
+                throw new \Exception("Session déjà délibérée le " . $session->date_deliberation->format('d/m/Y à H:i'));
+            }   
             // Validation étudiants
             $this->validateStudents($session, $niveauId, $parcoursId);
             
             // Exécution
             $result = $this->executeDeliberation($niveauId, $parcoursId, $session, $deliberationParams);
             
+            $session->marquerDeliberee(
+                Auth::id(),
+                $deliberationParams,
+                "Délibération {$deliberationParams['session_type']} - " . ($result['statistiques']['total_etudiants'] ?? 0) . " étudiants traités"
+            );
             return [
                 'success' => true,
                 'result' => $result,
