@@ -24,6 +24,7 @@ return new class extends Migration
             $table->unsignedBigInteger('delibere_par')->nullable();
             $table->json('parametres_deliberation')->nullable();
             $table->text('observations_deliberation')->nullable();
+            $table->json('historique_deliberations')->nullable();
             
             $table->foreign('delibere_par')->references('id')->on('users');
             $table->timestamps();

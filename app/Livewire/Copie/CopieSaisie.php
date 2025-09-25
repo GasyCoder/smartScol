@@ -2,19 +2,20 @@
 
 namespace App\Livewire\Copie;
 
-use Livewire\Component;
-use Livewire\WithPagination;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Collection;
-
-use App\Models\Niveau;
-use App\Models\Parcour;
-use App\Models\Examen;
 use App\Models\EC;
 use App\Models\Copie;
+use App\Models\Examen;
+use App\Models\Niveau;
+use App\Models\Parcour;
+
+use Livewire\Component;
 use App\Models\Manchette;
+use App\Models\SettingNote;
 use App\Models\CodeAnonymat;
+use Livewire\WithPagination;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class CopieSaisie extends Component
 {
@@ -22,6 +23,8 @@ class CopieSaisie extends Component
 
     // ÉTAPES
     public string $step = 'niveau';
+    public $is_active;
+    public string $codeAnonymat = ''; 
 
     // SÉLECTIONS
     public ?int $niveauId = null;
@@ -82,25 +85,39 @@ class CopieSaisie extends Component
     ];
 
     // VALIDATION
-    protected $rules = [
-        'matricule' => 'required|string|min:3|max:50',
-        'note' => 'required|numeric|min:0|max:20',
-    ];
+    protected function rules()
+    {
+        $rules = [
+            'note' => 'required|numeric|min:0|max:20',
+        ];
+        
+        if ($this->is_active) {
+            $rules['matricule'] = 'required|string|min:3|max:50';
+        } else {
+            $rules['codeAnonymat'] = 'required|string|min:2';
+        }
+        
+        return $rules;
+    }
 
     protected $messages = [
         'matricule.required' => 'Le matricule est obligatoire.',
         'matricule.min' => 'Le matricule doit comporter au moins 3 caractères.',
+        'codeAnonymat.required' => 'Le code anonymat est obligatoire.',
+        'codeAnonymat.min' => 'Le code anonymat doit comporter au moins 2 caractères.',
         'note.required' => 'La note est obligatoire.',
         'note.numeric' => 'La note doit être un nombre.',
         'note.min' => 'La note ne peut pas être négative.',
         'note.max' => 'La note ne peut pas dépasser 20.',
     ];
 
+
     public function mount(): void
     {
         $this->niveaux = collect();
         $this->parcours = collect();
         $this->examens = collect();
+        $this->is_active = SettingNote::isActive();
         
         $this->loadNiveaux();
         $this->sessionType = Manchette::getCurrentSessionType();
@@ -123,6 +140,208 @@ class CopieSaisie extends Component
 
         return view('livewire.copie.copie-saisie', compact('ecs'));
     }
+
+
+    public function updatedCodeAnonymat($value): void
+    {
+        // Reset
+        $this->etudiantTrouve = null;
+        $this->codeAnonymatCourant = null;
+        $this->afficherChampNote = false;
+        $this->peutEnregistrer = false;
+        $this->noteDejaExiste = false;
+        $this->noteExistante = null;
+        $this->note = '';
+        $this->resetErrorBag();
+
+        // Vérification automatique si au moins 2 caractères
+        if (is_string($value) && mb_strlen(trim($value)) >= 2) {
+            $this->rechercherCodeAnonymat();
+        }
+    }
+
+
+    // MÉTHODE SIMPLIFIÉE pour recherche par code anonymat
+    public function rechercherCodeAnonymat(): void
+    {
+        $this->etudiantTrouve = null;
+        $this->codeAnonymatCourant = null;
+        $this->afficherChampNote = false;
+        $this->peutEnregistrer = false;
+        $this->noteDejaExiste = false;
+
+        if (!$this->codeAnonymat || !$this->examenId || !$this->ecId) {
+            return;
+        }
+
+        $sessionId = Manchette::getCurrentSessionId();
+        $code = strtoupper(trim($this->codeAnonymat));
+
+        // 1. Chercher le code anonymat
+        $codeAnonymatObj = CodeAnonymat::where('code_complet', $code)
+            ->where('examen_id', $this->examenId)
+            ->where('ec_id', $this->ecId)
+            ->where('session_exam_id', $sessionId)
+            ->first();
+
+        if (!$codeAnonymatObj) {
+            // Code non trouvé
+            return;
+        }
+
+        // 2. Vérifier qu'il a une manchette
+        $manchette = Manchette::where('code_anonymat_id', $codeAnonymatObj->id)
+            ->where('examen_id', $this->examenId)
+            ->where('session_exam_id', $sessionId)
+            ->with('etudiant')
+            ->first();
+
+        if (!$manchette) {
+            toastr('❌ Aucune manchette pour ce code.', 'error');
+            return;
+        }
+
+        // 3. Vérifier si copie existe déjà
+        $copieExistante = Copie::where('examen_id', $this->examenId)
+            ->where('code_anonymat_id', $codeAnonymatObj->id)
+            ->where('session_exam_id', $sessionId)
+            ->first();
+
+        if ($copieExistante) {
+            // Note déjà saisie
+            $this->codeAnonymatCourant = $codeAnonymatObj;
+            $this->etudiantTrouve = $manchette->etudiant; // Pour affichage optionnel
+            $this->noteDejaExiste = true;
+            $this->noteExistante = $copieExistante->note;
+            return;
+        }
+
+        // 4. Tout est OK → Afficher le champ note
+        $this->codeAnonymatCourant = $codeAnonymatObj;
+        $this->etudiantTrouve = $manchette->etudiant; // Pour affichage optionnel
+        $this->manchetteCorrespondante = $manchette;
+        $this->afficherChampNote = true;
+
+        toastr('✅ Code trouvé - Saisissez la note', 'success');
+        $this->dispatch('etudiantTrouve');
+        $this->dispatch('focusNote');
+        
+        $this->verifierPeutEnregistrer();
+    }
+
+    // Nouvelle méthode de recherche par code anonymat
+    public function rechercherParCodeAnonymat(): void
+    {
+        // Reset des états
+        $this->etudiantTrouve = null;
+        $this->manchetteCorrespondante = null;
+        $this->codeAnonymatCourant = null;
+        $this->afficherChampNote = false;
+        $this->peutEnregistrer = false;
+        $this->noteDejaExiste = false;
+        $this->noteExistante = null;
+
+        if (!$this->codeAnonymat || !$this->examenId || !$this->ecId) {
+            logger('❌ Données manquantes', [
+                'codeAnonymat' => $this->codeAnonymat,
+                'examenId' => $this->examenId,
+                'ecId' => $this->ecId
+            ]);
+            return;
+        }
+
+        $sessionId = Manchette::getCurrentSessionId();
+        $code = trim($this->codeAnonymat); // RETIREZ strtoupper() pour le moment
+        $codesDisponibles = CodeAnonymat::where('examen_id', $this->examenId)
+            ->where('ec_id', $this->ecId)
+            ->where('session_exam_id', $sessionId)
+            ->pluck('code_complet')
+            ->toArray();
+        logger('🔍 DEBUG Recherche code', [
+            'code_saisi' => $code,
+            'examen_id' => $this->examenId,
+            'ec_id' => $this->ecId,
+            'session_id' => $sessionId,
+            'codes_disponibles' => $codesDisponibles, // VOIR TOUS LES CODES
+            'nb_codes' => count($codesDisponibles)
+        ]);
+
+        // Rechercher le code anonymat (SANS strtoupper pour le moment)
+        $codeAnonymatObj = CodeAnonymat::where('code_complet', $code)
+            ->where('examen_id', $this->examenId)
+            ->where('ec_id', $this->ecId)
+            ->where('session_exam_id', $sessionId)
+            ->first();
+
+        logger('📋 Résultat recherche code', [
+            'trouve' => $codeAnonymatObj ? 'OUI' : 'NON',
+            'code_obj' => $codeAnonymatObj ? $codeAnonymatObj->toArray() : null
+        ]);
+
+        if (!$codeAnonymatObj) {
+            toastr('❌ Code anonymat non trouvé pour cette matière.', 'error');
+            return;
+        }
+
+        // Rechercher la manchette associée
+        $manchette = Manchette::query()
+            ->where('code_anonymat_id', $codeAnonymatObj->id)
+            ->where('examen_id', $this->examenId)
+            ->where('session_exam_id', $sessionId)
+            ->with(['etudiant', 'codeAnonymat'])
+            ->first();
+
+        logger('👤 Résultat recherche manchette', [
+            'trouve' => $manchette ? 'OUI' : 'NON',
+            'manchette' => $manchette ? $manchette->toArray() : null
+        ]);
+
+        if (!$manchette) {
+            toastr('❌ Aucune manchette trouvée pour ce code.', 'error');
+            return;
+        }
+
+        // Vérifier si copie existe déjà
+        $copieExistante = Copie::query()
+            ->where('examen_id', $this->examenId)
+            ->where('code_anonymat_id', $codeAnonymatObj->id)
+            ->where('session_exam_id', $sessionId)
+            ->first();
+
+        logger('📝 Vérification copie existante', [
+            'existe' => $copieExistante ? 'OUI' : 'NON'
+        ]);
+
+        if ($copieExistante) {
+            // Note déjà saisie
+            $this->etudiantTrouve = $manchette->etudiant;
+            $this->codeAnonymatCourant = $codeAnonymatObj;
+            $this->noteDejaExiste = true;
+            $this->noteExistante = $copieExistante->note;
+            
+            logger('⚠️ Note déjà saisie');
+            $this->clearMessage();
+            return;
+        }
+
+        // Code trouvé et pas encore noté
+        $this->manchetteCorrespondante = $manchette;
+        $this->etudiantTrouve = $manchette->etudiant;
+        $this->codeAnonymatCourant = $codeAnonymatObj;
+        $this->afficherChampNote = true;
+        
+        logger('✅ Prêt pour saisie', [
+            'etudiant' => $this->etudiantTrouve->nom,
+            'afficherChampNote' => $this->afficherChampNote
+        ]);
+        
+        toastr('✅ Code trouvé - Étudiant: ' . $this->etudiantTrouve->nom . ' ' . $this->etudiantTrouve->prenoms, 'success');
+        $this->dispatch('etudiantTrouve');
+        $this->dispatch('focusNote');
+
+        $this->verifierPeutEnregistrer();
+    }
+
 
     public function loadDataFromUrl(): void
     {
@@ -388,8 +607,15 @@ class CopieSaisie extends Component
     {
         $this->resetSaisieForm();
         $this->loadStatistiques();
-        $this->dispatch('focusMatricule');
+        
+        // Focus sur le bon champ selon le mode
+        if ($this->is_active) {
+            $this->dispatch('focusMatricule');
+        } else {
+            $this->dispatch('focusCodeAnonymat');
+        }
     }
+
 
     public function updatedMatricule($value): void
     {
@@ -418,41 +644,53 @@ class CopieSaisie extends Component
         // Valider en temps réel pour afficher le message d'erreur
         $this->validateOnly('note');
         
-        // Mettre à jour directement $peutEnregistrer
-        $this->peutEnregistrer = !empty($this->matricule) 
-            && !empty($this->note)
-            && is_numeric($this->note)
-            && floatval($this->note) >= 0 
-            && floatval($this->note) <= 20  // ← Si > 20, sera false
-            && $this->etudiantTrouve 
-            && $this->codeAnonymatCourant
-            && !$this->noteDejaExiste;
+        // Mettre à jour peutEnregistrer
+        $this->verifierPeutEnregistrer();
     }
 
 
     public function getBoutonActiveProperty(): bool
     {
-        return !empty($this->matricule) 
-            && !empty($this->note)
+        // Vérifier la note
+        $noteValide = !empty($this->note) 
             && is_numeric($this->note)
             && floatval($this->note) >= 0 
-            && floatval($this->note) <= 20  // ← Condition clé
-            && $this->etudiantTrouve 
+            && floatval($this->note) <= 20;
+        
+        // Vérifier l'identifiant selon le mode
+        if ($this->is_active) {
+            // Mode matricule
+            $identifiantValide = !empty($this->matricule);
+        } else {
+            // Mode code anonymat
+            $identifiantValide = !empty($this->codeAnonymat);
+        }
+        
+        // Toutes les conditions
+        return $identifiantValide
+            && $noteValide
             && $this->codeAnonymatCourant
             && !$this->noteDejaExiste;
     }
 
     private function verifierPeutEnregistrer(): void
     {
-        // Vérification simple et claire
         $noteValide = !empty($this->note) 
             && is_numeric($this->note) 
             && floatval($this->note) >= 0 
             && floatval($this->note) <= 20;
         
-        $this->peutEnregistrer = !empty($this->matricule) 
-            && $noteValide  // Utiliser cette variable
-            && $this->etudiantTrouve 
+        // Pour mode matricule
+        if ($this->is_active) {
+            $identifiantValide = !empty($this->matricule);
+        } 
+        // Pour mode code anonymat
+        else {
+            $identifiantValide = !empty($this->codeAnonymat);
+        }
+        
+        $this->peutEnregistrer = $identifiantValide
+            && $noteValide
             && $this->codeAnonymatCourant
             && !$this->noteDejaExiste;
     }
@@ -534,6 +772,7 @@ class CopieSaisie extends Component
         return ['existe' => $existe];
     }
 
+
     public function sauvegarderCopie(): void
     {
         if (!$this->peutEnregistrer) {
@@ -593,11 +832,21 @@ class CopieSaisie extends Component
                 toastr()->success("Note enregistrée avec succès!");
             }
 
-            // Reset et focus
+            // Dispatch événement de sauvegarde
             $this->dispatch('copieSauvegardee');
+            
+            // Reset complet du formulaire
             $this->resetSaisieForm();
+            
+            // Recharger les statistiques
             $this->loadStatistiques();
-            $this->dispatch('focusMatricule');
+            
+            // Focus sur le bon champ selon le mode
+            if ($this->is_active) {
+                $this->dispatch('focusMatricule');
+            } else {
+                $this->dispatch('focusCodeAnonymat');
+            }
             
         } catch (\Illuminate\Database\QueryException $e) {
             DB::rollBack();
@@ -619,6 +868,7 @@ class CopieSaisie extends Component
             toastr()->error('Erreur lors de l\'enregistrement.');
         }
     }
+
 
     public function supprimerDerniereCopie(): void
     {
@@ -716,9 +966,11 @@ class CopieSaisie extends Component
         }
     }
 
+
     private function resetSaisieForm(): void
     {
         $this->matricule = '';
+        $this->codeAnonymat = '';
         $this->note = '';
         $this->etudiantTrouve = null;
         $this->manchetteCorrespondante = null;
@@ -729,7 +981,7 @@ class CopieSaisie extends Component
         $this->noteExistante = null;
         $this->clearMessage();
         
-        // Déclencher l'événement pour arrêter la vérification
+        // Dispatcher l'événement de reset
         $this->dispatch('resetForm');
     }
 

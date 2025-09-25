@@ -48,6 +48,7 @@ class DatabaseSeeder extends Seeder
             ParcoursSeeder::class,
             SessionExamSeeder::class,
             DeliberationConfigSeeder::class,
+            SettingNoteSeeder::class,
         ]);
     }
 }

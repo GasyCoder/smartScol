@@ -1,6 +1,6 @@
-<div class="mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="mx-auto px-4 sm:px-6 lg:px-8 py-4">
     <!-- En-tête -->
-    <div class="mb-4">
+    <div class="mb-2">
         <h1 class="text-3xl font-bold font-heading text-gray-900 dark:text-white">
             Saisie des Copies
         </h1>
@@ -118,9 +118,27 @@
     document.addEventListener('livewire:init', () => {
         // GESTION DES ÉVÉNEMENTS LIVEWIRE
 
-        // Focus events
+        // Focus events avec vidage des champs
         Livewire.on('focusMatricule', () => {
-            setTimeout(() => focusField('matricule'), 100);
+            setTimeout(() => {
+                const field = document.getElementById('matricule');
+                if (field) {
+                    field.value = ''; // Vider le champ
+                    field.focus();
+                    field.select();
+                }
+            }, 150);
+        });
+
+        Livewire.on('focusCodeAnonymat', () => {
+            setTimeout(() => {
+                const field = document.getElementById('codeAnonymat');
+                if (field) {
+                    field.value = ''; // Vider le champ
+                    field.focus();
+                    field.select();
+                }
+            }, 150);
         });
 
         Livewire.on('focusNote', () => {
@@ -139,14 +157,52 @@
             startVerificationPeriodique();
         });
 
-        // Arrêter la vérification quand on reset le form
+        // Reset form + focus
         Livewire.on('resetForm', () => {
             stopVerificationPeriodique();
+            // Vider explicitement tous les champs
+            setTimeout(() => {
+                const matricule = document.getElementById('matricule');
+                const codeAnonymat = document.getElementById('codeAnonymat');
+                const note = document.getElementById('note');
+                
+                if (matricule) matricule.value = '';
+                if (codeAnonymat) codeAnonymat.value = '';
+                if (note) note.value = '';
+            }, 50);
         });
 
-        // Arrêter la vérification quand on sauvegarde
+        // Après sauvegarde : vider et refocus
         Livewire.on('copieSauvegardee', () => {
             stopVerificationPeriodique();
+            
+            setTimeout(() => {
+                // Vider tous les champs
+                const matricule = document.getElementById('matricule');
+                const codeAnonymat = document.getElementById('codeAnonymat');
+                const note = document.getElementById('note');
+                
+                if (matricule) matricule.value = '';
+                if (codeAnonymat) codeAnonymat.value = '';
+                if (note) note.value = '';
+                
+                // Focus sur le bon champ selon le mode
+                if (@this.is_active) {
+                    setTimeout(() => {
+                        if (matricule) {
+                            matricule.focus();
+                            matricule.select();
+                        }
+                    }, 100);
+                } else {
+                    setTimeout(() => {
+                        if (codeAnonymat) {
+                            codeAnonymat.focus();
+                            codeAnonymat.select();
+                        }
+                    }, 100);
+                }
+            }, 100);
         });
 
         // Arrêter la vérification quand copie existe déjà
@@ -164,9 +220,15 @@
                 isSubmitting = false;
             }, 100);
         });
-        
-        // Focus initial
-        setTimeout(() => focusField('matricule'), 500);
+
+        // Focus initial selon le mode
+        setTimeout(() => {
+            if (@this.is_active) {
+                focusField('matricule');
+            } else {
+                focusField('codeAnonymat');
+            }
+        }, 500);
     });
 
     // FONCTIONS UTILITAIRES
@@ -175,7 +237,7 @@
         const field = document.getElementById(fieldId);
         if (field && field.offsetParent !== null) {
             field.focus();
-            if (fieldId === 'matricule') {
+            if (fieldId === 'matricule' || fieldId === 'codeAnonymat') {
                 field.select();
             }
         }
@@ -198,7 +260,11 @@
                     if (result && result.existe) {
                         stopVerificationPeriodique();
                         // Déclencher une nouvelle recherche pour mettre à jour l'affichage
-                        await @this.call('rechercherParMatricule');
+                        if (@this.is_active) {
+                            await @this.call('rechercherParMatricule');
+                        } else {
+                            await @this.call('rechercherCodeAnonymat');
+                        }
                     }
                 } catch (error) {
                     console.warn('Erreur lors de la vérification périodique:', error);
@@ -218,21 +284,21 @@
 
     // GESTION DES TOUCHES ET RACCOURCIS CLAVIER
 
-    // Gestion ENTER pour saisie rapide - SIMPLIFIÉ
+    // Gestion ENTER pour saisie rapide
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.ctrlKey && !e.altKey && !e.shiftKey && !isSubmitting) {
             const target = e.target;
             
             // Si on est dans le formulaire de saisie
-            if (target.id === 'matricule' || target.id === 'note') {
+            if (target.id === 'matricule' || target.id === 'codeAnonymat' || target.id === 'note') {
                 e.preventDefault();
                 
                 // SEULEMENT enregistrer si tout est prêt
                 if (@this.peutEnregistrer) {
                     @this.sauvegarderCopie();
                 } 
-                // Si matricule et étudiant trouvé, aller au champ note
-                else if (target.id === 'matricule' && @this.etudiantTrouve && @this.afficherChampNote) {
+                // Si identifiant et étudiant trouvé, aller au champ note
+                else if ((target.id === 'matricule' || target.id === 'codeAnonymat') && @this.etudiantTrouve && @this.afficherChampNote) {
                     focusField('note');
                 }
             }

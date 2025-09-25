@@ -198,14 +198,29 @@ class ExportService
                 return false;
             }
 
-            // Charger la session avec les données de délibération
-            $sessionComplete = SessionExam::with('deliberateur')
-                ->find($session->id);
+            // ✅ CORRECTION : Toujours recharger depuis la base pour avoir l'état le plus récent
+            $sessionComplete = SessionExam::find($session->id);
 
-            return $sessionComplete && $sessionComplete->deliberation_appliquee;
+            if (!$sessionComplete) {
+                Log::warning('Session non trouvée lors de la vérification délibération', [
+                    'session_id' => $session->id
+                ]);
+                return false;
+            }
+
+            Log::info('Vérification état délibération', [
+                'session_id' => $sessionComplete->id,
+                'type' => $sessionComplete->type,
+                'deliberation_appliquee' => $sessionComplete->deliberation_appliquee,
+                'date_deliberation' => $sessionComplete->date_deliberation
+            ]);
+
+            return (bool) $sessionComplete->deliberation_appliquee;
             
         } catch (\Exception $e) {
-            Log::warning('Erreur vérification délibération: ' . $e->getMessage());
+            Log::warning('Erreur vérification délibération: ' . $e->getMessage(), [
+                'session_id' => $session->id ?? 'null'
+            ]);
             return false;
         }
     }

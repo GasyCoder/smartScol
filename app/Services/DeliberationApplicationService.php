@@ -35,26 +35,36 @@ class DeliberationApplicationService
             // Récupération session
             $session = $this->getTargetSession($deliberationParams['session_type'], $sessionNormale, $sessionRattrapage);
             
-            // ✅ VÉRIFICATION SIMPLE
+            // ✅ CORRECTION : Permettre la réapplication de délibération
             if ($session->estDeliberee()) {
-                throw new \Exception("Session déjà délibérée le " . $session->date_deliberation->format('d/m/Y à H:i'));
-            }   
+                Log::info("Réapplication délibération sur session déjà délibérée", [
+                    'session_id' => $session->id,
+                    'session_type' => $session->type,
+                    'ancienne_date' => $session->date_deliberation->format('d/m/Y à H:i'),
+                    'niveau_id' => $niveauId,
+                    'parcours_id' => $parcoursId,
+                    'utilisateur' => Auth::user()->name ?? 'Inconnu'
+                ]);
+            }
+            
             // Validation étudiants
             $this->validateStudents($session, $niveauId, $parcoursId);
             
             // Exécution
             $result = $this->executeDeliberation($niveauId, $parcoursId, $session, $deliberationParams);
             
-            $session->marquerDeliberee(
+            // ✅ CORRECTION : Utiliser une méthode qui permet la mise à jour
+            $session->mettreAJourDeliberation(
                 Auth::id(),
                 $deliberationParams,
                 "Délibération {$deliberationParams['session_type']} - " . ($result['statistiques']['total_etudiants'] ?? 0) . " étudiants traités"
             );
+            
             return [
                 'success' => true,
                 'result' => $result,
                 'session' => $session,
-                'message' => $this->formatSuccessMessage($result['statistiques'] ?? [])
+                'message' => $this->formatSuccessMessage($result['statistiques'] ?? [], $session->estDeliberee())
             ];
             
         } catch (\Exception $e) {
@@ -147,16 +157,20 @@ class DeliberationApplicationService
     /**
      * Formater le message de succès
      */
-    private function formatSuccessMessage(array $statistics): string
+    private function formatSuccessMessage(array $statistics, bool $etaitDejaDeliberee = false): string
     {
         if (empty($statistics)) {
-            return 'Délibération appliquée avec succès.';
+            return $etaitDejaDeliberee ? 
+                'Délibération mise à jour avec succès.' : 
+                'Délibération appliquée avec succès.';
         }
 
         $statsMessage = collect($statistics)
             ->map(fn($count, $decision) => ucfirst($decision) . ': ' . $count)
             ->implode(', ');
 
-        return 'Délibération appliquée avec succès. ' . $statsMessage;
+        $actionMessage = $etaitDejaDeliberee ? 'mise à jour' : 'appliquée';
+        
+        return "Délibération {$actionMessage} avec succès. {$statsMessage}";
     }
 }

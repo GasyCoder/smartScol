@@ -212,7 +212,7 @@
                     @endcan
                     @if(auth()->user()->hasAnyRole(['superadmin']))
                     <li class="nk-menu-item {{ request()->routeIs('resultats.releve_note') ? 'active' : '' }}">
-                        <a href="{{ route('resultats.releve_note') }}"
+                        <a href="{{ route('resultats.releve-notes.index') }}"
                         class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
                                 {{ request()->routeIs('resultats.releve_note') 
                                         ? 'text-primary-500' 

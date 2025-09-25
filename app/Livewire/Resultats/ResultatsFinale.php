@@ -402,6 +402,8 @@ class ResultatsFinale extends Component
         }
     }
 
+
+
     private function loadResultatsForSession($session)
     {
         if (!$session) return [];
@@ -536,6 +538,9 @@ class ResultatsFinale extends Component
             return [];
         }
     }
+
+
+    
 
     private function loadUEStructure()
     {
@@ -936,90 +941,73 @@ class ResultatsFinale extends Component
         $this->simulationDeliberation = [];
         $this->resetErrorBag(['deliberation']);
     }
-public function exporterExcel()
-{
-    try {
-        $exportService = new ExportService();
-        
-        $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
-        $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-        
-        if (empty($resultats)) {
-            toastr()->error('Aucun résultat à exporter.');
-            return;
-        }
-        
-        // ✅ NOUVEAU : Vérifier le statut de délibération
-        $statutDeliberation = $this->verifierStatutDeliberation($session);
-        
-        // ✅ PASSER vos paramètres de délibération existants
-        $excel = $exportService->exporterExcel(
-            $resultats, 
-            $this->uesStructure, 
-            Niveau::find($this->selectedNiveau),
-            $this->selectedParcours ? Parcour::find($this->selectedParcours) : null,
-            AnneeUniversitaire::find($this->selectedAnneeUniversitaire),
-            $session,
-            $this->deliberationParams // ✅ VOS PARAMÈTRES DYNAMIQUES
-        );
-        
-        // ✅ MESSAGE DIFFÉRENT selon la délibération
-        $message = $statutDeliberation['appliquee'] 
-            ? 'Export Excel DÉLIBÉRÉ généré (' . count($resultats) . ' étudiants)'
-            : 'Export Excel BRUT généré (' . count($resultats) . ' étudiants)';
+
+    
+    public function exporterExcel()
+    {
+        try {
+            $exportService = new ExportService();
             
-        toastr()->success($message);
-        return $excel;
-        
-    } catch (\Exception $e) {
-        Log::error('Erreur export Excel: ' . $e->getMessage());
-        toastr()->error('Erreur lors de l\'export Excel: ' . $e->getMessage());
-    }
-}
-
-public function exportExcel()
-{
-    try {
-        $this->validate();
-
-        $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
-        $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
-
-        if (empty($resultats)) {
-            toastr()->error('Aucun résultat à exporter.');
-            return;
+            $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
+            
+            if (empty($resultats)) {
+                toastr()->error('Aucun résultat à exporter.');
+                return;
+            }
+            
+            $excel = $exportService->exporterExcel($resultats, $this->uesStructure);
+            
+            toastr()->success('Export Excel généré avec succès (' . count($resultats) . ' étudiants)');
+            return $excel;
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur export Excel: ' . $e->getMessage());
+            toastr()->error('Erreur lors de l\'export Excel: ' . $e->getMessage());
         }
-
-        $niveau = Niveau::find($this->selectedNiveau);
-        $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
-        $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
-
-        // ✅ NOUVEAU : Vérifier le statut de délibération
-        $statutDeliberation = $this->verifierStatutDeliberation($session);
-        
-        if (!$statutDeliberation['appliquee'] && $session->isRattrapage()) {
-            // ✅ Avertissement pour session rattrapage non délibérée
-            toastr()->warning('Attention : Export des résultats BRUTS (délibération non appliquée)');
-        }
-
-        // ✅ APPEL avec VOS paramètres de délibération
-        $exportService = new ExportService();
-        
-        return $exportService->exporterExcel(
-            $resultats, 
-            $this->uesStructure, 
-            $niveau, 
-            $parcours, 
-            $anneeUniv, 
-            $session,
-            $this->deliberationParams // ✅ PARAMÈTRES DYNAMIQUES
-        );
-
-    } catch (\Exception $e) {
-        Log::error('Erreur export Excel: ' . $e->getMessage());
-        toastr()->error('Erreur lors de l\'export Excel: ' . $e->getMessage());
     }
-}
+
+
+    public function exportExcel()
+    {
+        try {
+            $this->validate();
+
+            // ✅ CORRECTION : Recharger les données fraîches depuis la base avant export
+            $this->loadResultats();
+
+            $resultats = $this->activeTab === 'session1' ? $this->resultatsSession1 : $this->resultatsSession2;
+            $session = $this->activeTab === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
+
+            if (empty($resultats)) {
+                toastr()->error('Aucun résultat à exporter.');
+                return;
+            }
+
+            // ✅ CORRECTION : Recharger la session depuis la base pour avoir le bon statut de délibération
+            $sessionFraiche = SessionExam::find($session->id);
+            
+            $niveau = Niveau::find($this->selectedNiveau);
+            $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
+            $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
+
+            $exportService = new ExportService();
+
+            // ✅ CORRECTION : Passer la session fraîche et forcer les paramètres de délibération
+            return $exportService->exporterExcel(
+                $resultats, 
+                $this->uesStructure, 
+                $niveau, 
+                $parcours, 
+                $anneeUniv, 
+                $sessionFraiche, // Session fraîche avec statut délibération correct
+                $this->deliberationParams
+            );
+
+        } catch (\Exception $e) {
+            Log::error('Erreur export Excel: ' . $e->getMessage());
+            toastr()->error('Erreur lors de l\'export Excel: ' . $e->getMessage());
+        }
+    }
 
 
     public function exportPDF()
@@ -1701,7 +1689,14 @@ public function exportExcel()
             $this->showConfirmationModal = false;
             $this->simulationDeliberation = [];
 
-            // Recharger les résultats pour afficher les changements
+            // ✅ CORRECTION : Recharger la session depuis la base pour avoir le statut délibération
+            $this->loadSessions();
+            
+            // ✅ CORRECTION : Vider le cache des résultats avant rechargement  
+            $this->resultatsSession1 = [];
+            $this->resultatsSession2 = [];
+            
+            // ✅ CORRECTION : Recharger complètement les résultats depuis la base
             $this->loadResultats();
             
             // Recalculer les statistiques
@@ -1714,11 +1709,8 @@ public function exportExcel()
             $sessionName = $sessionType === 'session1' ? 'Session 1' : 'Session 2';
             toastr()->info("Données actualisées après délibération {$sessionName}");
 
-            // Dispatch événement simple pour d'éventuels listeners
-            $this->dispatch('deliberation-completed', [
-                'session_type' => $sessionType,
-                'timestamp' => now()->timestamp
-            ]);
+            // ✅ AJOUT : Forcer le rafraîchissement de la vue
+            $this->dispatch('resultats-updated');
 
         } catch (\Exception $e) {
             Log::error('Erreur reset après délibération: ' . $e->getMessage());
@@ -1765,6 +1757,7 @@ public function exportExcel()
         return $session ? $session->estDeliberee() : false;
     }
 
+
     public function ouvrirDeliberation($sessionType)
     {
         $session = $sessionType === 'session1' ? $this->sessionNormale : $this->sessionRattrapage;
@@ -1774,15 +1767,22 @@ public function exportExcel()
             return;
         }
 
-        // ✅ VÉRIFICATION SIMPLE
+        // ✅ MODIFICATION : Informer au lieu de bloquer
         if ($session->estDeliberee()) {
-            toastr()->warning("Session déjà délibérée le {$session->date_deliberation->format('d/m/Y à H:i')}");
-            return;
+            $nbModifications = method_exists($session, 'getNombreModificationsDeliberation') ? 
+                $session->getNombreModificationsDeliberation() : 0;
+                
+            $message = $nbModifications > 0 ? 
+                "Session déjà délibérée le {$session->date_deliberation->format('d/m/Y à H:i')} ({$nbModifications} modification(s) précédente(s)). Vous pouvez la modifier." :
+                "Session déjà délibérée le {$session->date_deliberation->format('d/m/Y à H:i')}. Vous pouvez la modifier.";
+                
+            toastr()->info($message);
         }
 
         $this->deliberationParams['session_type'] = $sessionType;
         $this->showDeliberationModal = true;
     }
+
 
     public function render()
     {

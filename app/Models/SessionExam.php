@@ -24,7 +24,8 @@ class SessionExam extends Model
         'date_deliberation',
         'delibere_par',
         'parametres_deliberation',
-        'observations_deliberation'
+        'observations_deliberation',
+        'historique_deliberations'
     ];
 
     protected $casts = [
@@ -34,7 +35,8 @@ class SessionExam extends Model
         'date_end' => 'date',
         'deliberation_appliquee' => 'boolean',
         'date_deliberation' => 'datetime', 
-        'parametres_deliberation' => 'array'
+        'parametres_deliberation' => 'array',
+        'historique_deliberations' => 'array' 
     ];
 
     // ✅ NOUVELLES RELATIONS ET MÉTHODES
@@ -67,6 +69,71 @@ class SessionExam extends Model
             'delibere_par' => $userId,
             'observations_deliberation' => $motif ? "Annulée : {$motif}" : 'Délibération annulée'
         ]);
+    }
+
+    public function mettreAJourDeliberation(int $userId, array $parametres = [], ?string $observations = null): void
+    {
+        // Historiser l'ancienne délibération si elle existait
+        if ($this->deliberation_appliquee) {
+            $historiqueDeliberation = $this->historique_deliberations ?? [];
+            
+            $historiqueDeliberation[] = [
+                'action' => 'modification',
+                'ancienne_date' => $this->date_deliberation,
+                'ancien_delibere_par' => $this->delibere_par,
+                'anciens_parametres' => $this->parametres_deliberation,
+                'anciennes_observations' => $this->observations_deliberation,
+                'date_modification' => now(),
+                'modifie_par' => $userId,
+                'raison' => 'Réapplication de délibération'
+            ];
+            
+            $this->update(['historique_deliberations' => $historiqueDeliberation]);
+        }
+        
+        // Appliquer la nouvelle délibération
+        $this->update([
+            'deliberation_appliquee' => true,
+            'date_deliberation' => now(),
+            'delibere_par' => $userId,
+            'parametres_deliberation' => $parametres,
+            'observations_deliberation' => $observations
+        ]);
+    }
+
+    public function getHistoriqueDeliberations(): array
+    {
+        return $this->historique_deliberations ?? [];
+    }
+
+    public function getNombreModificationsDeliberation(): int
+    {
+        return count($this->getHistoriqueDeliberations());
+    }
+
+    public function getDerniereModificationDeliberation(): ?array
+    {
+        $historique = $this->getHistoriqueDeliberations();
+        return !empty($historique) ? end($historique) : null;
+    }
+
+
+
+    /**
+     * Récupérer les paramètres de délibération
+     */
+    public function getParametresDeliberation(): ?array
+    {
+        try {
+            return $this->parametres_deliberation ? 
+                (is_string($this->parametres_deliberation) ? 
+                    json_decode($this->parametres_deliberation, true) : 
+                    $this->parametres_deliberation) : 
+                null;
+        } catch (\Exception $e) {
+            \Log::error('Erreur récupération paramètres délibération: ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**

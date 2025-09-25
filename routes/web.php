@@ -80,7 +80,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/fusion', FusionIndex::class)->name('fusion');
             Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
             Route::get('/finale', ResultatsFinale::class)->name('finale');
-            Route::get('/releve-notes', ReleveNotes::class)->name('releve_note');
+            Route::get('/releve-notes', ReleveNotes::class)->name('releve-notes.index'); // ✅ Nom cohérent
+            Route::get('/releve-notes/{etudiant}/{session}', function($etudiantId, $sessionId) {
+                $releveComponent = new ReleveNotes();
+                $donneesReleve = $releveComponent->getDonneesReleve($etudiantId, $sessionId);
+                
+                return view('releve-notes-show', $donneesReleve);
+            })->name('releve-notes.show'); // ✅ Dans le bon groupe
         });
 
         Route::get('/liste-manchettes', ManchettesIndex::class)->name('manchette.index');

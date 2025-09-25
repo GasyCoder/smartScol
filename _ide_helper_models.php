@@ -837,6 +837,7 @@ namespace App\Models{
  * @property int|null $delibere_par
  * @property array<array-key, mixed>|null $parametres_deliberation
  * @property string|null $observations_deliberation
+ * @property array<array-key, mixed>|null $historique_deliberations
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\AnneeUniversitaire $anneeUniversitaire
@@ -857,6 +858,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDateStart($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDeliberationAppliquee($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereDeliberePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereHistoriqueDeliberations($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereIsActive($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereIsCurrent($value)
@@ -866,6 +868,23 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SessionExam whereUpdatedAt($value)
  */
 	class SessionExam extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * @property int $id
+ * @property int $is_enabled
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote whereIsEnabled($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SettingNote whereUpdatedAt($value)
+ */
+	class SettingNote extends \Eloquent {}
 }
 
 namespace App\Models{
