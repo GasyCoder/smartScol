@@ -423,6 +423,7 @@
                                 
                                 {{-- Actions de l'examen --}}
                                 <div class="flex space-x-2">
+                                    @can('examens.edit')
                                     <a href="{{ route('examens.edit', ['examen' => $examen->id]) }}" 
                                        class="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded hover:bg-blue-200 transition-colors"
                                        title="Modifier tout l'examen">
@@ -431,6 +432,8 @@
                                         </svg>
                                         Modifier
                                     </a>
+                                    @endcan
+                                    @can('examens.delete')
                                     <button wire:click="confirmDelete({{ $examen->id }})" 
                                             class="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
                                             title="Supprimer tout l'examen">
@@ -439,6 +442,7 @@
                                         </svg>
                                         Supprimer
                                     </button>
+                                    @endcan
                                 </div>
                             </div>
                         </div>

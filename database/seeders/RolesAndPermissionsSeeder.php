@@ -78,11 +78,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Permissions pour les copies (notes)
             [
-                'name' => 'copies.create',
-                'label' => 'Créer des copies',
-                'description' => 'Permet de saisir de nouvelles copies'
-            ],
-            [
                 'name' => 'copies.view',
                 'label' => 'Voir les notes',
                 'description' => 'Permet de consulter les notes saisies'
@@ -99,11 +94,6 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
 
             // Permissions pour les manchettes
-            [
-                'name' => 'manchettes.create',
-                'label' => 'Créer des manchettes',
-                'description' => 'Permet de créer de nouvelles manchettes'
-            ],
             [
                 'name' => 'manchettes.view',
                 'label' => 'Voir les manchettes',
@@ -186,6 +176,21 @@ class RolesAndPermissionsSeeder extends Seeder
                 'label' => 'Reactiver la résultats',
                 'description' => 'Permet de réactiver la validation des résultats d\'un examen'
             ],
+            [
+                'name' => 'releve-note.view',
+                'label' => 'Voir le relevé de notes',
+                'description' => 'Permet de consulter le relevé de notes d\'un étudiant'
+            ],
+            [
+                'name' => 'releve-note.view-detail',
+                'label' => 'Voir les détails du relevé de notes',
+                'description' => 'Permet de consulter les détails du relevé de notes d\'un étudiant'
+            ],
+            [
+                'name' => 'releve-note.exportPDF',
+                'label' => 'Exporter le relevé de notes',
+                'description' => 'Permet d\'exporter le relevé de notes au format PDF etc.'
+            ],
             // Permissions pour l'administration
             [
                 'name' => 'users.manage',
@@ -263,9 +268,14 @@ class RolesAndPermissionsSeeder extends Seeder
             'resultats.view',
             'manchettes.view',
             'manchettes.edit',
+            'examens.view',
+            'examens.edit',
             'copies.view',
             'copies.edit',
-            'resultats.fusion'
+            'resultats.fusion',
+            'releve-note.view',
+            'releve-note.view-detail',
+            'releve-note.exportPDF',
         ]);
 
         // Créer le rôle secrétaire

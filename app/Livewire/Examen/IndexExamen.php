@@ -102,7 +102,7 @@ class IndexExamen extends Component
 
     public function mount()
     {
-        if (!Auth::user()->hasRole('superadmin')) {
+        if (!Auth::user()->hasAnyRole(['superadmin', 'enseignant'])) {
             abort(403, 'Accès non autorisé.');
         }
         

@@ -95,7 +95,8 @@
                             </span>
                         </a>
                     </li>
-
+                    @endif
+                    @can('examens.view')
                     <li class="nk-menu-item py-0.5{{ request()->routeIs('examens.*') ? ' active' : '' }} group/item">
                         <a href="{{ route('examens.index') }}"
                             class="nk-menu-link flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
@@ -110,7 +111,7 @@
                             </span>
                         </a>
                     </li>
-                    @endif
+                    @endcan
                     @can('etudiants.view')
                     <li class="nk-menu-item py-0.5{{ is_route('students') ? ' active' : '' }} group/item">
                         <a href="{{ route('students') }}"
@@ -147,18 +148,28 @@
                         </a>
                     </li>
                     @endcan
-
-                    @can('manchettes.create')
-                    <li class="nk-menu-item {{ request()->routeIs('manchettes.saisie') ? 'active' : '' }}">
-                        <a href="{{ route('manchettes.saisie') }}"
-                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('manchettes.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
-                            <span class="flex-grow">Saisie Manchettes</span>
-                        </a>
-                    </li>
-                    @endcan
-
+                    @if(auth()->user()->hasRole('secretaire'))
+                        @can('manchettes.create')
+                        <li class="nk-menu-item {{ request()->routeIs('manchettes.saisie') ? 'active' : '' }}">
+                            <a href="{{ route('manchettes.saisie') }}"
+                            class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                    {{ request()->routeIs('manchettes.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                                <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
+                                <span class="flex-grow">Saisie Manchettes</span>
+                            </a>
+                        </li>
+                        @endcan
+                        @can('copies.create')
+                        <li class="nk-menu-item {{ request()->routeIs('copies.saisie') ? 'active' : '' }}">
+                            <a href="{{ route('copies.saisie') }}"
+                            class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
+                                    {{ request()->routeIs('copies.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
+                                <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
+                                <span class="flex-grow">Saisie Copies</span>
+                            </a>
+                        </li>
+                        @endcan
+                    @endif
                     {{-- === COPIES (même niveau) === --}}
                     @can('copies.view')
                     <li class="nk-menu-item {{ request()->routeIs('copie.index') ? 'active' : '' }}">
@@ -171,16 +182,6 @@
                     </li>
                     @endcan
 
-                    @can('copies.create')
-                    <li class="nk-menu-item {{ request()->routeIs('copies.saisie') ? 'active' : '' }}">
-                        <a href="{{ route('copies.saisie') }}"
-                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('copies.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
-                            <span class="flex-grow">Saisie Copies</span>
-                        </a>
-                    </li>
-                    @endcan
                     @can('resultats.fusion')
                     <li class="nk-menu-item {{ request()->routeIs('resultats.fusion', 'resultats.verification') ? 'active' : '' }}">
                         <a href="{{ route('resultats.fusion') }}"
@@ -195,7 +196,6 @@
                         </a>
                     </li>
                     @endcan
-                    
                     @can('resultats.view')
                         <li class="nk-menu-item {{ request()->routeIs('resultats.finale') ? 'active' : '' }}">
                             <a href="{{ route('resultats.finale') }}"
@@ -210,11 +210,11 @@
                             </a>
                         </li>
                     @endcan
-                    @if(auth()->user()->hasAnyRole(['superadmin']))
-                    <li class="nk-menu-item {{ request()->routeIs('resultats.releve_note') ? 'active' : '' }}">
+                    @can('releve-note.view')
+                    <li class="nk-menu-item {{ request()->routeIs('resultats.releve-notes.index') ? 'active' : '' }}">
                         <a href="{{ route('resultats.releve-notes.index') }}"
                         class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('resultats.releve_note') 
+                                {{ request()->routeIs('resultats.releve-notes.index') 
                                         ? 'text-primary-500' 
                                         : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
                             <span class="w-9 flex-shrink-0 text-slate-400">
@@ -223,7 +223,7 @@
                             <span class="flex-grow"> Relevé de notes</span>
                         </a>
                     </li>
-                    @endif
+                    @endcan
                     <!-- PARAMÈTRAGES - Réservé SUPERADMIN uniquement -->
                     @if(auth()->user()->hasRole('superadmin'))
                     <li

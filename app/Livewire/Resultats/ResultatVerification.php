@@ -614,20 +614,29 @@ class ResultatVerification extends Component
     {
         $datasetComplet = collect();
 
-        // Récupérer tous les résultats existants
+        // Charger les utilisateurs une seule fois pour optimiser les performances
+        $userIds = [];
+        $usersCache = [];
+
+        // Récupérer tous les résultats existants avec les relations utilisateurs
         $resultatsExistants = ResultatFusion::where('examen_id', $this->examenId)
             ->where('session_exam_id', $this->sessionActive->id)
             ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
             ->where('etape_fusion', $this->etapeFusion)
-            ->with(['etudiant:id,matricule,nom,prenom', 'ec:id,nom,enseignant,ue_id', 'ec.ue:id,nom,abr,credits'])
+            ->with([
+                'etudiant:id,matricule,nom,prenom', 
+                'ec:id,nom,enseignant,ue_id', 
+                'ec.ue:id,nom,abr,credits'
+            ])
             ->get()
             ->keyBy(function($item) {
                 return $item->etudiant_id . '_' . $item->ec_id;
             });
 
-        // Récupérer toutes les copies
+        // Récupérer toutes les copies avec les relations utilisateurs
         $copies = Copie::where('examen_id', $this->examenId)
             ->where('session_exam_id', $this->sessionActive->id)
+            ->with(['utilisateurSaisie:id,name', 'utilisateurModification:id,name'])
             ->get()
             ->keyBy(function($copie) {
                 return $copie->code_anonymat_id . '_' . $copie->ec_id;
@@ -639,7 +648,6 @@ class ResultatVerification extends Component
                 $resultat = $resultatsExistants->get($key);
 
                 if ($resultat) {
-                    // EC avec résultat
                     $copieKey = $resultat->code_anonymat_id . '_' . $resultat->ec_id;
                     $copie = $copies->get($copieKey);
 
@@ -649,6 +657,20 @@ class ResultatVerification extends Component
                     if ($copie && $copie->is_checked) {
                         $noteAffichee = $copie->note;
                         $sourceNote = 'copies';
+                    }
+
+                    // Résoudre les noms des utilisateurs pour saisie_par et modifie_par
+                    $saisieParName = 'Inconnu';
+                    $modifieParName = 'Inconnu';
+
+                    if ($copie) {
+                        // Toujours résoudre saisie_par depuis la copie, car c'est requis dans la table
+                        $saisieParName = $copie->utilisateurSaisie ? $copie->utilisateurSaisie->name : 'Système';
+                        // Résoudre modifie_par si présent
+                        $modifieParName = $copie->utilisateurModification ? $copie->utilisateurModification->name : 'Inconnu';
+                    } elseif ($resultat->genere_par) {
+                        // Si pas de copie mais resultat généré par le système
+                        $saisieParName = 'Système';
                     }
 
                     $datasetComplet->push([
@@ -671,8 +693,10 @@ class ResultatVerification extends Component
                         'commentaire' => $copie->commentaire ?? '',
                         'copie_id' => $copie->id ?? null,
                         'code_anonymat_id' => $resultat->code_anonymat_id,
-                        'created_at' => $copie->created_at ?? null,
-                        'updated_at' => $copie->updated_at ?? null,
+                        'created_at' => $copie->created_at ?? $resultat->created_at,
+                        'updated_at' => $copie->updated_at ?? $resultat->updated_at,
+                        'saisie_par' => $saisieParName,
+                        'modifie_par' => $modifieParName,
                     ]);
                 } else {
                     // EC sans résultat - afficher vide
@@ -688,6 +712,10 @@ class ResultatVerification extends Component
                         'ue_nom' => $ec->ue->nom,
                         'ue_abr' => $ec->ue->abr ?? 'UE',
                         'ue_credits' => $ec->ue->credits ?? 0,
+                        'created_at' => null,
+                        'updated_at' => null,
+                        'saisie_par' => 'Inconnu',
+                        'modifie_par' => 'Inconnu',
                     ]);
                 }
             }
@@ -964,21 +992,6 @@ class ResultatVerification extends Component
                 throw new \Exception("ResultatFusion non trouvé avec l'ID: {$resultatData['id']}");
             }
 
-            Log::info('Tentative de sauvegarde modification individuelle', [
-                'unique_key' => $uniqueKey,
-                'resultat_fusion_id' => $resultatFusion->id,
-                'etudiant_id' => $resultatFusion->etudiant_id,
-                'etudiant_nom' => $resultatFusion->etudiant->nom ?? 'N/A',
-                'etudiant_prenom' => $resultatFusion->etudiant->prenom ?? 'N/A',
-                'ec_id' => $resultatFusion->ec_id,
-                'ec_nom' => $resultatFusion->ec->nom ?? 'N/A',
-                'code_anonymat_id' => $resultatFusion->code_anonymat_id,
-                'nouvelle_note' => $this->newNote,
-                'ancienne_note' => $resultatData['note'],
-                'observation' => $this->observation,
-                'session_exam_id' => $this->sessionActive->id
-            ]);
-
             $copie = Copie::where('examen_id', $resultatFusion->examen_id)
                 ->where('ec_id', $resultatFusion->ec_id)
                 ->where('code_anonymat_id', $resultatFusion->code_anonymat_id)
@@ -993,31 +1006,18 @@ class ResultatVerification extends Component
                     'session_exam_id' => $this->sessionActive->id,
                     'note' => $this->newNote,
                     'saisie_par' => Auth::id(),
+                    'modifie_par' => Auth::id(),
                     'is_checked' => true,
-                    'commentaire' => $this->observation
+                    'commentaire' => 'Modifié lors de la vérification humaine',
+                    'updated_at' => now(),
                 ]);
-
-                Log::info('Création nouvelle copie lors de la modification', [
-                    'resultat_fusion_id' => $resultatFusion->id,
-                    'nouvelle_note' => $this->newNote,
-                    'session_exam_id' => $this->sessionActive->id,
-                    'raison' => 'Copie inexistante pour ce triplet (examen_id, ec_id, code_anonymat_id, session_exam_id)'
-                ]);
+                $copie->save(); // Explicitly save the new Copie record
             }
 
             DB::transaction(function () use ($copie, $resultatFusion) {
                 $copie->marquerCommeModifiee($this->newNote, $this->observation);
                 $resultatFusion->mettreAJourNote($this->newNote, Auth::id(), $this->etapeFusion);
                 $resultatFusion->marquerCommeVerifie($this->etapeFusion, Auth::id());
-
-                Log::info('Sauvegarde modification individuelle réussie', [
-                    'copie_id' => $copie->id,
-                    'resultat_fusion_id' => $resultatFusion->id,
-                    'note_appliquee' => $this->newNote,
-                    'statut_applique' => $resultatFusion->statut,
-                    'session_exam_id' => $this->sessionActive->id,
-                    'user_id' => Auth::id()
-                ]);
             });
 
             $this->loadResultats();

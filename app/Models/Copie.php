@@ -217,17 +217,11 @@ class Copie extends Model
         $this->note = $nouvelleNote;
         $this->commentaire = $commentaire;
         $this->is_checked = true;
+        $this->modifie_par = Auth::id(); // Explicitly set modifie_par
         $this->save();
 
-        Log::info('Copie marquée comme modifiée', [
-            'copie_id' => $this->id,
-            'ancienne_note' => $this->note_old,
-            'nouvelle_note' => $this->note,
-            'user_id' => Auth::id()
-        ]);
-
         return $this;
-    }
+}
 
     public function marquerCommeVerifiee()
     {

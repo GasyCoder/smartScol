@@ -290,6 +290,34 @@
                                             @endif
                                         @endif
                                     </div>
+<!-- Informations dynamiques d'audit -->
+<div class="mt-2 space-y-1 text-xs text-gray-500 dark:text-gray-400">
+    @if(!empty($resultat['saisie_par']) && $resultat['saisie_par'] !== 'Inconnu' || $resultat['created_at'])
+        <p class="flex items-center justify-center gap-1">
+            <em class="icon ni ni-user-add text-xs"></em>
+            Ajouté par 
+            <span class="font-medium text-gray-700 dark:text-gray-300">
+                {{ $resultat['saisie_par'] ?? 'Inconnu' }}
+            </span>
+            @if($resultat['created_at'])
+                <span class="text-xs">il y a {{ $resultat['created_at']->diffForHumans() }}</span>
+            @endif
+        </p>
+    @endif
+    
+    @if(!empty($resultat['modifie_par']) && $resultat['modifie_par'] !== 'Inconnu' || $resultat['updated_at'])
+        <p class="flex items-center justify-center gap-1">
+            <em class="icon ni ni-edit text-xs"></em>
+            Modifié par 
+            <span class="font-medium text-gray-700 dark:text-gray-300">
+                {{ $resultat['modifie_par'] ?? 'Inconnu' }}
+            </span>
+            @if($resultat['updated_at'])
+                <span class="text-xs">il y a {{ $resultat['updated_at']->diffForHumans() }}</span>
+            @endif
+        </p>
+    @endif
+</div>
                                 </td>
                                 
                                 <!-- Actions améliorées -->

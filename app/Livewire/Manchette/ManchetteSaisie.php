@@ -57,13 +57,20 @@ class ManchetteSaisie extends Component
     public bool $hasExistingPresence = false;
     public bool $isEditingPresence = false;
 
-    // SAISIE
+    // SAISIE - NOUVELLES PROPRIÉTÉS POUR CODE ANONYMAT
     public string $matricule = '';
+    public string $codeAnonymatSaisi = ''; // Code saisi manuellement
+    public string $codeAnonymatSuggere = ''; // Code suggéré automatiquement
     public $etudiantTrouve = null;
     public bool $matriculeExisteDeja = false;
     public $prochaineSequence = 1;
     public $prochainCodeAnonymat = '';
     public $manchettesSaisies = [];
+    
+    // ÉTATS DE CONFIRMATION
+    public bool $showConfirmation = false;
+    public bool $isValidatingCode = false;
+    public array $codeValidationErrors = [];
 
     // UI
     public string $search = '';
@@ -79,7 +86,11 @@ class ManchetteSaisie extends Component
     public $show_envelope_calculator = false;
 
     // LISTENERS
-    protected $listeners = ['save-presence-shortcut' => 'savePresence'];
+    protected $listeners = [
+        'save-presence-shortcut' => 'savePresence',
+        'confirm-code-anonymat' => 'confirmerCodeAnonymat',
+        'cancel-confirmation' => 'annulerConfirmation'
+    ];
 
     // QUERY STRING
     protected $queryString = [
@@ -97,6 +108,12 @@ class ManchetteSaisie extends Component
     protected $rules = [
         'matricule' => 'required|string',
         'totalManchettesPresentes' => 'required|integer|min:1',
+        'codeAnonymatSaisi' => 'required|string|regex:/^[A-Z]{2}[0-9]+$/',
+    ];
+
+    protected $messages = [
+        'codeAnonymatSaisi.required' => 'Le code anonymat est obligatoire',
+        'codeAnonymatSaisi.regex' => 'Le code anonymat doit être composé de 2 lettres majuscules suivies de chiffres (ex: AB1, XY25)',
     ];
 
     // HOOKS
@@ -107,12 +124,63 @@ class ManchetteSaisie extends Component
     {
         $this->examenSelected = $this->examen_id ? Examen::find($this->examen_id) : null;
         
-        // ✅ AJOUT : Recalculer les données de rattrapage
+        // Recalculer les données de rattrapage
         if ($this->examenSelected && $this->sessionType === 'rattrapage') {
             $this->filterECsSelonSession();
         }
         
         $this->resetPage();
+    }
+
+    // NOUVEAU : Validation automatique du code anonymat lors de la saisie
+    public function updatedCodeAnonymatSaisi()
+    {
+        $this->validateCodeAnonymats();
+        
+        // Réinitialiser la confirmation si le code change
+        $this->showConfirmation = false;
+    }
+
+    // MODIFIÉ : Génération automatique du matricule avec code anonymat
+    public function updatedMatricule()
+    {
+        // Réinitialiser toutes les propriétés liées au code
+        $this->etudiantTrouve = null;
+        $this->matriculeExisteDeja = false;
+        $this->codeAnonymatSaisi = '';
+        $this->codeAnonymatSuggere = '';
+        $this->showConfirmation = false;
+        $this->codeValidationErrors = [];
+        
+        if (strlen($this->matricule) >= 3) {
+            $query = Etudiant::where('matricule', $this->matricule)
+                ->where('niveau_id', $this->niveauSelected->id);
+                
+            if ($this->parcoursSelected) {
+                $query->where('parcours_id', $this->parcoursSelected->id);
+            }
+            
+            $etudiantCandidat = $query->first();
+            
+            if ($etudiantCandidat) {
+                // Vérification selon le type de session
+                if ($this->sessionType === 'rattrapage') {
+                    $this->verifierEligibiliteRattrapage($etudiantCandidat);
+                } else {
+                    // Session normale : validation standard
+                    $this->etudiantTrouve = $etudiantCandidat;
+                    $this->verifierDoublonSessionNormale();
+                }
+                
+                // NOUVEAU : Générer la suggestion de code anonymat
+                if ($this->etudiantTrouve && !$this->matriculeExisteDeja) {
+                    $this->genererSuggestionCodeAnonymat();
+                }
+            } else {
+                // Étudiant non trouvé dans le niveau/parcours
+                $this->etudiantTrouve = null;
+            }
+        }
     }
 
     public function updated($propertyName)
@@ -128,6 +196,9 @@ class ManchetteSaisie extends Component
     // INITIALISATION
     public function mount()
     {
+        if (!Auth::user()->hasAnyRole(['secretaire'])) {
+            abort(403, 'Accès non autorisé.');
+        }
         $this->niveaux = new Collection();
         $this->parcours = new Collection();
         $this->examens = new Collection();
@@ -234,7 +305,7 @@ class ManchetteSaisie extends Component
 
         $this->examenSelected = $this->examen_id ? Examen::find($this->examen_id) : null;
         
-        // ✅ AJOUT : Calculer les données de rattrapage dès que l'examen est sélectionné
+        // Calculer les données de rattrapage dès que l'examen est sélectionné
         if ($this->examenSelected && $this->sessionType === 'rattrapage') {
             $this->filterECsSelonSession();
         }
@@ -349,7 +420,7 @@ class ManchetteSaisie extends Component
         // Filtrer les ECs selon la session (calcule les statistiques de rattrapage)
         $this->filterECsSelonSession();
         
-        // ✅ IMPORTANT : Recalculer APRÈS l'analyse de rattrapage
+        // Recalculer APRÈS l'analyse de rattrapage
         $this->calculateTotalEtudiants(); 
         
         $this->loadPresenceData();
@@ -359,7 +430,6 @@ class ManchetteSaisie extends Component
             $this->calculateNextSequence();
         }
     }
-
 
     // GESTION PRÉSENCES - LOGIQUE SIMPLIFIÉE
     public function loadPresenceData()
@@ -418,7 +488,7 @@ class ManchetteSaisie extends Component
             $this->filterECsSelonSession();
         }
         
-        $this->calculateTotalEtudiants(); // ← Ajoutez cette ligne
+        $this->calculateTotalEtudiants();
         $this->isEditingPresence = true;
         $this->show_envelope_calculator = false;
         $this->clearEnvelopes();
@@ -432,15 +502,15 @@ class ManchetteSaisie extends Component
     public function cancelEditingPresence()
     {
         $this->isEditingPresence = false;
-        $this->show_envelope_calculator = false; // Ajouter cette ligne
-        $this->clearEnvelopes(); // Ajouter cette ligne
+        $this->show_envelope_calculator = false;
+        $this->clearEnvelopes();
         $this->loadPresenceData();
         $this->showMessage('Modification annulée', 'info');
     }
 
     public function savePresence()
     {
-            // Vérifications de sécurité AVANT la validation
+        // Vérifications de sécurité AVANT la validation
         if (!$this->examenSelected || !$this->examenSelected->id) {
             $errorMessage = 'Examen non sélectionné. Veuillez recommencer la sélection.';
             $this->showMessage($errorMessage, 'error');
@@ -527,7 +597,7 @@ class ManchetteSaisie extends Component
 
     public function canStartSaisie()
     {
-        // Ajoutez une vérification que la propriété existe
+        // Vérification que la propriété existe
         if (!property_exists($this, 'totalManchettesPresentes') || 
             !isset($this->totalManchettesPresentes)) {
             return false;
@@ -631,7 +701,6 @@ class ManchetteSaisie extends Component
         }
     }
 
-
     public function calculateTotalEtudiants()
     {
         if (!$this->niveauSelected) {
@@ -662,41 +731,207 @@ class ManchetteSaisie extends Component
         }
     }
 
-    // SAISIE MANCHETTES
-    public function updatedMatricule()
+    // NOUVELLES MÉTHODES POUR CODE ANONYMAT
+    private function genererSuggestionCodeAnonymat()
     {
-        $this->etudiantTrouve = null;
-        $this->matriculeExisteDeja = false;
-        
-        if (strlen($this->matricule) >= 3) {
-            $query = Etudiant::where('matricule', $this->matricule)
-                ->where('niveau_id', $this->niveauSelected->id);
-                
-            if ($this->parcoursSelected) {
-                $query->where('parcours_id', $this->parcoursSelected->id);
+        if (!$this->examenSelected || !$this->ecSelected) {
+            return;
+        }
+
+        try {
+            // Générer les lettres à partir du code salle ou utiliser des lettres par défaut
+            $lettres = $this->genererLettresCode();
+            
+            // Trouver le prochain numéro disponible
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            // Récupérer tous les codes existants pour cette EC/session avec ce préfixe
+            $codesExistants = CodeAnonymat::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->where('ec_id', $this->ecSelected->id)
+                ->where('code_complet', 'LIKE', $lettres . '%')
+                ->whereHas('allManchettes', function($query) use ($sessionId) {
+                    $query->where('session_exam_id', $sessionId);
+                })
+                ->pluck('code_complet')
+                ->toArray();
+
+            // Extraire les numéros existants
+            $numerosExistants = [];
+            foreach ($codesExistants as $code) {
+                if (preg_match('/^' . $lettres . '([0-9]+)$/', $code, $matches)) {
+                    $numerosExistants[] = (int) $matches[1];
+                }
             }
             
-            $etudiantCandidat = $query->first();
+            // Trouver le premier numéro disponible
+            $prochainNumero = 1;
+            while (in_array($prochainNumero, $numerosExistants)) {
+                $prochainNumero++;
+            }
             
-            if ($etudiantCandidat) {
-                // ✅ NOUVELLE LOGIQUE : Vérification selon le type de session
-                if ($this->sessionType === 'rattrapage') {
-                    $this->verifierEligibiliteRattrapage($etudiantCandidat);
-                } else {
-                    // Session normale : validation standard
-                    $this->etudiantTrouve = $etudiantCandidat;
-                    $this->verifierDoublonSessionNormale();
+            // Vérifier que le numéro ne dépasse pas le nombre de présences
+            if ($prochainNumero > $this->totalManchettesPresentes && $this->totalManchettesPresentes > 0) {
+                // Chercher un trou dans la séquence plutôt que de dépasser
+                for ($i = 1; $i <= $this->totalManchettesPresentes; $i++) {
+                    if (!in_array($i, $numerosExistants)) {
+                        $prochainNumero = $i;
+                        break;
+                    }
                 }
-            } else {
-                // Étudiant non trouvé dans le niveau/parcours
-                $this->etudiantTrouve = null;
+            }
+            
+            $this->codeAnonymatSuggere = $lettres . $prochainNumero;
+            $this->codeAnonymatSaisi = $this->codeAnonymatSuggere;
+            
+        } catch (\Exception $e) {
+            logger('Erreur génération suggestion code: ' . $e->getMessage());
+            $this->codeAnonymatSuggere = 'AS1';
+            $this->codeAnonymatSaisi = 'AS1';
+        }
+    }
+
+    private function genererLettresCode()
+    {
+        // Utiliser toujours "AS" comme préfixe par défaut (cohérent avec votre exemple AS1)
+        if (!$this->codeSalle || strlen($this->codeSalle) < 1) {
+            return 'AS'; // Par défaut
+        }
+
+        // Convertir le code salle en lettres majuscules
+        $codeSalle = strtoupper($this->codeSalle);
+        
+        if (strlen($codeSalle) >= 2) {
+            return substr($codeSalle, 0, 2);
+        }
+        
+        // Si une seule lettre, compléter avec 'S'
+        return $codeSalle . 'S';
+    }
+
+    private function validateCodeAnonymats()
+    {
+        $this->codeValidationErrors = [];
+
+        if (empty($this->codeAnonymatSaisi)) {
+            return;
+        }
+
+        // 1. Validation du format
+        if (!preg_match('/^[A-Z]{2}[0-9]+$/', $this->codeAnonymatSaisi)) {
+            $this->codeValidationErrors[] = 'Format invalide : utilisez 2 lettres majuscules suivies de chiffres (ex: AS1, AS25)';
+        }
+
+        // 2. Extraire le numéro
+        if (preg_match('/^[A-Z]{2}([0-9]+)$/', $this->codeAnonymatSaisi, $matches)) {
+            $numero = (int) $matches[1];
+            
+            // 3. Vérifier que le numéro ne dépasse pas les présences
+            if ($numero > $this->totalManchettesPresentes && $this->totalManchettesPresentes > 0) {
+                $this->codeValidationErrors[] = "Numéro trop élevé : maximum autorisé {$this->totalManchettesPresentes} (selon le nombre de présences)";
+            }
+            
+            if ($numero < 1) {
+                $this->codeValidationErrors[] = "Le numéro doit être supérieur à 0";
+            }
+        }
+
+        // 4. Vérifier les doublons seulement si les autres validations passent
+        if ($this->examenSelected && $this->ecSelected && empty($this->codeValidationErrors)) {
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            // Vérifier s'il existe un code anonymat avec une manchette active
+            $codeExistant = CodeAnonymat::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->where('ec_id', $this->ecSelected->id)
+                ->where('code_complet', $this->codeAnonymatSaisi)
+                ->whereHas('allManchettes', function($query) use ($sessionId) {
+                    $query->where('session_exam_id', $sessionId);
+                })
+                ->first();
+
+            if ($codeExistant) {
+                // Vérifier si c'est utilisé par un autre étudiant
+                $manchetteExistante = $codeExistant->allManchettes()
+                    ->where('session_exam_id', $sessionId)
+                    ->with('etudiant')
+                    ->first();
+                    
+                if ($manchetteExistante) {
+                    // Si c'est le même étudiant (cas d'une modification), ce n'est pas un doublon
+                    if ($this->etudiantTrouve && $manchetteExistante->etudiant_id == $this->etudiantTrouve->id) {
+                        // Même étudiant, pas de problème
+                        return;
+                    }
+                    
+                    $etudiantExistant = $manchetteExistante->etudiant;
+                    $nomExistant = $etudiantExistant ? ($etudiantExistant->nom . ' ' . ($etudiantExistant->prenoms ?? '')) : 'Étudiant inconnu';
+                    $this->codeValidationErrors[] = "Ce code d'anonymat est déjà utilisé par {$nomExistant}";
+                }
             }
         }
     }
 
+    public function validerEtConfirmer()
+    {
+        // Vérifications de base
+        if (!$this->etudiantTrouve || !is_object($this->etudiantTrouve)) {
+            $this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
+            return;
+        }
 
+        if ($this->matriculeExisteDeja) {
+            $this->showMessage('Cet étudiant a déjà une manchette pour cette matière.', 'warning');
+            return;
+        }
+
+        // Validation du code anonymat
+        $this->validate([
+            'codeAnonymatSaisi' => 'required|string|regex:/^[A-Z]{2}[0-9]+$/'
+        ]);
+
+        $this->validateCodeAnonymats();
+
+        if (!empty($this->codeValidationErrors)) {
+            $errorMessage = 'Erreurs de validation du code : ' . implode(', ', $this->codeValidationErrors);
+            $this->showMessage($errorMessage, 'error');
+            return;
+        }
+
+        // Afficher la confirmation et émettre l'événement pour le focus
+        $this->showConfirmation = true;
+        $this->dispatch('modal-opened'); // Ajout de l'événement
+    }
+
+    public function confirmerCodeAnonymat()
+    {
+        $this->showConfirmation = false;
+        $this->sauvegarderManchette();
+    }
+
+    public function annulerConfirmation()
+    {
+        $this->showConfirmation = false;
+        $this->showMessage('Enregistrement annulé. Vous pouvez modifier le code anonymat.', 'info');
+    }
+
+    public function validerParEntree()
+    {
+        // Vérifier si le champ matricule est valide et un étudiant est trouvé
+        if ($this->etudiantTrouve && !$this->matriculeExisteDeja && !isset($this->etudiantTrouve->message_erreur)) {
+            // Vérifier si un code anonymat est saisi et valide
+            if (!empty($this->codeAnonymatSaisi) && $this->codeEstValide) {
+                $this->validerEtConfirmer();
+            } else {
+                // Si le code anonymat n'est pas encore saisi, déplacer le focus vers ce champ
+                $this->dispatch('focus-code-anonymat');
+            }
+        }
+    }
+
+    // SAISIE MANCHETTES - MODIFIÉE
     /**
-     * 🔍 NOUVELLE MÉTHODE : Vérifie si l'étudiant est éligible au rattrapage
+     * Vérification d'éligibilité au rattrapage
      */
     private function verifierEligibiliteRattrapage($etudiantCandidat)
     {
@@ -720,9 +955,8 @@ class ManchetteSaisie extends Component
         $this->verifierDoublonSessionRattrapage();
     }
 
-
     /**
-     * 📋 MÉTHODE CORRIGÉE : Raison spécifique par EC/UE
+     * Raison spécifique par EC/UE
      */
     private function verifierRaisonNonEligibiliteSpecifique($etudiantCandidat)
     {
@@ -774,53 +1008,7 @@ class ManchetteSaisie extends Component
     }
 
     /**
-     * 📋 NOUVELLE MÉTHODE : Détermine pourquoi l'étudiant n'est pas éligible
-     */
-    private function verifierRaisonNonEligibilite($etudiantCandidat)
-    {
-        try {
-            // Récupérer la session normale correspondante
-            $sessionRattrapage = SessionExam::find(Manchette::getCurrentSessionId());
-            $sessionNormaleId = SessionExam::where('annee_universitaire_id', $sessionRattrapage->annee_universitaire_id)
-                ->where('type', 'Normale')
-                ->value('id');
-
-            if (!$sessionNormaleId) {
-                $this->showMessage('Impossible de vérifier l\'éligibilité - Session normale non trouvée.', 'error');
-                toastr()->error('Session normale non trouvée.');
-                $this->etudiantTrouve = null;
-                return;
-            }
-
-            // Vérifier le statut de l'étudiant en session normale
-            $decisionEtudiant = $etudiantCandidat->getDecisionPourSession($sessionNormaleId);
-            
-            if ($decisionEtudiant === 'admis') {
-                $this->showMessage('Cet étudiant a été ADMIS en session normale et ne peut pas passer le rattrapage.', 'error');
-                toastr()->error('Étudiant ADMIS en session normale, non éligible au rattrapage.');
-            } elseif ($decisionEtudiant === 'exclus' || $decisionEtudiant === 'redoublant') {
-                $this->showMessage("Cet étudiant a une décision '$decisionEtudiant' en session normale et ne peut pas passer le rattrapage.", 'error');
-                toastr()->error("Étudiant avec décision '$decisionEtudiant', non éligible au rattrapage.");
-            } elseif (empty($decisionEtudiant)) {
-                $this->showMessage('Cet étudiant n\'a pas de résultats en session normale.', 'error');
-                toastr()->error('Aucun résultat en session normale pour cet étudiant.');
-            } else {
-                $this->showMessage('Cet étudiant n\'a pas d\'ECs à rattraper pour cette matière.', 'error');
-                toastr()->error('Aucune EC à rattraper pour cet étudiant.');
-            }
-
-            // Set to null to prevent invalid saves
-            $this->etudiantTrouve = null;
-
-        } catch (\Exception $e) {
-            $this->showMessage('Erreur lors de la vérification d\'éligibilité: ' . $e->getMessage(), 'error');
-            toastr()->error('Erreur lors de la vérification d\'éligibilité.');
-            $this->etudiantTrouve = null;
-        }
-    }
-
-    /**
-     * 🔍 Vérification des doublons pour session normale
+     * Vérification des doublons pour session normale
      */
     private function verifierDoublonSessionNormale()
     {
@@ -835,9 +1023,8 @@ class ManchetteSaisie extends Component
             ->exists();
     }
 
-
     /**
-     * 🔍 Vérification des doublons pour session rattrapage
+     * Vérification des doublons pour session rattrapage
      */
     private function verifierDoublonSessionRattrapage()
     {
@@ -861,21 +1048,32 @@ class ManchetteSaisie extends Component
         $this->matriculeExisteDeja = false;
         // Déclencher les événements pour le JavaScript
         $this->dispatch('matricule-cleared');
-        
     }
 
-    public function validerParEntree()
+    private function resetSaisieComplete()
     {
-        if ($this->etudiantTrouve && !$this->matriculeExisteDeja) {
-            $this->sauvegarderManchette();
-        }
+        $this->reset([
+            'matricule', 
+            'codeAnonymatSaisi', 
+            'codeAnonymatSuggere', 
+            'etudiantTrouve', 
+            'matriculeExisteDeja',
+            'showConfirmation',
+            'codeValidationErrors'
+        ]);
+        
+        // Forcer la valeur vide explicitement
+        $this->matricule = '';
+        $this->codeAnonymatSaisi = '';
+        $this->codeAnonymatSuggere = '';
+        
+        session()->forget('manchette_saisie_matricule');
+        $this->dispatch('matricule-cleared');
+        $this->dispatch('focus-matricule-input');
     }
 
     public function sauvegarderManchette()
     {
-        $this->validate(['matricule' => 'required|string']);
-
-        
         if (!$this->etudiantTrouve || !is_object($this->etudiantTrouve)) {
             $this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
             return;
@@ -893,6 +1091,14 @@ class ManchetteSaisie extends Component
 
         if ($this->matriculeExisteDeja) {
             $this->showMessage('Cet étudiant a déjà une manchette pour cette matière.', 'warning');
+            return;
+        }
+
+        // Validation finale du code anonymat
+        $this->validateCodeAnonymats();
+        if (!empty($this->codeValidationErrors)) {
+            $errorMessage = 'Code anonymat invalide : ' . implode(', ', $this->codeValidationErrors);
+            $this->showMessage($errorMessage, 'error');
             return;
         }
 
@@ -932,7 +1138,7 @@ class ManchetteSaisie extends Component
                     throw new \Exception("Cette matière n'est pas disponible en rattrapage.");
                 }
                 
-                // Optionnel : vérifier que l'étudiant fait partie de ceux identifiés comme éligibles
+                // Vérifier que l'étudiant fait partie de ceux identifiés comme éligibles
                 $etudiantsEligibles = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
                     ->pluck('etudiant_id')->toArray();
                 
@@ -941,22 +1147,22 @@ class ManchetteSaisie extends Component
                 }
             }
 
-            // Vérifier code pas déjà utilisé
+            // Vérifier que le code anonymat saisi n'est pas déjà utilisé
             $existingCode = CodeAnonymat::where('examen_id', $this->examenSelected->id)
                 ->where('session_exam_id', $sessionId)
                 ->where('ec_id', $this->ecSelected->id)
-                ->where('code_complet', $this->prochainCodeAnonymat)
-                ->whereHas('manchettes', function($query) use ($sessionId) {
+                ->where('code_complet', $this->codeAnonymatSaisi)
+                ->whereHas('allManchettes', function($query) use ($sessionId) {
                     $query->where('session_exam_id', $sessionId);
                 })
-                ->with(['manchettes.etudiant'])
+                ->with(['allManchettes.etudiant'])
                 ->first();
 
-            if ($existingCode && $existingCode->manchettes->isNotEmpty()) {
-                $manchetteExistante = $existingCode->manchettes->first();
+            if ($existingCode && $existingCode->allManchettes->isNotEmpty()) {
+                $manchetteExistante = $existingCode->allManchettes->first();
                 $etudiantExistant = $manchetteExistante->etudiant;
                 $nomExistant = ($etudiantExistant->nom ?? 'Nom inconnu') . ' ' . ($etudiantExistant->prenoms ?? '');
-                throw new \Exception("Ce code d'anonymat ({$this->prochainCodeAnonymat}) est déjà utilisé en session {$sessionLibelle} par l'étudiant {$nomExistant}.");
+                throw new \Exception("Ce code d'anonymat ({$this->codeAnonymatSaisi}) est déjà utilisé en session {$sessionLibelle} par l'étudiant {$nomExistant}.");
             }
 
             // Gestion manchettes supprimées
@@ -965,7 +1171,7 @@ class ManchetteSaisie extends Component
                 ->where('session_exam_id', $sessionId)
                 ->whereHas('codeAnonymat', function($query) {
                     $query->where('ec_id', $this->ecSelected->id)
-                        ->where('code_complet', $this->prochainCodeAnonymat);
+                        ->where('code_complet', $this->codeAnonymatSaisi);
                 })
                 ->whereNotNull('deleted_at')
                 ->first();
@@ -980,16 +1186,16 @@ class ManchetteSaisie extends Component
                     'date_saisie' => now(),
                 ]);
                 
-                $successMessage = "✅ Manchette restaurée : {$this->prochainCodeAnonymat}";
+                $successMessage = "✅ Manchette restaurée : {$this->codeAnonymatSaisi}";
             } else {
-                // Créer nouvelle manchette
+                // Créer nouveau code avec le code saisi
                 $codeAnonymat = CodeAnonymat::create([
                     'examen_id' => $this->examenSelected->id,
-                    'session_exam_id' => $sessionId, // ← Seule différence entre sessions
+                    'session_exam_id' => $sessionId,
                     'ec_id' => $this->ecSelected->id,
-                    'code_base' => $this->codeSalle, // ← Identique (TA, TB, etc.)
-                    'code_complet' => $this->prochainCodeAnonymat, // ← Identique (TA1, TA2, etc.)
-                    'sequence' => $this->prochaineSequence,
+                    'code_base' => substr($this->codeAnonymatSaisi, 0, 2), // 2 premières lettres
+                    'code_complet' => $this->codeAnonymatSaisi,
+                    'sequence' => (int) substr($this->codeAnonymatSaisi, 2), // Chiffres après les lettres
                     'saisie_par' => Auth::id(),
                 ]);
 
@@ -1002,27 +1208,19 @@ class ManchetteSaisie extends Component
                     'saisie_par' => Auth::id(),
                 ]);
                 
-                $successMessage = "✅ Manchette enregistrée : {$this->prochainCodeAnonymat}";
+                $successMessage = "✅ Manchette enregistrée : {$this->codeAnonymatSaisi}";
             }
 
             // Progression
             $this->progressCount++;
             $manchettesRestantes = $this->totalManchettesPresentes - $this->progressCount;
             
-            // Préparation suivante
-            $this->reset('matricule');
-            $this->etudiantTrouve = null;
-            $this->matriculeExisteDeja = false;
-            $this->resetMatriculeCompletement();
-            $this->prochaineSequence++;
-            $this->prochainCodeAnonymat = $this->codeSalle . $this->prochaineSequence;
-            
-            // Nettoyer la session
-            session()->forget('manchette_saisie_matricule');
-            // Forcer le focus sur le champ matricule
-            $this->dispatch('focus-matricule-input');
-
+            // Réinitialisation complète
+            $this->resetSaisieComplete();
             $this->loadStatistiques();
+
+             // Forcer le focus sur le champ matricule
+            $this->dispatch('focus-matricule-input');
 
             // Messages intelligents avec toast
             if ($manchettesRestantes <= 0) {
@@ -1117,7 +1315,6 @@ class ManchetteSaisie extends Component
         }
     }
 
-    // ✅ MÉTHODE MANQUANTE loadStatistiques
     public function loadStatistiques()
     {
         if (!$this->examenSelected || !$this->ecSelected) {
@@ -1165,7 +1362,7 @@ class ManchetteSaisie extends Component
             ->where('ecs.is_active', true)
             ->with(['ue:id,nom,niveau_id,parcours_id']);
 
-        // ✅ NOUVEAU : Filtrage selon la session
+        // Filtrage selon la session
         if ($this->sessionType === 'rattrapage' && !empty($this->ecsDisponibles)) {
             $q->whereIn('ecs.id', $this->ecsDisponibles);
         }
@@ -1353,6 +1550,20 @@ class ManchetteSaisie extends Component
         return max(0, $this->totalManchettesPresentes - $this->progressCount);
     }
 
+    public function getPourcentageProgressionProperty()
+    {
+        if ($this->totalManchettesPresentes <= 0) {
+            return 0;
+        }
+        
+        return round(($this->progressCount / $this->totalManchettesPresentes) * 100, 1);
+    }
+
+    public function getCodeEstValideProperty()
+    {
+        return empty($this->codeValidationErrors) && !empty($this->codeAnonymatSaisi);
+    }
+
     public function hasValidSetup()
     {
         return $this->examenSelected 
@@ -1361,7 +1572,6 @@ class ManchetteSaisie extends Component
             && $this->totalEtudiantsTheorique > 0 
             && $this->codeSalle;
     }
-
 
     public function toggleEnvelopeCalculator()
     {
@@ -1373,7 +1583,7 @@ class ManchetteSaisie extends Component
 
    public function clearEnvelopes()
     {
-        $this->enveloppe1 = '';  // Pas '' mais 0
+        $this->enveloppe1 = '';  
         $this->enveloppe2 = '';
         $this->enveloppe3 = '';
         $this->enveloppe4 = '';
@@ -1412,34 +1622,10 @@ class ManchetteSaisie extends Component
         $total = $env1 + $env2 + $env3 + $env4;
         
         $this->totalManchettesPresentes = $total;
-    
     }
-
-
-    // RENDER
-    public function render()
-    {
-        if ($this->step === 'ec' && (!$this->examens || $this->examens->isEmpty()) && $this->niveauSelected) {
-            $this->loadExamens();
-        }
-
-        if (!$this->examen_id && $this->examens && $this->examens->isNotEmpty()) {
-            $this->examen_id = $this->examens->first()->id;
-            $this->examenSelected = $this->examens->first();
-        }
-
-        $ecs = $this->ecsQuery()->paginate($this->perPage);
-
-        return view('livewire.manchette.manchette-saisie', [
-            'ecs' => $ecs,
-            'examensList' => $this->examens,
-        ]);
-    }
-
-
 
     /**
-     * 🎯 MÉTHODE CLÉ : Filtre les ECs selon le type de session
+     * Filtre les ECs selon le type de session
      */
     public function filterECsSelonSession()
     {
@@ -1452,7 +1638,7 @@ class ManchetteSaisie extends Component
             $sessionType = Manchette::getCurrentSessionType();
             
             if ($sessionType === 'rattrapage') {
-                // 🚀 LOGIQUE RATTRAPAGE : Récupérer la session normale correspondante
+                // Logique rattrapage : récupérer la session normale correspondante
                 $sessionRattrapage = SessionExam::find($sessionId);
                 $this->sessionNormaleId = SessionExam::where('annee_universitaire_id', $sessionRattrapage->annee_universitaire_id)
                     ->where('type', 'Normale')
@@ -1463,7 +1649,7 @@ class ManchetteSaisie extends Component
                     return;
                 }
 
-                // 📊 Analyser TOUS les étudiants éligibles au rattrapage
+                // Analyser tous les étudiants éligibles au rattrapage
                 $this->analyserEtudiantsRattrapage();
             } else {
                 // Session normale : tous les ECs sont disponibles
@@ -1480,9 +1666,8 @@ class ManchetteSaisie extends Component
         }
     }
 
-
     /**
-     * 📊 MÉTHODE : Analyse tous les étudiants éligibles pour déterminer les ECs à rattraper
+     * Analyse tous les étudiants éligibles pour déterminer les ECs à rattraper
      */
     private function analyserEtudiantsRattrapage()
     {
@@ -1491,7 +1676,7 @@ class ManchetteSaisie extends Component
         }
 
         try {
-            // Récupérer TOUTES les UE de l'examen avec leurs ECs
+            // Récupérer toutes les UE de l'examen avec leurs ECs
             $uesAvecEcs = DB::table('ues')
                 ->join('ecs', 'ues.id', '=', 'ecs.ue_id')
                 ->join('examen_ec', 'ecs.id', '=', 'examen_ec.ec_id')
@@ -1556,9 +1741,8 @@ class ManchetteSaisie extends Component
         }
     }
 
-
     /**
-     * 🔄 MÉTHODE UTILITAIRE : Reset des statistiques
+     * Reset des statistiques
      */
     private function resetStatistiquesRattrapage()
     {
@@ -1573,7 +1757,7 @@ class ManchetteSaisie extends Component
     }
 
     /**
-     * 🔍 NOUVELLE MÉTHODE : Analyse spécifique d'un étudiant UE par UE
+     * Analyse spécifique d'un étudiant UE par UE
      */
     private function analyserEtudiantSpecifique($etudiant, $uesAvecEcs)
     {
@@ -1595,7 +1779,7 @@ class ManchetteSaisie extends Component
 
             $moyenneUe = $notesUe->avg();
 
-            // Si UE < 10, TOUTES les ECs de cette UE doivent être rattrapées
+            // Si UE < 10, toutes les ECs de cette UE doivent être rattrapées
             if ($moyenneUe < 10) {
                 $uesNonValidees[] = [
                     'ue_id' => $ueId,
@@ -1621,7 +1805,7 @@ class ManchetteSaisie extends Component
     }
 
     /**
-     * 🎯 NOUVELLE MÉTHODE : Calcule les étudiants éligibles pour une EC spécifique
+     * Calcule les étudiants éligibles pour une EC spécifique
      */
     public function getEtudiantsEligiblesPourEC($ecId)
     {
@@ -1654,4 +1838,23 @@ class ManchetteSaisie extends Component
         return $etudiantsEligibles;
     }
 
+    // RENDER
+    public function render()
+    {
+        if ($this->step === 'ec' && (!$this->examens || $this->examens->isEmpty()) && $this->niveauSelected) {
+            $this->loadExamens();
+        }
+
+        if (!$this->examen_id && $this->examens && $this->examens->isNotEmpty()) {
+            $this->examen_id = $this->examens->first()->id;
+            $this->examenSelected = $this->examens->first();
+        }
+
+        $ecs = $this->ecsQuery()->paginate($this->perPage);
+
+        return view('livewire.manchette.manchette-saisie', [
+            'ecs' => $ecs,
+            'examensList' => $this->examens,
+        ]);
+    }
 }

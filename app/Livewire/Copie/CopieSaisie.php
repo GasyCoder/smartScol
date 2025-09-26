@@ -114,6 +114,11 @@ class CopieSaisie extends Component
 
     public function mount(): void
     {
+        
+        if (!Auth::user()->hasAnyRole(['secretaire'])) {
+            abort(403, 'Accès non autorisé.');
+        }
+
         $this->niveaux = collect();
         $this->parcours = collect();
         $this->examens = collect();

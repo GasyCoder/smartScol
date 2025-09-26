@@ -43,20 +43,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/etudiants/ajouter/{niveau}/{parcour}', AddEtudiant::class)->name('add_etudiant');
         Route::get('/etudiants/modifier/{etudiant}', EditEtudiant::class)->name('edit_etudiant');
         Route::get('/salle', SalleIndex::class)->name('salles.index');
-        Route::prefix('examens')->name('examens.')->group(function () {
-            Route::get('/', IndexExamen::class)->name('index');
-            Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
-            Route::get('/modifier/{examen}', EditExamen::class)->name('edit');
-        });
-        Route::get('/examens/reset', function () {
-            session()->forget(['examen_niveau_id', 'examen_parcours_id']);
-            return redirect()->route('examens.index');
-        })->name('examens.reset');
     });
 
     // ========================================
     // TRAITEMENTS - Accessible aux : superadmin, enseignant, secretaire
     // ========================================
+    Route::middleware(['role:secretaire'])->group(function () {
+        // Copies
+        Route::prefix('copies')->name('copies.')->group(function () {
+            Route::get('/saisie', CopieSaisie::class)->name('saisie');
+        });
+
+        // Manchettes
+        Route::prefix('manchettes')->name('manchettes.')->group(function () {
+            Route::get('/saisie', ManchetteSaisie::class)->name('saisie');
+        });
+
+        // Students
+        Route::get('/etudiants', Students::class)->name('students');
+    });
+
     Route::middleware(['role:superadmin|enseignant|secretaire'])->group(function () {
         // Copies
         Route::prefix('copies')->name('copies.')->group(function () {
@@ -80,20 +86,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/fusion', FusionIndex::class)->name('fusion');
             Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
             Route::get('/finale', ResultatsFinale::class)->name('finale');
-            Route::get('/releve-notes', ReleveNotes::class)->name('releve-notes.index'); // ✅ Nom cohérent
+
+            Route::get('/releve-notes', ReleveNotes::class)->name('releve-notes.index');
+
             Route::get('/releve-notes/{etudiant}/{session}', function($etudiantId, $sessionId) {
                 $releveComponent = new ReleveNotes();
                 $donneesReleve = $releveComponent->getDonneesReleve($etudiantId, $sessionId);
                 
-                return view('releve-notes-show', $donneesReleve);
-            })->name('releve-notes.show'); // ✅ Dans le bon groupe
+                    return view('livewire.resultats.partials.releve-notes-show', $donneesReleve);
+                })->name('releve-notes.show');
+            });
+
         });
 
-        Route::get('/liste-manchettes', ManchettesIndex::class)->name('manchette.index');
-        Route::get('/liste-copies-notes', CopiesIndex::class)->name('copie.index');
+            Route::get('/liste-manchettes', ManchettesIndex::class)->name('manchette.index');
+            Route::get('/liste-copies-notes', CopiesIndex::class)->name('copie.index');
 
-        Route::get('/corbeille/manchettes', ManchettesCorbeille::class)->name('manchettes.corbeille');
-        Route::get('/corbeille/copies', CopiesCorbeille::class)->name('copies.corbeille');
+            Route::get('/corbeille/manchettes', ManchettesCorbeille::class)->name('manchettes.corbeille');
+            Route::get('/corbeille/copies', CopiesCorbeille::class)->name('copies.corbeille');
+
+            Route::prefix('examens')->name('examens.')->group(function () {
+            Route::get('/', IndexExamen::class)->name('index');
+            Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
+            Route::get('/modifier/{examen}', EditExamen::class)->name('edit');
+            });
+            Route::get('/examens/reset', function () {
+                session()->forget(['examen_niveau_id', 'examen_parcours_id']);
+                return redirect()->route('examens.index');
+            })->name('examens.reset');
     });
 
     // ========================================
@@ -107,6 +127,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/roles-permission', RolesPermissions::class)->name('roles_permission');
         });
     });
-});
+
 
 require __DIR__ . '/auth.php';
