@@ -1,412 +1,328 @@
-{{-- livewire.fusion.partials.table-verify-resultat --}}
-<div class="overflow-hidden bg-white border border-gray-200 rounded-xl shadow-md dark:bg-gray-900 dark:border-gray-700 transition-all duration-200 hover:shadow-lg">
-    <!-- Header amélioré -->
-    <div class="px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-900/20 dark:border-gray-600">
+{{-- livewire.fusion.partials.table-verify-resultat - Version refonte --}}
+<div class="overflow-hidden bg-white border border-gray-200 rounded-2xl shadow-xl dark:bg-gray-900 dark:border-gray-700 transition-all duration-300 hover:shadow-2xl">
+    <!-- Header modernisé -->
+    <div class="px-6 py-4 border-b border-gray-300 bg-slate-50 dark:bg-gray-800 dark:border-gray-600">
         <div class="flex items-center justify-between">
-            <h3 class="flex items-center text-sm font-semibold text-gray-900 dark:text-white">
-                <em class="mr-2 text-blue-600 icon ni ni-file-docs"></em>
-                Résultats des Étudiants
-                <span class="ml-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
-                    {{ $totalResultats }} résultats - {{ $pourcentageVerification }}% vérifiés
-                </span>
-            </h3>
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-primary-100 rounded-lg dark:bg-primary-900">
+                    <em class="text-lg text-primary-600 icon ni ni-file-docs dark:text-primary-400"></em>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                        Résultats des Étudiants
+                    </h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                        {{ $totalResultats }} résultats • {{ $pourcentageVerification }}% vérifiés
+                    </p>
+                </div>
+            </div>
             @if($afficherMoyennesUE)
-                <span class="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-800 bg-blue-100 rounded-full shadow-sm dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700">
-                    <em class="mr-1 icon ni ni-bar-chart"></em>Mode UE Activé
-                </span>
+                <div class="flex items-center px-4 py-2 bg-primary-500 rounded-xl shadow-lg text-white">
+                    <em class="mr-2 icon ni ni-bar-chart"></em>
+                    <span class="font-semibold">Mode UE Activé</span>
+                </div>
             @endif
         </div>
     </div>
 
-    <!-- Table responsive améliorée -->
+    <!-- Container principal -->
     <div class="overflow-x-auto bg-white dark:bg-gray-900">
-        <table class="min-w-full text-xs divide-y divide-gray-200 dark:divide-gray-700">
-            <thead class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 sticky top-0 z-10">
-                <tr class="border-b border-gray-200 dark:border-gray-600">
-                    <th class="px-3 py-2 text-xs font-semibold text-left text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <div class="flex items-center space-x-1">
-                            <em class="icon ni ni-hash"></em>
-                            <span>N°</span>
-                        </div>
-                    </th>
-                    <th class="px-3 py-2 text-xs font-semibold text-left text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <button wire:click="toggleOrder('matricule')" 
-                                class="group flex items-center space-x-1 hover:text-blue-600 transition-colors duration-200 {{ $orderBy === 'matricule' ? 'text-blue-600' : '' }}">
-                            <em class="icon ni ni-card-view"></em>
-                            <span>Matricule</span>
-                            @if($orderBy === 'matricule')
-                                <em class="icon ni ni-sort-{{ $orderAsc ? 'down' : 'up' }} ml-1 text-blue-500"></em>
-                            @endif
-                        </button>
-                    </th>
-                    <th class="px-3 py-2 text-xs font-semibold text-left text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <button wire:click="toggleOrder('nom')" 
-                                class="group flex items-center space-x-1 hover:text-blue-600 transition-colors duration-200 {{ $orderBy === 'nom' ? 'text-blue-600' : '' }}">
-                            <em class="icon ni ni-user"></em>
-                            <span>Nom</span>
-                            @if($orderBy === 'nom')
-                                <em class="icon ni ni-sort-{{ $orderAsc ? 'down' : 'up' }} ml-1 text-blue-500"></em>
-                            @endif
-                        </button>
-                    </th>
-                    <th class="px-3 py-2 text-xs font-semibold text-left text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <button wire:click="toggleOrder('prenom')" 
-                                class="group flex items-center space-x-1 hover:text-blue-600 transition-colors duration-200 {{ $orderBy === 'prenom' ? 'text-blue-600' : '' }}">
-                            <em class="icon ni ni-user-circle"></em>
-                            <span>Prénom</span>
-                            @if($orderBy === 'prenom')
-                                <em class="icon ni ni-sort-{{ $orderAsc ? 'down' : 'up' }} ml-1 text-blue-500"></em>
-                            @endif
-                        </button>
-                    </th>
-                    @if($afficherMoyennesUE)
-                        <th class="px-3 py-2 text-xs font-semibold text-center text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                            <div class="flex items-center justify-center space-x-1">
-                                <em class="icon ni ni-bar-chart-alt text-blue-600"></em>
-                                <span>Moy. UE</span>
-                            </div>
-                        </th>
-                    @endif
-                    <th class="px-3 py-2 text-xs font-semibold text-left text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <div class="flex items-center space-x-1">
-                            <em class="icon ni ni-book"></em>
-                            <span>UE / EC</span>
-                        </div>
-                    </th>
-                    <th class="px-3 py-2 text-xs font-semibold text-left text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <div class="flex items-center space-x-1">
-                            <em class="icon ni ni-user-circle-o"></em>
-                            <span>Enseignant</span>
-                        </div>
-                    </th>
-                    <th class="px-3 py-2 text-xs font-semibold text-center text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <button wire:click="toggleOrder('note')" 
-                                class="group flex items-center justify-center space-x-1 hover:text-blue-600 transition-colors duration-200 {{ $orderBy === 'note' ? 'text-blue-600' : '' }}">
-                            <em class="icon ni ni-property"></em>
-                            <span>Note/20</span>
-                            @if($orderBy === 'note')
-                                <em class="icon ni ni-sort-{{ $orderAsc ? 'down' : 'up' }} ml-1 text-blue-500"></em>
-                            @endif
-                        </button>
-                    </th>
-                    <th class="px-3 py-2 text-xs font-semibold text-center text-gray-700 uppercase tracking-wider dark:text-gray-300">
-                        <div class="flex items-center justify-center space-x-1">
-                            <em class="icon ni ni-setting"></em>
-                            <span>Actions</span>
-                        </div>
-                    </th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-900 dark:divide-gray-800">
+        <div class="min-w-full">
+            @php
+                $resultatsByStudent = collect($resultats)->groupBy('matricule');
+                $index = 0;
+            @endphp
+            
+            @forelse($resultatsByStudent as $matricule => $resultatGroup)
                 @php
-                    $resultatsByStudent = collect($resultats)->groupBy('matricule');
-                    $index = 0;
+                    $index++;
+                    $firstResultat = $resultatGroup->first();
+                    $resultatsByUE = $resultatGroup->groupBy('ue_nom');
                 @endphp
-                @forelse($resultatsByStudent as $matricule => $resultatGroup)
-                    @php
-                        $index++;
-                        $firstResultat = $resultatGroup->first();
-                        $resultatsByUE = $resultatGroup->groupBy('ue_nom');
-                        $ueIndex = 0;
-                    @endphp
-                    
-                    <!-- Ligne en-tête étudiant améliorée -->
-                    <tr class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 font-medium border-l-4 border-blue-500 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/40 dark:hover:to-indigo-900/40 transition-all duration-200">
-                        <td class="px-3 py-2">
-                            <div class="flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-gradient-to-br from-blue-500 to-blue-600 rounded-full shadow-sm">
-                                {{ $index }}
-                            </div>
-                        </td>
-                        <td class="px-3 py-2">
-                            <span class="inline-flex items-center px-2 py-1 text-xs font-bold text-blue-800 bg-blue-100 rounded-md shadow-sm dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700">
-                                <em class="mr-1 icon ni ni-card-view"></em>
-                                {{ $matricule }}
-                            </span>
-                        </td>
-                        <td class="px-3 py-2 text-sm font-bold text-gray-900 dark:text-gray-100">
-                            {{ $firstResultat['nom'] }}
-                        </td>
-                        <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
-                            {{ $firstResultat['prenom'] }}
-                        </td>
-                        @if($afficherMoyennesUE)
-                            <td class="px-3 py-2 text-center">
-                                <span class="inline-flex items-center px-2 py-1 text-xs font-medium text-purple-800 bg-purple-100 rounded-full shadow-sm dark:bg-purple-900 dark:text-purple-200">
-                                    <em class="mr-1 icon ni ni-users"></em>
-                                    {{ count($resultatsByUE) }} UE
-                                </span>
-                            </td>
-                        @endif
-                        <td colspan="{{ $afficherMoyennesUE ? 4 : 4 }}" class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
-                            <div class="flex items-center space-x-2">
-                                <em class="icon ni ni-list text-blue-600"></em>
-                                <strong>Résultats par UE et EC :</strong>
-                                <span class="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
-                                    {{ count($resultatGroup) }} EC au total
-                                </span>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- Lignes UE/EC améliorées -->
-                    @foreach($resultatsByUE as $ueNom => $ecGroup)
-                        @php 
-                            $ueIndex++; 
-                            // Calcul de la moyenne UE (selon votre logique originale)
-                            $notesUE = $ecGroup->pluck('note')->filter(function($note) {
-                                return $note !== null && is_numeric($note);
-                            });
-                            $moyenneUE = $notesUE->isNotEmpty() ? $notesUE->avg() : null;
-                            $hasZero = $ecGroup->contains('note', 0);
-                            if ($hasZero) $moyenneUE = 0; // Note éliminatoire
-                            
-                            $ueCredits = $ecGroup->first()['ue_credits'] ?? 0;
-                            $ueValidee = $moyenneUE !== null && $moyenneUE >= 10 && !$hasZero;
-                        @endphp
-                        
-                        @foreach($ecGroup as $indexEC => $resultat)
-                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200 group {{ $resultat['is_checked'] ? 'bg-green-50 dark:bg-green-900/20 border-l-2 border-green-400' : 'border-l-2 border-transparent' }}">
-                                <td class="px-3 py-2"></td>
-                                <td class="px-3 py-2"></td>
-                                <td class="px-3 py-2"></td>
-                                <td class="px-3 py-2"></td>
-                                
-                                @if($afficherMoyennesUE)
-                                    <td class="px-3 py-2 text-center">
-                                        @if($indexEC === 0 && $moyenneUE !== null)
-                                            <div class="flex flex-col items-center space-y-1">
-                                                <span class="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full shadow-sm {{ $ueValidee ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
-                                                    <em class="mr-1 icon ni ni-{{ $ueValidee ? 'check-circle' : 'cross-circle' }}"></em>
-                                                    {{ number_format($moyenneUE, 2) }}
-                                                </span>
-                                                @if($hasZero)
-                                                    <span class="text-xs text-red-600 dark:text-red-400 font-medium">
-                                                        <em class="icon ni ni-alert-circle"></em> Éliminatoire
-                                                    </span>
-                                                @endif
-                                            </div>
-                                        @endif
-                                    </td>
-                                @endif
-                                
-                                <!-- UE/EC avec meilleur design -->
-                                    <td class="px-3 py-2">
-                                    @if($indexEC === 0)
-                                        <div class="mb-2 p-2 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                                            <div class="flex items-center justify-between">
-                                                <div class="flex items-center space-x-2">
-                                                    <!-- Utiliser l'abréviation UE au lieu de l'index -->
-                                                    <span class="inline-flex items-center px-2 py-1 text-xs font-bold text-blue-800 bg-blue-100 rounded-md dark:bg-blue-900 dark:text-blue-200">
-                                                        {{ $resultat['ue_abr'] ?? 'UE' }}
-                                                    </span>
-                                                    <span class="font-medium text-gray-900 dark:text-gray-100">
-                                                        {{ $ueNom ?? 'UE N/A' }}
-                                                    </span>
-                                                </div>
-                                                <span class="inline-flex items-center px-2 py-1 text-xs text-gray-600 bg-gray-100 rounded dark:bg-gray-700 dark:text-gray-400">
-                                                    <em class="mr-1 icon ni ni-coins"></em>
-                                                    {{ $ueCredits }} crédits
-                                                </span>
-                                            </div>
-                                        </div>
-                                    @endif
-                                     <div class="pl-4 py-1 border-l-2 border-gray-200 dark:border-gray-600 ml-2">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="inline-flex items-center px-1.5 py-0.5 text-xs font-medium text-purple-700 bg-purple-100 rounded dark:bg-purple-900 dark:text-purple-200">
-                                                EC{{ $indexEC + 1 }}
-                                            </span>
-                                            <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">
-                                                {{ $resultat['matiere'] }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </td>
-                                
-                                <td class="px-3 py-2">
-                                    <div class="flex items-center space-x-2">
-                                        <em class="icon ni ni-user-circle-o text-gray-400"></em>
-                                        <span class="text-sm text-gray-700 dark:text-gray-300">
-                                            {{ $resultat['enseignant'] ?? 'N/A' }}
-                                        </span>
-                                    </div>
-                                </td>
-                                
-                                <!-- Note avec design amélioré -->
-                                <td class="px-3 py-2 text-center">
-                                    <div class="flex flex-col items-center space-y-1">
-                                        @if($editingRow === $resultat['unique_key'])
-                                            <div class="relative">
-                                                <input
-                                                    type="number"
-                                                    wire:model.live="newNote"
-                                                    step="0.01"
-                                                    min="0"
-                                                    max="20"
-                                                    class="w-20 px-3 py-2 text-sm font-semibold text-center text-gray-900 bg-white border-2 border-blue-300 rounded-lg shadow-sm dark:text-white dark:bg-gray-700 dark:border-blue-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                                                    placeholder="{{ number_format($resultat['note'], 2) }}"
-                                                    aria-label="Modifier la note pour {{ $resultat['matiere'] }}"
-                                                    autofocus
-                                                />
-                                                @if($newNote && $newNote != $resultat['note'])
-                                                    <div class="absolute -right-6 top-1/2 transform -translate-y-1/2">
-                                                        @if($newNote >= 0 && $newNote <= 20)
-                                                            <em class="text-sm text-green-500 icon ni ni-check-circle"></em>
-                                                        @else
-                                                            <em class="text-sm text-red-500 icon ni ni-alert-circle"></em>
-                                                        @endif
-                                                    </div>
-                                                @endif
-                                            </div>
-                                            @if($newNote && $newNote != $resultat['note'])
-                                                <div class="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
-                                                    {{ number_format($resultat['note'], 2) }} → {{ number_format($newNote, 2) }}
-                                                </div>
-                                            @endif
-                                        @else
-                                            @if($resultat['note_old'])
-                                                <div class="relative group">
-                                                    <span class="inline-flex items-center px-3 py-1.5 text-sm font-bold rounded-lg cursor-help shadow-sm transition-all duration-200 hover:shadow-md {{ $resultat['note'] >= 10 ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
-                                                        {{ number_format($resultat['note'], 2) }}
-                                                        @if($resultat['is_checked'])
-                                                            <em class="ml-2 text-blue-600 icon ni ni-check-circle"></em>
-                                                        @endif
-                                                        <em class="ml-1 text-orange-500 icon ni ni-edit-alt" title="Note modifiée"></em>
-                                                    </span>
-                                                    <!-- Tooltip amélioré -->
-                                                    <div class="absolute z-20 px-3 py-2 mb-2 text-xs text-white transition-opacity duration-300 transform -translate-x-1/2 bg-gray-800 rounded-lg shadow-lg opacity-0 pointer-events-none bottom-full left-1/2 dark:bg-gray-700 group-hover:opacity-100 whitespace-nowrap">
-                                                        <div class="font-semibold">Note modifiée</div>
-                                                        <div>Ancienne : {{ number_format($resultat['note_old'], 2) }}</div>
-                                                        <div>Actuelle : {{ number_format($resultat['note'], 2) }}</div>
-                                                        <div class="absolute transform -translate-x-1/2 border-4 border-transparent top-full left-1/2 border-t-gray-800 dark:border-t-gray-700"></div>
-                                                    </div>
-                                                </div>
-                                            @else
-                                                <span class="inline-flex items-center px-3 py-1.5 text-sm font-bold rounded-lg shadow-sm transition-all duration-200 hover:shadow-md {{ $resultat['note'] >= 10 ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
-                                                    {{ number_format($resultat['note'], 2) }}
-                                                    @if($resultat['is_checked'])
-                                                        <em class="ml-2 text-blue-600 icon ni ni-check-circle"></em>
-                                                    @endif
-                                                </span>
-                                            @endif
-                                        @endif
-                                    </div>
-<!-- Informations dynamiques d'audit -->
-<div class="mt-2 space-y-1 text-xs text-gray-500 dark:text-gray-400">
-    @if(!empty($resultat['saisie_par']) && $resultat['saisie_par'] !== 'Inconnu' || $resultat['created_at'])
-        <p class="flex items-center justify-center gap-1">
-            <em class="icon ni ni-user-add text-xs"></em>
-            Ajouté par 
-            <span class="font-medium text-gray-700 dark:text-gray-300">
-                {{ $resultat['saisie_par'] ?? 'Inconnu' }}
-            </span>
-            @if($resultat['created_at'])
-                <span class="text-xs">il y a {{ $resultat['created_at']->diffForHumans() }}</span>
-            @endif
-        </p>
-    @endif
-    
-    @if(!empty($resultat['modifie_par']) && $resultat['modifie_par'] !== 'Inconnu' || $resultat['updated_at'])
-        <p class="flex items-center justify-center gap-1">
-            <em class="icon ni ni-edit text-xs"></em>
-            Modifié par 
-            <span class="font-medium text-gray-700 dark:text-gray-300">
-                {{ $resultat['modifie_par'] ?? 'Inconnu' }}
-            </span>
-            @if($resultat['updated_at'])
-                <span class="text-xs">il y a {{ $resultat['updated_at']->diffForHumans() }}</span>
-            @endif
-        </p>
-    @endif
-</div>
-                                </td>
-                                
-                                <!-- Actions améliorées -->
-                                <td class="px-3 py-2 text-center">
-                                    @if($editingRow === $resultat['unique_key'])
-                                        <div class="flex items-center justify-center space-x-2">
-                                            <button wire:click="saveChanges('{{ $resultat['unique_key'] }}')" 
-                                                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-200 hover:shadow-md">
-                                                <em class="mr-1 icon ni ni-check"></em>
-                                                Sauver
-                                            </button>
-                                            <button wire:click="cancelEditing" 
-                                                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 hover:shadow-md">
-                                                <em class="mr-1 icon ni ni-cross"></em>
-                                                Annuler
-                                            </button>
-                                        </div>
-                                    @else
-                                        <button wire:click="startEditing('{{ $resultat['unique_key'] }}')" wire:key="edit-{{ $resultat['unique_key'] }}"
-                                                class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 hover:shadow-md dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800">
-                                            <em class="mr-1 icon ni ni-edit"></em>
-                                            Modifier
-                                        </button>
-                                    @endif
-                                </td>
-                            </tr>
-                        @endforeach
-                    @endforeach
-                    
-                    <!-- Séparateur entre étudiants amélioré -->
-                    @if(!$loop->last)
-                        <tr class="bg-gray-50 dark:bg-gray-800">
-                            <td colspan="{{ $afficherMoyennesUE ? 9 : 8 }}" class="h-3">
-                                <div class="w-full h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent dark:via-gray-600"></div>
-                            </td>
-                        </tr>
-                    @endif
-                    
-                @empty
-                    <tr>
-                        <td colspan="{{ $afficherMoyennesUE ? 9 : 8 }}" class="px-6 py-12 text-center">
-                            <div class="flex flex-col items-center justify-center space-y-4">
-                                <div class="p-4 bg-gray-100 rounded-full dark:bg-gray-700">
-                                    <em class="text-4xl text-gray-400 icon ni ni-folder-close dark:text-gray-500"></em>
+                
+                <!-- Carte Étudiant -->
+                <div class="mx-6 mt-6 mb-4 overflow-hidden bg-slate-50 border border-slate-200 rounded-2xl shadow-lg dark:bg-slate-800 dark:border-slate-700 hover:shadow-xl transition-all duration-300">
+                    <!-- En-tête étudiant -->
+                    <div class="px-6 py-4 bg-primary-600 text-white">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-4">
+                                <div class="flex items-center justify-center w-10 h-10 bg-white bg-opacity-20 rounded-full backdrop-blur-sm">
+                                    <span class="text-lg font-bold">{{ $index }}</span>
                                 </div>
                                 <div>
-                                    <h4 class="text-lg font-medium text-gray-900 dark:text-white">Aucun résultat trouvé</h4>
-                                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                        Aucun résultat ne correspond aux critères sélectionnés.
-                                    </p>
+                                    <h4 class="text-xl font-bold">{{ $firstResultat['prenom'] }} {{ $firstResultat['nom'] }}</h4>
+                                    <p class="text-blue-100">Matricule: {{ $matricule }}</p>
                                 </div>
                             </div>
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
+                            <div class="text-right">
+                                @if($afficherMoyennesUE)
+                                    <div class="px-3 py-1 bg-white bg-opacity-20 rounded-lg backdrop-blur-sm">
+                                        <span class="text-sm font-medium">{{ count($resultatsByUE) }} UE</span>
+                                    </div>
+                                @endif
+                                <p class="mt-1 text-sm text-blue-100">{{ count($resultatGroup) }} EC au total</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Résultats par UE -->
+                    <div class="p-6 space-y-6">
+                        @foreach($resultatsByUE as $ueNom => $ecGroup)
+                            @php 
+                                // Calcul de la moyenne UE
+                                $notesUE = $ecGroup->pluck('note')->filter(function($note) {
+                                    return $note !== null && is_numeric($note);
+                                });
+                                $moyenneUE = $notesUE->isNotEmpty() ? $notesUE->avg() : null;
+                                $hasZero = $ecGroup->contains('note', 0);
+                                if ($hasZero) $moyenneUE = 0;
+                                
+                                $ueCredits = $ecGroup->first()['ue_credits'] ?? 0;
+                                $ueValidee = $moyenneUE !== null && $moyenneUE >= 10 && !$hasZero;
+                            @endphp
+                            
+                            <!-- En-tête UE -->
+                            <div class="p-4 bg-slate-100 border border-slate-200 rounded-xl dark:bg-slate-800 dark:border-slate-600">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="px-3 py-1 text-sm font-bold text-primary-800 bg-primary-100 rounded-lg dark:bg-primary-900 dark:text-primary-200">
+                                            {{ $ecGroup->first()['ue_abr'] ?? 'UE' }}
+                                        </div>
+                                        <h5 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                            {{ $ueNom ?? 'UE N/A' }}
+                                        </h5>
+                                    </div>
+                                    <div class="flex items-center space-x-4">
+                                        @if($afficherMoyennesUE && $moyenneUE !== null)
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-sm text-gray-600 dark:text-gray-400">Moyenne UE:</span>
+                                                <span class="px-3 py-1 text-sm font-bold rounded-lg shadow-sm {{ $ueValidee ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
+                                                    {{ number_format($moyenneUE, 2) }}/20
+                                                    @if($hasZero)
+                                                        <span class="ml-1 text-xs">(Éliminatoire)</span>
+                                                    @endif
+                                                </span>
+                                            </div>
+                                        @endif
+                                        <div class="px-3 py-1 text-sm text-gray-600 bg-gray-100 rounded-lg dark:bg-gray-700 dark:text-gray-400">
+                                            {{ $ueCredits }} crédits
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Liste des EC -->
+                                <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    @foreach($ecGroup as $indexEC => $resultat)
+                                        <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm dark:bg-gray-900 dark:border-gray-600 hover:shadow-md transition-all duration-200 {{ $resultat['is_checked'] ? 'ring-2 ring-green-400 bg-green-50 dark:bg-green-900/20' : '' }}">
+                                            <!-- En-tête EC -->
+                                            <div class="flex items-start justify-between mb-3">
+                                                <div class="flex-1">
+                                                    <div class="flex items-center space-x-2 mb-2">
+                                                        <span class="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 rounded-md dark:bg-purple-900 dark:text-purple-200">
+                                                            EC{{ $indexEC + 1 }}
+                                                        </span>
+                                                        @if($resultat['is_checked'])
+                                                            <span class="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-md dark:bg-green-900 dark:text-green-200">
+                                                                ✓ Vérifié
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                    <h6 class="font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                                                        {{ $resultat['matiere'] }}
+                                                    </h6>
+                                                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                                        {{ $resultat['enseignant'] ?? 'Enseignant non défini' }}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <!-- Note et Actions -->
+                                            <div class="space-y-3">
+                                                <!-- Zone de note -->
+                                                @if($editingRow === $resultat['unique_key'])
+                                                    <!-- Mode édition -->
+                                                    <div class="p-3 bg-primary-50 border border-primary-200 rounded-lg dark:bg-primary-900/20 dark:border-primary-700">
+                                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                            Modifier la note
+                                                        </label>
+                                                        <div class="flex items-center space-x-2">
+                                                            <input
+                                                                type="number"
+                                                                wire:model.live="newNote"
+                                                                step="0.01"
+                                                                min="0"
+                                                                max="20"
+                                                                class="flex-1 px-3 py-2 text-sm font-semibold text-center text-gray-900 bg-white border-2 border-blue-300 rounded-lg shadow-sm dark:text-white dark:bg-gray-700 dark:border-blue-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                                                                placeholder="{{ number_format($resultat['note'], 2) }}"
+                                                                autofocus
+                                                            />
+                                                            @if($newNote && $newNote != $resultat['note'])
+                                                                <div class="flex items-center">
+                                                                    @if($newNote >= 0 && $newNote <= 20)
+                                                                        <em class="text-green-500 icon ni ni-check-circle"></em>
+                                                                    @else
+                                                                        <em class="text-red-500 icon ni ni-alert-circle"></em>
+                                                                    @endif
+                                                                </div>
+                                                            @endif
+                                                        </div>
+                                                        @if($newNote && $newNote != $resultat['note'])
+                                                            <div class="mt-2 text-xs text-primary-600 dark:text-primary-400 bg-primary-100 dark:bg-primary-900/30 px-2 py-1 rounded">
+                                                                {{ number_format($resultat['note'], 2) }} → {{ number_format($newNote, 2) }}
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        <!-- Boutons d'action -->
+                                                        <div class="flex items-center justify-end space-x-2 mt-3">
+                                                            <button wire:click="saveChanges('{{ $resultat['unique_key'] }}')" 
+                                                                    class="px-4 py-2 text-xs font-medium text-white bg-green-600 rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-200">
+                                                                <em class="mr-1 icon ni ni-check"></em>
+                                                                Sauver
+                                                            </button>
+                                                            <button wire:click="cancelEditing" 
+                                                                    class="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
+                                                                <em class="mr-1 icon ni ni-cross"></em>
+                                                                Annuler
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                @else
+                                                    <!-- Affichage normal -->
+                                                    <div class="flex items-center justify-between">
+                                                        <div class="flex items-center space-x-3">
+                                                            <span class="text-sm text-gray-600 dark:text-gray-400">Note:</span>
+                                                            <div class="relative">
+                                                                @if($resultat['note_old'])
+                                                                    <!-- Note modifiée -->
+                                                                    <span class="inline-flex items-center px-3 py-2 text-lg font-bold rounded-xl cursor-help shadow-sm transition-all duration-200 hover:shadow-md {{ $resultat['note'] >= 10 ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
+                                                                        {{ number_format($resultat['note'], 2) }}
+                                                                        <em class="ml-2 text-orange-500 icon ni ni-edit-alt" title="Note modifiée"></em>
+                                                                    </span>
+                                                                    <!-- Tooltip info -->
+                                                                    <div class="absolute z-20 px-3 py-2 text-xs text-white bg-gray-800 rounded-lg shadow-lg opacity-0 pointer-events-none -top-16 left-1/2 transform -translate-x-1/2 hover:opacity-100 transition-opacity duration-300">
+                                                                        <div class="font-semibold">Note modifiée</div>
+                                                                        <div>Ancienne: {{ number_format($resultat['note_old'], 2) }}</div>
+                                                                        <div>Actuelle: {{ number_format($resultat['note'], 2) }}</div>
+                                                                    </div>
+                                                                @else
+                                                                    <!-- Note normale -->
+                                                                    <span class="inline-flex items-center px-3 py-2 text-lg font-bold rounded-xl shadow-sm transition-all duration-200 hover:shadow-md {{ $resultat['note'] >= 10 ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
+                                                                        {{ number_format($resultat['note'], 2) }}
+                                                                    </span>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- Bouton modifier -->
+                                                        <button wire:click="startEditing('{{ $resultat['unique_key'] }}')" 
+                                                                class="px-3 py-2 text-xs font-medium text-primary-700 bg-primary-100 rounded-lg shadow-sm hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 dark:bg-primary-900 dark:text-primary-200 dark:hover:bg-primary-800">
+                                                            <em class="mr-1 icon ni ni-edit"></em>
+                                                            Modifier
+                                                        </button>
+                                                    </div>
+                                                @endif
+
+                                                <!-- Informations d'audit modernisées -->
+                                                @if((!empty($resultat['saisie_par']) && $resultat['saisie_par'] !== 'Inconnu') || (!empty($resultat['modifie_par']) && $resultat['modifie_par'] !== 'Inconnu'))
+                                                    <div class="pt-3 mt-3 border-t border-gray-200 dark:border-gray-600">
+                                                        <div class="space-y-2 text-xs">
+                                                            @if(!empty($resultat['saisie_par']) && $resultat['saisie_par'] !== 'Inconnu')
+                                                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg dark:bg-gray-800">
+                                                                    <div class="flex items-center space-x-2">
+                                                                        <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                                                        <span class="font-medium text-gray-700 dark:text-gray-300">{{ $resultat['saisie_par'] }}</span>
+                                                                    </div>
+                                                                    @if($resultat['created_at'])
+                                                                        <span class="text-gray-500 dark:text-gray-400">{{ $resultat['created_at']->diffForHumans() }}</span>
+                                                                    @endif
+                                                                </div>
+                                                            @endif
+                                                            
+                                                            @if(!empty($resultat['modifie_par']) && $resultat['modifie_par'] !== 'Inconnu' && $resultat['saisie_par'] !== $resultat['modifie_par'])
+                                                                <div class="flex items-center justify-between p-2 bg-orange-50 rounded-lg dark:bg-orange-900/20">
+                                                                    <div class="flex items-center space-x-2">
+                                                                        <div class="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                                                        <span class="font-medium text-orange-700 dark:text-orange-400">{{ $resultat['modifie_par'] }}</span>
+                                                                    </div>
+                                                                    @if($resultat['updated_at'])
+                                                                        <span class="text-orange-600 dark:text-orange-400">{{ $resultat['updated_at']->diffForHumans() }}</span>
+                                                                    @endif
+                                                                </div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+                
+            @empty
+                <!-- État vide modernisé -->
+                <div class="flex flex-col items-center justify-center py-16 px-6">
+                    <div class="p-6 bg-gray-100 rounded-full dark:bg-gray-700 mb-6">
+                        <em class="text-6xl text-gray-400 icon ni ni-folder-close dark:text-gray-500"></em>
+                    </div>
+                    <h4 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Aucun résultat trouvé</h4>
+                    <p class="text-gray-600 dark:text-gray-400 text-center max-w-md">
+                        Aucun résultat ne correspond aux critères sélectionnés. Essayez de modifier vos filtres ou de vérifier les données d'examen.
+                    </p>
+                </div>
+            @endforelse
+        </div>
     </div>
 
-    <!-- Footer avec statistiques amélioré -->
+    <!-- Footer statistiques modernisé -->
     @if(count($resultats) > 0)
-        <div class="px-4 py-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-900/20 dark:border-gray-600">
+        <div class="px-6 py-4 border-t border-gray-200 bg-slate-50 dark:bg-gray-800 dark:border-gray-600">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4 text-sm">
-                    <div class="flex items-center space-x-2 text-gray-700 dark:text-gray-300">
-                        <em class="icon ni ni-users text-blue-600"></em>
-                        <span class="font-medium">{{ count($resultatsByStudent) }} étudiant(s)</span>
+                <div class="flex items-center space-x-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-primary-100 rounded-lg dark:bg-primary-900">
+                            <em class="text-primary-600 icon ni ni-users dark:text-primary-400"></em>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ count($resultatsByStudent) }} Étudiants</p>
+                            <p class="text-xs text-gray-600 dark:text-gray-400">Total inscrits</p>
+                        </div>
                     </div>
-                    <div class="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
-                    <div class="flex items-center space-x-2 text-gray-700 dark:text-gray-300">
-                        <em class="icon ni ni-book text-green-600"></em>
-                        <span class="font-medium">{{ count($resultats) }} EC</span>
+                    
+                    <div class="w-px h-12 bg-gray-300 dark:bg-gray-600"></div>
+                    
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-green-100 rounded-lg dark:bg-green-900">
+                            <em class="text-green-600 icon ni ni-book dark:text-green-400"></em>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ count($resultats) }} EC</p>
+                            <p class="text-xs text-gray-600 dark:text-gray-400">Éléments constitutifs</p>
+                        </div>
                     </div>
+                    
                     @if($statistiquesPresence)
-                        <div class="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
-                        <div class="flex items-center space-x-2">
-                            <em class="icon ni ni-check-circle text-green-600"></em>
-                            <span class="font-medium text-green-700 dark:text-green-400">
-                                {{ $statistiquesPresence['taux_presence'] }}% présents
-                            </span>
+                        <div class="w-px h-12 bg-gray-300 dark:bg-gray-600"></div>
+                        
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2 bg-cyan-100 rounded-lg dark:bg-cyan-900">
+                                <em class="text-cyan-600 icon ni ni-check-circle dark:text-cyan-400"></em>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-cyan-700 dark:text-cyan-400">{{ $statistiquesPresence['taux_presence'] }}% Présents</p>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">Taux de présence</p>
+                            </div>
                         </div>
                     @endif
                 </div>
                 
                 @if($afficherMoyennesUE)
-                    <div class="flex items-center space-x-2 text-xs">
-                        <em class="icon ni ni-info text-blue-600"></em>
-                        <span class="text-gray-600 dark:text-gray-400">
-                            Moyennes UE calculées avec validation automatique
+                    <div class="flex items-center space-x-2 px-4 py-2 bg-primary-100 rounded-xl dark:bg-primary-900">
+                        <em class="text-primary-600 icon ni ni-info dark:text-primary-400"></em>
+                        <span class="text-sm text-primary-800 dark:text-primary-300 font-medium">
+                            Moyennes UE calculées automatiquement
                         </span>
                     </div>
                 @endif
@@ -419,7 +335,7 @@
 <style>
 /* Animations et transitions améliorées */
 .table-row-animation {
-    animation: slideInUp 0.3s ease-out forwards;
+    animation: slideInUp 0.4s ease-out forwards;
 }
 
 @keyframes slideInUp {
@@ -433,28 +349,38 @@
     }
 }
 
-/* Hover effects optimisés */
-.group:hover .group-hover\:scale-105 {
-    transform: scale(1.05);
+/* Hover effects pour les cartes */
+.hover\:scale-102:hover {
+    transform: scale(1.02);
 }
 
-.group:hover .group-hover\:shadow-md {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+/* Animation des tooltips */
+.tooltip:hover .tooltip-content {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-5px);
 }
 
-/* Amélioration des tooltips */
-.tooltip-arrow {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -4px;
-    border-width: 4px 4px 0 4px;
-    border-style: solid;
-    border-color: #374151 transparent transparent transparent;
+.tooltip-content {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(0);
+    transition: all 0.3s ease;
 }
 
-/* Animation des badges */
-.badge-pulse {
+/* Amélioration des focus states */
+.focus\:ring-2:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+
+/* Backdrop blur pour les éléments flottants */
+.backdrop-blur-sm {
+    backdrop-filter: blur(4px);
+}
+
+/* Animation pour les badges de vérification */
+.verification-badge {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
@@ -467,59 +393,84 @@
     }
 }
 
-/* Optimisation pour les écrans tactiles */
-@media (hover: none) and (pointer: coarse) {
-    .hover\:shadow-md:hover {
-        box-shadow: none;
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .grid-cols-3 {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
     }
     
-    .hover\:scale-105:hover {
-        transform: none;
+    .grid-cols-2 {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+}
+
+/* Dark mode improvements */
+@media (prefers-color-scheme: dark) {
+    .shadow-xl {
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
     }
 }
 
 /* Amélioration de l'accessibilité */
-.focus\:ring-2:focus {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-}
-
-/* Sticky header optimisé */
-.sticky {
-    position: -webkit-sticky;
-    position: sticky;
-    backdrop-filter: blur(8px);
-    background-color: rgba(249, 250, 251, 0.95);
-}
-
-.dark .sticky {
-    background-color: rgba(17, 24, 39, 0.95);
-}
-
-/* Animation de chargement pour les notes en édition */
-.note-editing {
-    position: relative;
-    overflow: hidden;
-}
-
-.note-editing::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
-    animation: shimmer 1.5s infinite;
-}
-
-@keyframes shimmer {
-    0% {
-        transform: translateX(-100%);
+@media (prefers-reduced-motion: reduce) {
+    .transition-all,
+    .table-row-animation {
+        transition: none;
+        animation: none;
     }
-    100% {
-        transform: translateX(100%);
+}
+
+/* Custom scrollbar */
+.overflow-x-auto::-webkit-scrollbar {
+    height: 8px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Animation d'entrée pour les cartes */
+.student-card {
+    animation: fadeInUp 0.6s ease-out forwards;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
     }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Amélioration des inputs en édition */
+.editing-input {
+    background: #f8fafc;
+    border: 2px solid #6576ff;
+    box-shadow: 0 0 0 3px rgba(101, 118, 255, 0.1);
+}
+
+/* Amélioration des états de validation */
+.valid-input {
+    border-color: #1ee0ac;
+    box-shadow: 0 0 0 3px rgba(30, 224, 172, 0.1);
+}
+
+.invalid-input {
+    border-color: #e85347;
+    box-shadow: 0 0 0 3px rgba(232, 83, 71, 0.1);
 }
 </style>
 @endpush
@@ -527,109 +478,71 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Configuration optimisée
+    // Configuration des animations
     const ANIMATION_CONFIG = {
-        duration: 300,
+        duration: 400,
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        stagger: 20
+        stagger: 100
     };
 
-    // Animation d'entrée progressive pour les lignes
-    const animateTableRows = () => {
-        const rows = document.querySelectorAll('tbody tr');
-        rows.forEach((row, index) => {
-            row.style.opacity = '0';
-            row.style.transform = 'translateY(10px)';
-            row.style.transition = `opacity ${ANIMATION_CONFIG.duration}ms ${ANIMATION_CONFIG.easing}, transform ${ANIMATION_CONFIG.duration}ms ${ANIMATION_CONFIG.easing}`;
+    // Animation d'entrée pour les cartes étudiants
+    const animateStudentCards = () => {
+        const cards = document.querySelectorAll('.student-card');
+        cards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(30px)';
+            card.style.transition = `opacity ${ANIMATION_CONFIG.duration}ms ${ANIMATION_CONFIG.easing}, transform ${ANIMATION_CONFIG.duration}ms ${ANIMATION_CONFIG.easing}`;
             
             setTimeout(() => {
-                row.style.opacity = '1';
-                row.style.transform = 'translateY(0)';
-                row.classList.add('table-row-animation');
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+                card.classList.add('student-card');
             }, index * ANIMATION_CONFIG.stagger);
         });
     };
 
-    // Amélioration des tooltips
+    // Gestion améliorée des tooltips
     const initTooltips = () => {
-        const tooltipElements = document.querySelectorAll('[title]');
-        tooltipElements.forEach(element => {
-            element.addEventListener('mouseenter', function() {
-                // Logique de tooltip personnalisée si nécessaire
-            });
-        });
-    };
-
-    // Gestion améliorée du focus pour l'accessibilité
-    const manageFocus = () => {
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Tab') {
-                document.body.classList.add('keyboard-navigation');
-            }
-        });
-
-        document.addEventListener('mousedown', function() {
-            document.body.classList.remove('keyboard-navigation');
-        });
-    };
-
-    // Animation des badges de notes
-    const animateNoteBadges = () => {
-        const badges = document.querySelectorAll('.badge-pulse');
-        badges.forEach(badge => {
-            badge.addEventListener('mouseenter', function() {
-                this.style.transform = 'scale(1.05)';
+        const tooltipTriggers = document.querySelectorAll('[title]');
+        tooltipTriggers.forEach(trigger => {
+            trigger.addEventListener('mouseenter', function() {
+                this.setAttribute('data-tooltip', this.getAttribute('title'));
+                this.removeAttribute('title');
             });
             
-            badge.addEventListener('mouseleave', function() {
-                this.style.transform = 'scale(1)';
-            });
-        });
-    };
-
-    // Optimisation des performances avec Intersection Observer
-    const observeTableElements = () => {
-        const observerOptions = {
-            root: null,
-            rootMargin: '50px',
-            threshold: 0.1
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('animate-fade-in');
-                    observer.unobserve(entry.target);
+            trigger.addEventListener('mouseleave', function() {
+                const tooltip = this.getAttribute('data-tooltip');
+                if (tooltip) {
+                    this.setAttribute('title', tooltip);
+                    this.removeAttribute('data-tooltip');
                 }
             });
-        }, observerOptions);
-
-        document.querySelectorAll('.animate-on-scroll').forEach(el => {
-            observer.observe(el);
         });
     };
 
-    // Amélioration de l'input de note avec validation en temps réel
-    const enhanceNoteInputs = () => {
+    // Amélioration des inputs en édition
+    const enhanceEditingInputs = () => {
         document.addEventListener('input', function(e) {
             if (e.target.type === 'number' && e.target.hasAttribute('wire:model.live')) {
                 const value = parseFloat(e.target.value);
-                const parent = e.target.closest('.note-editing');
                 
-                if (parent) {
-                    if (value >= 0 && value <= 20) {
-                        parent.classList.remove('border-red-500');
-                        parent.classList.add('border-green-500');
-                    } else {
-                        parent.classList.remove('border-green-500');
-                        parent.classList.add('border-red-500');
-                    }
+                // Supprimer les classes précédentes
+                e.target.classList.remove('valid-input', 'invalid-input', 'editing-input');
+                
+                // Ajouter la classe d'édition
+                e.target.classList.add('editing-input');
+                
+                // Validation
+                if (value >= 0 && value <= 20) {
+                    e.target.classList.add('valid-input');
+                } else if (e.target.value !== '') {
+                    e.target.classList.add('invalid-input');
                 }
             }
         });
     };
 
-    // Gestion des raccourcis clavier
+    // Gestion des raccourcis clavier améliorée
     const handleKeyboardShortcuts = () => {
         document.addEventListener('keydown', function(e) {
             // Échapper pour annuler l'édition
@@ -640,65 +553,136 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Entrée pour sauvegarder (si dans un input de note)
+            // Entrée pour sauvegarder
             if (e.key === 'Enter' && e.target.type === 'number') {
-                const saveButton = e.target.closest('tr').querySelector('[wire\\:click*="saveChanges"]');
+                const saveButton = e.target.closest('.space-y-3').querySelector('[wire\\:click*="saveChanges"]');
                 if (saveButton) {
                     e.preventDefault();
                     saveButton.click();
                 }
             }
+            
+            // Ctrl+E pour mode édition rapide
+            if (e.ctrlKey && e.key === 'e') {
+                e.preventDefault();
+                const editButtons = document.querySelectorAll('[wire\\:click*="startEditing"]:not(.hidden)');
+                if (editButtons.length > 0) {
+                    editButtons[0].click();
+                }
+            }
         });
     };
 
-    // Notification améliorée pour les moyennes UE
+    // Animation de confirmation pour les actions
+    const animateConfirmations = () => {
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('[wire\\:click*="saveChanges"]')) {
+                // Animation de succès
+                e.target.style.transform = 'scale(0.95)';
+                e.target.style.transition = 'transform 0.1s ease';
+                
+                setTimeout(() => {
+                    e.target.style.transform = 'scale(1)';
+                }, 100);
+            }
+        });
+    };
+
+    // Observation des mutations pour réappliquer les animations
+    const observeChanges = () => {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Réappliquer les animations pour les nouveaux éléments
+                    setTimeout(() => {
+                        initTooltips();
+                        enhanceEditingInputs();
+                    }, 100);
+                }
+            });
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    };
+
+    // Gestion de l'état de chargement
+    const handleLoadingStates = () => {
+        document.addEventListener('livewire:loading', function() {
+            const buttons = document.querySelectorAll('button[wire\\:click]');
+            buttons.forEach(button => {
+                button.disabled = true;
+                button.style.opacity = '0.6';
+            });
+        });
+
+        document.addEventListener('livewire:loaded', function() {
+            const buttons = document.querySelectorAll('button[wire\\:click]');
+            buttons.forEach(button => {
+                button.disabled = false;
+                button.style.opacity = '1';
+            });
+        });
+    };
+
+    // Notification d'état pour les moyennes UE
     Livewire.on('moyennesUEToggled', (isActivated) => {
         const message = isActivated
-            ? '✅ Mode moyennes UE activé - Calculs automatiques des UE'
-            : '🔄 Mode moyennes UE désactivé - Affichage simplifié';
+            ? 'Mode moyennes UE activé - Calculs automatiques des UE'
+            : 'Mode moyennes UE désactivé - Affichage simplifié';
 
-        if (typeof toastr !== 'undefined') {
-            toastr.info(message, 'Configuration mise à jour', {
-                timeOut: 4000,
-                progressBar: true,
-                positionClass: 'toast-top-right',
-                showMethod: 'slideDown',
-                hideMethod: 'slideUp'
-            });
-        }
+        // Création d'une notification personnalisée
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 z-50 p-4 bg-blue-500 text-white rounded-lg shadow-lg transform translate-x-full transition-transform duration-300';
+        notification.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <em class="icon ni ni-info-circle"></em>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.transform = 'translateX(0)';
+        }, 100);
+        
+        setTimeout(() => {
+            notification.style.transform = 'translateX(full)';
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 300);
+        }, 4000);
     });
 
-    // Initialisation de tous les modules
-    animateTableRows();
+    // Initialisation
+    animateStudentCards();
     initTooltips();
-    manageFocus();
-    animateNoteBadges();
-    observeTableElements();
-    enhanceNoteInputs();
+    enhanceEditingInputs();
     handleKeyboardShortcuts();
+    animateConfirmations();
+    observeChanges();
+    handleLoadingStates();
 
     // Réinitialisation après les mises à jour Livewire
     document.addEventListener('livewire:morph-updated', function() {
         setTimeout(() => {
-            animateTableRows();
+            animateStudentCards();
             initTooltips();
-            animateNoteBadges();
-        }, 50);
+            enhanceEditingInputs();
+        }, 100);
     });
 });
 
-// Nettoyage optimisé lors de la navigation
+// Nettoyage lors de la navigation
 document.addEventListener('livewire:navigating', () => {
-    // Arrêter toutes les animations en cours
+    // Arrêter toutes les animations
     document.querySelectorAll('*').forEach(el => {
         el.style.animation = 'none';
         el.style.transition = 'none';
     });
-    
-    // Nettoyage des observateurs
-    if (window.tableObserver) {
-        window.tableObserver.disconnect();
-    }
 });
 </script>
 @endpush

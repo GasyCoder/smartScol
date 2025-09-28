@@ -288,16 +288,20 @@
                         </div>
                     </div>
                 </div>
-                  <h3 class="text-center text-lg font-semibold mb-3 text-yellow-500"> {{ Auth::user()->name }}, Vakio tsara sao diso io Code io!</h3>
+                <h3 class="text-center text-lg font-semibold mb-3 text-yellow-500"> {{ Auth::user()->name }}, Vakio tsara sao diso io Code io!</h3>
+                
                 <div class="flex space-x-3">
                     <button wire:click="annulerConfirmation" 
+                            type="button"
                             class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                         ❌ Non, modifier
                     </button>
                     <button wire:click="confirmerCodeAnonymat" 
                             wire:loading.attr="disabled"
+                            type="button"
                             class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                            id="confirm-anonymat-button">
+                            id="confirm-anonymat-button"
+                            autofocus>
                         <span wire:loading.remove>✅ Oui, confirmer</span>
                         <span wire:loading>⏳ Enregistrement...</span>
                     </button>
@@ -309,9 +313,16 @@
 
 @push('scripts')
 <script>
-    document.addEventListener('livewire:init', () => {
+    // Fonction pour initialiser tous les event listeners
+    function initializeEventListeners() {
         let lastFocusedElement = null;
         let isCodeAnonymatFocused = false;
+
+        // Supprimer les anciens listeners pour éviter les doublons
+        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('focus', handleFocus, true);
+        document.removeEventListener('blur', handleBlur, true);
+        document.removeEventListener('input', handleInput);
 
         // Validation côté client pour le format du code anonymat
         const validateCodeFormat = (code) => {
@@ -319,18 +330,8 @@
             return regex.test(code);
         };
 
-        // Validation du nombre maximum
-        const validateMaxNumber = (code, maxPresences) => {
-            const match = code.match(/^[A-Z]{2}([0-9]+)$/);
-            if (match) {
-                const number = parseInt(match[1]);
-                return number >= 1 && number <= maxPresences;
-            }
-            return false;
-        };
-
-        // Traquer le focus sur les champs
-        document.addEventListener('focus', (e) => {
+        // Gestion du focus
+        function handleFocus(e) {
             if (e.target.id === 'codeAnonymat') {
                 isCodeAnonymatFocused = true;
                 lastFocusedElement = e.target;
@@ -338,9 +339,9 @@
                 isCodeAnonymatFocused = false;
                 lastFocusedElement = e.target;
             }
-        }, true);
+        }
 
-        document.addEventListener('blur', (e) => {
+        function handleBlur(e) {
             if (e.target.id === 'codeAnonymat') {
                 setTimeout(() => {
                     if (document.activeElement?.id !== 'codeAnonymat') {
@@ -348,15 +349,14 @@
                     }
                 }, 100);
             }
-        }, true);
+        }
 
         // Mise à jour en temps réel du champ code anonymat
-        document.addEventListener('input', (e) => {
+        function handleInput(e) {
             if (e.target.id === 'codeAnonymat') {
                 const code = e.target.value.toUpperCase();
-                e.target.value = code; // Forcer majuscules
+                e.target.value = code;
                 
-                // Validation visuelle immédiate
                 const isValidFormat = validateCodeFormat(code);
                 if (isValidFormat) {
                     e.target.classList.add('border-green-300', 'bg-green-50');
@@ -366,9 +366,38 @@
                     e.target.classList.remove('border-green-300', 'bg-green-50');
                 }
             }
-        });
+        }
 
-        // Gestion intelligente du focus sans vider le champ matricule
+        // Gestion des raccourcis clavier - FONCTION NOMMÉE
+        function handleKeyDown(e) {
+            // Vérifier si la modal est ouverte
+            const modalVisible = document.querySelector('.fixed.inset-0.bg-black.bg-opacity-50');
+            
+            // Échapper pour fermer la modal
+            if (e.key === 'Escape' && modalVisible) {
+                e.preventDefault();
+                window.Livewire.find(@js($this->getId())).call('annulerConfirmation');
+                return;
+            }
+            
+            // ENTRÉE dans la modal pour confirmer
+            if (e.key === 'Enter' && modalVisible) {
+                e.preventDefault();
+                const confirmButton = document.getElementById('confirm-anonymat-button');
+                if (confirmButton && !confirmButton.disabled) {
+                    confirmButton.click();
+                }
+                return;
+            }
+            
+            // Ctrl+Enter pour validation rapide (hors modal)
+            if (e.ctrlKey && e.key === 'Enter' && !modalVisible) {
+                e.preventDefault();
+                window.Livewire.find(@js($this->getId())).call('validerEtConfirmer');
+            }
+        }
+
+        // Gestion intelligente du focus
         const focusMatriculeInput = () => {
             if (isCodeAnonymatFocused || document.activeElement?.id === 'codeAnonymat') {
                 return;
@@ -376,11 +405,17 @@
             
             const input = document.getElementById('matricule');
             if (input && document.activeElement !== input) {
-                input.focus(); // Ne pas vider le champ ici
+                input.focus();
             }
         };
 
-        // Focus sur le champ code anonymat
+        // Attacher les event listeners
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('focus', handleFocus, true);
+        document.addEventListener('blur', handleBlur, true);
+        document.addEventListener('input', handleInput);
+
+        // Event listeners Livewire
         Livewire.on('focus-code-anonymat', () => {
             const input = document.getElementById('codeAnonymat');
             if (input) {
@@ -388,17 +423,15 @@
             }
         });
 
-        // Focus sur le bouton de confirmation dans la modal
         Livewire.on('modal-opened', () => {
             setTimeout(() => {
                 const confirmButton = document.getElementById('confirm-anonymat-button');
                 if (confirmButton && !confirmButton.disabled) {
                     confirmButton.focus();
                 }
-            }, 100);
+            }, 200);
         });
 
-        // Focus après actions Livewire
         Livewire.on('focus-matricule-input', () => {
             setTimeout(() => {
                 if (!isCodeAnonymatFocused) {
@@ -407,12 +440,11 @@
             }, 100);
         });
 
-        // Gestion du vidage explicite du champ matricule
         Livewire.on('matricule-cleared', () => {
             setTimeout(() => {
                 const input = document.getElementById('matricule');
                 if (input) {
-                    input.value = ''; // Vider uniquement sur cet événement
+                    input.value = '';
                     if (!isCodeAnonymatFocused) {
                         input.focus();
                     }
@@ -420,65 +452,17 @@
             }, 50);
         });
 
-        // Focus initial uniquement lors du chargement initial
-        document.addEventListener('livewire:navigated', () => {
-            setTimeout(() => {
-                if (!isCodeAnonymatFocused && !document.getElementById('matricule')?.value) {
-                    focusMatriculeInput();
-                }
-            }, 100);
-        });
-
-        // Supprimer le hook morph.updated pour éviter les réinitialisations pendant la saisie
-        // Livewire.hook('morph.updated', () => {
-        //     setTimeout(() => {
-        //         if (!isCodeAnonymatFocused) {
-        //             focusMatriculeInput();
-        //         }
-        //     }, 50);
-        // });
-
-        // Gestion des raccourcis clavier
-        document.addEventListener('keydown', (e) => {
-            // Échapper pour fermer la modal
-            if (e.key === 'Escape' && @json($showConfirmation)) {
-                @this.call('annulerConfirmation');
-                e.preventDefault();
-                return;
-            }
-            
-            // Entrée dans la modal pour confirmer
-            if (e.key === 'Enter' && @json($showConfirmation)) {
-                e.preventDefault();
-                const confirmButton = document.getElementById('confirm-anonymat-button');
-                if (confirmButton && !confirmButton.disabled) {
-                    confirmButton.click(); // Simuler un clic sur le bouton
-                    @this.call('confirmerCodeAnonymat');
-                }
-                return;
-            }
-            
-            // Ctrl+Enter pour validation rapide
-            if (e.ctrlKey && e.key === 'Enter') {
-                e.preventDefault();
-                @this.call('validerEtConfirmer');
-            }
-        });
-
-        // Animations de progression et vidage après sauvegarde
         Livewire.on('manchette-saved', () => {
-            // Vider le champ matricule et remettre le focus
             setTimeout(() => {
                 const inputMatricule = document.getElementById('matricule');
                 if (inputMatricule) {
-                    inputMatricule.value = ''; // Vider explicitement après sauvegarde
+                    inputMatricule.value = '';
                     if (!isCodeAnonymatFocused) {
                         inputMatricule.focus();
                     }
                 }
             }, 100);
 
-            // Animation de la barre de progression
             const progressBar = document.querySelector('.bg-gradient-to-r.from-blue-500');
             if (progressBar) {
                 progressBar.classList.add('animate-pulse');
@@ -488,15 +472,34 @@
             }
         });
 
-        // Notification de fin de saisie
         Livewire.on('saisie-terminee', (data) => {
-            // Animation de célébration
             const celebration = () => {
                 console.log('🎉 Saisie terminée avec succès!', data);
-                focusMatriculeInput(); // Remettre le focus pour une nouvelle saisie
+                focusMatriculeInput();
             };
             setTimeout(celebration, 500);
         });
+
+        // Focus initial
+        setTimeout(() => {
+            if (!isCodeAnonymatFocused && !document.getElementById('matricule')?.value) {
+                focusMatriculeInput();
+            }
+        }, 100);
+    }
+
+    // Initialiser lors du chargement initial
+    document.addEventListener('livewire:init', initializeEventListeners);
+
+    // IMPORTANT: Réinitialiser lors des navigations Livewire
+    document.addEventListener('livewire:navigated', initializeEventListeners);
+
+    // Réinitialiser après les mises à jour de composants
+    Livewire.hook('morph.updated', ({ el, component }) => {
+        // Seulement pour ce composant spécifique
+        if (component.fingerprint.name === 'manchette.manchette-saisie') {
+            setTimeout(initializeEventListeners, 50);
+        }
     });
 </script>
 @endpush

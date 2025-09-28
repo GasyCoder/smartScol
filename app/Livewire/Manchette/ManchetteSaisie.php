@@ -876,7 +876,7 @@ class ManchetteSaisie extends Component
     {
         // Vérifications de base
         if (!$this->etudiantTrouve || !is_object($this->etudiantTrouve)) {
-            $this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
+            //$this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
             return;
         }
 
@@ -1075,7 +1075,7 @@ class ManchetteSaisie extends Component
     public function sauvegarderManchette()
     {
         if (!$this->etudiantTrouve || !is_object($this->etudiantTrouve)) {
-            $this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
+            //$this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
             return;
         }
 

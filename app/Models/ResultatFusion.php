@@ -149,9 +149,6 @@ class ResultatFusion extends Model
         return $this->belongsTo(User::class, 'modifie_par');
     }
 
-
-
-
     /**
      * Libellés des statuts
      */

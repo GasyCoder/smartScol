@@ -487,6 +487,8 @@ class ResultatVerification extends Component
                             : null,
                         'created_at' => null,
                         'updated_at' => null,
+                        'saisie_par' => 'Inconnu',      // AJOUTÉ
+                        'modifie_par' => 'Inconnu',     // AJOUTÉ
                     ];
                 }
 
@@ -521,6 +523,8 @@ class ResultatVerification extends Component
                     'moyenne_ue' => $moyenneUE,
                     'created_at' => $item['created_at'],
                     'updated_at' => $item['updated_at'],
+                    'saisie_par' => $item['saisie_par'],        // AJOUTÉ
+                    'modifie_par' => $item['modifie_par'],      // AJOUTÉ
                 ];
             });
 
@@ -695,8 +699,8 @@ class ResultatVerification extends Component
                         'code_anonymat_id' => $resultat->code_anonymat_id,
                         'created_at' => $copie->created_at ?? $resultat->created_at,
                         'updated_at' => $copie->updated_at ?? $resultat->updated_at,
-                        'saisie_par' => $saisieParName,
-                        'modifie_par' => $modifieParName,
+                        'saisie_par' => $saisieParName,        // AJOUTÉ
+                        'modifie_par' => $modifieParName,      // AJOUTÉ
                     ]);
                 } else {
                     // EC sans résultat - afficher vide
@@ -1193,6 +1197,7 @@ class ResultatVerification extends Component
         // Récupérer toutes les copies
         $copies = Copie::where('examen_id', $this->examenId)
             ->where('session_exam_id', $this->sessionActive->id)
+            ->with(['utilisateurSaisie:id,name', 'utilisateurModification:id,name']) // AJOUTÉ
             ->get()
             ->keyBy(function($copie) {
                 return $copie->code_anonymat_id . '_' . $copie->ec_id;

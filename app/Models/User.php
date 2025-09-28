@@ -50,6 +50,25 @@ class User extends Authenticatable
         ];
     }
 
+    public function resultatsGeneres()
+    {
+        return $this->hasMany(ResultatFusion::class, 'genere_par');
+    }
+
+    public function resultatsModifies()
+    {
+        return $this->hasMany(ResultatFusion::class, 'modifie_par');
+    }
+
+    public function copiesSaisies()
+    {
+        return $this->hasMany(Copie::class, 'saisie_par');
+    }
+
+    public function copiesModifiees()
+    {
+        return $this->hasMany(Copie::class, 'modifie_par');
+    }
 
     /**
      * Obtenir les initiales de l'utilisateur.

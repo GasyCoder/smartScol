@@ -94,10 +94,10 @@ namespace App\Models{
  * @property int $ec_id Élément constitutif concerné
  * @property int $code_anonymat_id Référence au code d'anonymat
  * @property numeric $note Note obtenue
+ * @property numeric|null $note_old Note corrigée
  * @property int $saisie_par Utilisateur ayant saisi la note
  * @property int|null $modifie_par
  * @property string $date_saisie
- * @property numeric|null $note_old Note corrigée
  * @property bool $is_checked
  * @property string|null $commentaire Commentaire sur la note
  * @property \Illuminate\Support\Carbon|null $created_at
@@ -199,6 +199,8 @@ namespace App\Models{
 namespace App\Models{
 /**
  * @property int $id
+ * @property int|null $niveau_id
+ * @property int|null $parcours_id
  * @property string|null $abr Ex: EC1, EC2
  * @property string $nom Ex: Anatomie, Histologie
  * @property numeric $coefficient
@@ -240,7 +242,9 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereEnseignant($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereNom($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereParcoursId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUeId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|EC withTrashed(bool $withTrashed = true)
@@ -529,7 +533,7 @@ namespace App\Models{
  * @property int $salle_id Salle concernée
  * @property int|null $ec_id Matière spécifique (optionnel)
  * @property int $etudiants_presents Nombre d'étudiants présents
- * @property array<array-key, mixed>|null $etudiants_absents Liste des IDs des étudiants absents (JSON)
+ * @property array<array-key, mixed> $etudiants_absents Nombre d'étudiants absents
  * @property int|null $total_attendu Total d'étudiants attendus
  * @property string|null $observations Observations sur la présence
  * @property int $saisie_par Utilisateur ayant saisi
@@ -931,11 +935,19 @@ namespace App\Models{
  * @property string|null $remember_token
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Copie> $copiesModifiees
+ * @property-read int|null $copies_modifiees_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Copie> $copiesSaisies
+ * @property-read int|null $copies_saisies_count
  * @property-read string $initials
  * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \Spatie\Permission\Models\Permission> $permissions
  * @property-read int|null $permissions_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFusion> $resultatsGeneres
+ * @property-read int|null $resultats_generes_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ResultatFusion> $resultatsModifies
+ * @property-read int|null $resultats_modifies_count
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \Spatie\Permission\Models\Role> $roles
  * @property-read int|null $roles_count
  * @method static \Database\Factories\UserFactory factory($count = null, $state = [])
