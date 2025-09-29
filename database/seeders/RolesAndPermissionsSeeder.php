@@ -71,6 +71,11 @@ class RolesAndPermissionsSeeder extends Seeder
                 'description' => 'Permet de modifier les informations d\'un examen existant'
             ],
             [
+                'name' => 'copies.create',
+                'label' => 'Créer des notes',
+                'description' => 'Permet de saisir de nouvelles notes'
+            ],
+            [
                 'name' => 'examens.delete',
                 'label' => 'Supprimer un examen',
                 'description' => 'Permet de supprimer un examen du système'
@@ -98,6 +103,11 @@ class RolesAndPermissionsSeeder extends Seeder
                 'name' => 'manchettes.view',
                 'label' => 'Voir les manchettes',
                 'description' => 'Permet de consulter les manchettes saisies'
+            ],
+            [
+                'name' => 'manchettes.create',
+                'label' => 'Créer des manchettes',
+                'description' => 'Permet de créer de nouvelles manchettes'
             ],
             [
                 'name' => 'manchettes.edit',
