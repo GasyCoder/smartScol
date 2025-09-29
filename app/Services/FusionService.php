@@ -20,7 +20,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ResultatFinalHistorique;
-use App\Services\CalculAcademiqueService;
 
 class FusionService
 {
@@ -91,15 +90,6 @@ class FusionService
             }
             $stats['total'] = count($rapport);
 
-            Log::info('Vérification de cohérence terminée', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionActive->id,
-                'session_type' => $sessionActive->type,
-                'resultats_existants' => $resultatsExistants,
-                'stats' => $stats,
-                'total_etudiants' => $totalEtudiants,
-            ]);
-
             return [
                 'success' => true,
                 'stats' => $stats,
@@ -131,9 +121,6 @@ class FusionService
             ->first();
 
         if (!$sessionActive) {
-            \Log::warning('Aucune session active trouvée pour l\'analyse des résultats existants', [
-                'examen_id' => $examenId,
-            ]);
             return [];
         }
 
@@ -149,11 +136,6 @@ class FusionService
         foreach ($resultats->groupBy('ec_id') as $ecId => $resultatsEc) {
             $ec = $resultatsEc->first()->ec;
             if (!$ec) {
-                \Log::warning('EC introuvable pour résultats existants', [
-                    'examen_id' => $examenId,
-                    'ec_id' => $ecId,
-                    'session_exam_id' => $sessionActive->id,
-                ]);
                 continue;
             }
 
@@ -219,14 +201,6 @@ class FusionService
             ];
         }
 
-        \Log::info('Analyse des résultats existants par session CORRIGÉE', [
-            'examen_id' => $examenId,
-            'session_id' => $sessionActive->id,
-            'session_type' => $sessionActive->type,
-            'nb_ecs_analysees' => count($rapport),
-            'total_resultats' => $resultats->count(),
-        ]);
-
         return $rapport;
     }
 
@@ -240,9 +214,6 @@ class FusionService
             ->first();
 
         if (!$sessionActive) {
-            \Log::warning('Aucune session active trouvée pour l\'analyse pré-fusion', [
-                'examen_id' => $examenId,
-            ]);
             return [];
         }
 
@@ -268,10 +239,6 @@ class FusionService
         $ecs = EC::whereIn('id', $ecIds)->get();
 
         if ($ecs->isEmpty()) {
-            \Log::warning('Aucune EC trouvée pour l\'analyse', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionActive->id,
-            ]);
             return [];
         }
 
@@ -384,10 +351,6 @@ class FusionService
                 ->first();
 
             if (!$sessionNormale) {
-                \Log::warning('Session normale introuvable pour le rapport rattrapage', [
-                    'examen_id' => $examenId,
-                    'session_rattrapage_id' => $sessionActive->id,
-                ]);
                 return [];
             }
 
@@ -505,16 +468,6 @@ class FusionService
                     ];
                 }
             }
-
-            \Log::info('Analyse rapport rattrapage avec affichage correct terminée', [
-                'examen_id' => $examenId,
-                'session_rattrapage_id' => $sessionActive->id,
-                'session_normale_id' => $sessionNormale->id,
-                'nb_ecs_analysees' => count($rapport),
-                'total_notes_normales' => $resultatsNormale->flatten()->count(),
-                'total_copies_rattrapage' => $copiesRattrapage->flatten()->count(),
-            ]);
-
             return $rapport;
 
         } catch (\Exception $e) {
@@ -612,102 +565,6 @@ class FusionService
         ];
     }
 
-    /**
-     * Récupérer le nombre d'étudiants attendus depuis les données de présence
-     */
-    private function getEtudiantsAttendusByPresence($examenId, $sessionActive, $ecId)
-    {
-        // Chercher d'abord une présence spécifique à cette EC
-        $presenceSpecifique = PresenceExamen::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionActive->id)
-            ->where('ec_id', $ecId)
-            ->first();
-
-        if ($presenceSpecifique) {
-            return $presenceSpecifique->etudiants_presents;
-        }
-
-        // Si pas de présence spécifique, utiliser la présence globale
-        $presenceGlobale = PresenceExamen::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionActive->id)
-            ->whereNull('ec_id') // Présence globale
-            ->first();
-
-        if ($presenceGlobale) {
-            return $presenceGlobale->etudiants_presents;
-        }
-
-        // Fallback : compter les manchettes existantes
-        return Manchette::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionActive->id)
-            ->whereHas('codeAnonymat', function($q) use ($ecId) {
-                $q->where('ec_id', $ecId);
-            })
-            ->distinct('etudiant_id')
-            ->count();
-    }
-
-    
-    private function calculerEtudiantsAttendus($examenId, $sessionActive, $totalEtudiants)
-    {
-        if ($sessionActive->type === 'Rattrapage') {
-            // Pour le rattrapage, compter les étudiants qui ont eu une moyenne < 10 en session normale
-            $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionActive->annee_universitaire_id)
-                ->where('type', 'Normale')
-                ->first();
-
-            if ($sessionNormale) {
-                // CORRECTION : Utiliser Eloquent au lieu de SQL brut pour éviter les erreurs de colonnes
-                $examen = Examen::find($examenId);
-                if ($examen) {
-                    $etudiantsEligibles = 0;
-
-                    $etudiants = Etudiant::where('niveau_id', $examen->niveau_id)
-                        ->where('parcours_id', $examen->parcours_id)
-                        ->where('is_active', true)
-                        ->get();
-
-                    foreach ($etudiants as $etudiant) {
-                        $moyenne = ResultatFusion::where('examen_id', $examenId)
-                            ->where('session_exam_id', $sessionNormale->id)
-                            ->where('etudiant_id', $etudiant->id)
-                            ->avg('note');
-
-                        if ($moyenne && $moyenne < 10) {
-                            $etudiantsEligibles++;
-                        }
-                    }
-
-                    if ($etudiantsEligibles > 0) {
-                        \Log::info('Étudiants éligibles au rattrapage calculés', [
-                            'examen_id' => $examenId,
-                            'session_normale_id' => $sessionNormale->id,
-                            'session_rattrapage_id' => $sessionActive->id,
-                            'etudiants_eligibles' => $etudiantsEligibles
-                        ]);
-                        return $etudiantsEligibles;
-                    }
-                }
-
-                // Si aucun résultat fusion, estimer depuis les manchettes de rattrapage existantes
-                $etudiantsRattrapage = Manchette::where('examen_id', $examenId)
-                    ->where('session_exam_id', $sessionActive->id)
-                    ->distinct('etudiant_id')
-                    ->count('etudiant_id');
-
-                \Log::info('Étudiants de rattrapage estimés depuis manchettes', [
-                    'examen_id' => $examenId,
-                    'session_rattrapage_id' => $sessionActive->id,
-                    'etudiants_rattrapage' => $etudiantsRattrapage
-                ]);
-
-                return $etudiantsRattrapage > 0 ? $etudiantsRattrapage : $totalEtudiants;
-            }
-        }
-
-        return $totalEtudiants; // Session normale
-    }
-
 
     /**
      * Effectue la fusion des manchettes et copies
@@ -727,9 +584,6 @@ class FusionService
                 ->first();
 
             if (!$sessionActive) {
-                Log::error('Aucune session active trouvée pour la fusion', [
-                    'examen_id' => $examenId,
-                ]);
                 return [
                     'success' => false,
                     'message' => 'Aucune session active trouvée.',
@@ -742,12 +596,6 @@ class FusionService
                 ->max('etape_fusion') ?? 0;
 
             if ($currentEtape >= 4 && !$force) {
-                Log::warning('Fusion bloquée : déjà terminée pour cette session', [
-                    'examen_id' => $examenId,
-                    'session_id' => $sessionActive->id,
-                    'session_type' => $sessionActive->type,
-                    'etape_actuelle' => $currentEtape,
-                ]);
                 return [
                     'success' => false,
                     'message' => "La fusion est déjà terminée pour la session {$sessionActive->type}. Utilisez l'option de refusion si nécessaire.",
@@ -774,12 +622,6 @@ class FusionService
 
             if (!$result['success']) {
                 DB::rollBack();
-                Log::warning('Échec de l\'étape de fusion', [
-                    'examen_id' => $examenId,
-                    'session_id' => $sessionActive->id,
-                    'etape' => $nextEtape,
-                    'message' => $result['message'],
-                ]);
                 return $result;
             }
 
@@ -793,14 +635,6 @@ class FusionService
             ];
 
             DB::commit();
-
-            Log::info('Fusion réussie pour session', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionActive->id,
-                'session_type' => $sessionActive->type,
-                'etape' => $nextEtape,
-                'statistiques' => $statistiques,
-            ]);
 
             return [
                 'success' => true,
@@ -996,14 +830,6 @@ class FusionService
                     return $item->etudiant_id . '_' . $item->ec_id;
                 });
 
-            Log::info('Étudiants filtrés pour rattrapage', [
-                'examen_id' => $examenId,
-                'session_normale_id' => $sessionNormale->id,
-                'session_rattrapage_id' => $sessionRattrapageId,
-                'total_etudiants_eligibles' => count($etudiantsEligiblesIds),
-                'resultats_normaux_eligibles' => $resultatsNormale->count(),
-            ]);
-
             if ($resultatsNormale->isEmpty()) {
                 return [
                     'success' => false,
@@ -1055,11 +881,6 @@ class FusionService
 
                 // ✅ VÉRIFICATION SUPPLÉMENTAIRE : S'assurer que l'étudiant est bien éligible
                 if (!in_array($etudiantId, $etudiantsEligiblesIds)) {
-                    Log::warning('Étudiant non éligible détecté dans les résultats', [
-                        'etudiant_id' => $etudiantId,
-                        'examen_id' => $examenId,
-                        'session_rattrapage_id' => $sessionRattrapageId
-                    ]);
                     continue;
                 }
 
@@ -1120,16 +941,6 @@ class FusionService
                 }
             }
 
-            Log::info('Fusion rattrapage corrigée terminée', [
-                'examen_id' => $examenId,
-                'session_rattrapage_id' => $sessionRattrapageId,
-                'session_normale_id' => $sessionNormale->id,
-                'etudiants_eligibles' => count($etudiantsEligiblesIds),
-                'resultats_generes' => $resultatsGeneres,
-                'resultats_normale_recuperes' => $resultatsNormale->count(),
-                'copies_rattrapage_trouvees' => $copiesRattrapage->count()
-            ]);
-
             return [
                 'success' => true,
                 'resultats_generes' => $resultatsGeneres,
@@ -1176,10 +987,6 @@ class FusionService
 
             // Fallback : si pas de décisions enregistrées, utiliser la moyenne < 10
             if ($etudiantsEligibles->isEmpty()) {
-                Log::info('Aucune décision trouvée, utilisation du fallback moyenne < 10', [
-                    'examen_id' => $examenId,
-                    'session_normale_id' => $sessionNormaleId
-                ]);
 
                 $etudiantsAvecMoyenne = ResultatFinal::where('examen_id', $examenId)
                     ->where('session_exam_id', $sessionNormaleId)
@@ -1263,68 +1070,7 @@ class FusionService
         return 'fusion_auto';
     }
 
-    /**
-     * Insérer les résultats par batch
-     */
-    private function insererResultatsBatch(array $resultatsAInserer, array $codesAnonymatACreer, int $examenId)
-    {
-        // 1. Insérer/récupérer les codes d'anonymat
-        $codesExistants = CodeAnonymat::where('examen_id', $examenId)
-            ->whereIn('code_complet', array_column($codesAnonymatACreer, 'code_complet'))
-            ->get()
-            ->keyBy(function($item) {
-                return $item->code_complet . '_' . $item->ec_id;
-            });
-
-        // Insérer les nouveaux codes
-        $nouveauxCodes = [];
-        foreach ($codesAnonymatACreer as $key => $codeData) {
-            if (!$codesExistants->has($key)) {
-                $nouveauxCodes[] = $codeData;
-            }
-        }
-
-        if (!empty($nouveauxCodes)) {
-            CodeAnonymat::insert($nouveauxCodes);
-            
-            // Récupérer les codes nouvellement insérés
-            $codesInseres = CodeAnonymat::where('examen_id', $examenId)
-                ->whereIn('code_complet', array_column($nouveauxCodes, 'code_complet'))
-                ->get()
-                ->keyBy(function($item) {
-                    return $item->code_complet . '_' . $item->ec_id;
-                });
-            
-            $codesExistants = $codesExistants->merge($codesInseres);
-        }
-
-        // 2. Mettre à jour les IDs des codes d'anonymat dans les résultats
-        foreach ($resultatsAInserer as &$resultat) {
-            $codeKey = $resultat['_code_key'];
-            if ($codesExistants->has($codeKey)) {
-                $resultat['code_anonymat_id'] = $codesExistants[$codeKey]->id;
-            }
-            unset($resultat['_code_key']); // Supprimer la clé temporaire
-        }
-
-        // 3. Insérer les résultats en masse
-        $resultatsValides = array_filter($resultatsAInserer, function($r) {
-            return !is_null($r['code_anonymat_id']);
-        });
-
-        if (!empty($resultatsValides)) {
-            ResultatFusion::insert($resultatsValides);
-        }
-    }
-
-    /**
-     * Extrait la séquence d'un code d'anonymat
-     */
-    private function extraireSequence($codeAnonymat)
-    {
-        return preg_match('/(\d+)$/', $codeAnonymat, $matches) ? (int) $matches[1] : null;
-    }
-
+ 
     /**
      * Étape 2 : Validation des résultats
      */
@@ -1484,57 +1230,15 @@ class FusionService
     }
 
     /**
-     * Effectue des vérifications supplémentaires pour l'étape 3
-     */
-    private function verifierResultatEtape3(ResultatFusion $resultat)
-    {
-        // Vérifier que la note est valide et dans la plage autorisée
-        if ($resultat->note !== null && ($resultat->note < 0 || $resultat->note > 20)) {
-            Log::warning('Résultat invalide pour étape 3 : note hors plage', [
-                'resultat_id' => $resultat->id,
-                'examen_id' => $resultat->examen_id,
-                'note' => $resultat->note,
-            ]);
-            return false;
-        }
-
-        // Vérifier que l'étudiant existe et est actif
-        $etudiantActif = Etudiant::where('id', $resultat->etudiant_id)
-            ->where('is_active', true)
-            ->exists();
-
-        if (!$etudiantActif) {
-            Log::warning('Résultat invalide pour étape 3 : étudiant inactif', [
-                'resultat_id' => $resultat->id,
-                'etudiant_id' => $resultat->etudiant_id,
-            ]);
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
      * Valide un résultat
      */
     private function validerResultat(ResultatFusion $resultat)
     {
         if (!$resultat->etudiant_id || !$resultat->ec_id || !$resultat->examen_id) {
-            Log::warning('Résultat invalide : champs manquants', [
-                'resultat_id' => $resultat->id,
-                'examen_id' => $resultat->examen_id,
-                'etudiant_id' => $resultat->etudiant_id,
-                'ec_id' => $resultat->ec_id,
-            ]);
             return false;
         }
 
         if ($resultat->note !== null && ($resultat->note < 0 || $resultat->note > 20)) {
-            Log::warning('Résultat invalide : note hors plage', [
-                'resultat_id' => $resultat->id,
-                'examen_id' => $resultat->examen_id,
-                'note' => $resultat->note,
-            ]);
             return false;
         }
 
@@ -1572,14 +1276,6 @@ class FusionService
                 ])
                 ->get();
 
-            Log::info('Résultats fusion récupérés pour transfert', [
-                'session_id' => $sessionActive->id,
-                'session_type' => $sessionActive->type,
-                'ids_demandes' => count($resultatFusionIds),
-                'resultats_trouves' => $resultatsFusion->count(),
-                'premier_resultat_session_id' => $resultatsFusion->first()?->session_exam_id ?? 'aucun'
-            ]);
-
             if ($resultatsFusion->isEmpty()) {
                 DB::rollBack();
                 return [
@@ -1600,14 +1296,7 @@ class FusionService
                     ->where('ec_id', $resultatFusion->ec_id)
                     ->where('session_exam_id', $sessionActive->id) // IMPORTANT: Vérifier pour la session actuelle
                     ->exists();
-
                 if ($exists) {
-                    Log::info('Résultat final existe déjà', [
-                        'etudiant_id' => $resultatFusion->etudiant_id,
-                        'examen_id' => $resultatFusion->examen_id,
-                        'ec_id' => $resultatFusion->ec_id,
-                        'session_id' => $sessionActive->id
-                    ]);
                     continue;
                 }
 
@@ -1820,23 +1509,9 @@ class FusionService
                         'statut' => ResultatFusion::STATUT_VALIDE,
                         'updated_at' => now(),
                     ]);
-
-                Log::info('Résultats fusion restaurés pour session', [
-                    'examen_id' => $examenId,
-                    'session_id' => $sessionId,
-                    'fusion_ids_restored' => $fusionIds,
-                    'nb_restored' => $nbFusionRestored
-                ]);
             }
 
             DB::commit();
-
-            Log::info('Retour à l\'état en attente effectué pour session', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionId,
-                'resultats_restaures' => $resultats->count(),
-                'fusion_ids_restored' => $fusionIds,
-            ]);
 
             return [
                 'success' => true,
@@ -1919,13 +1594,6 @@ class FusionService
 
             DB::commit();
 
-            Log::info('Examen réinitialisé pour session', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionId,
-                'resultats_fusion_supprimes' => $deletedFusion,
-                'resultats_finaux_supprimes' => $deletedFinal,
-            ]);
-
             return [
                 'success' => true,
                 'message' => "$deletedFusion résultat(s) fusion et $deletedFinal résultat(s) final supprimé(s) pour cette session.",
@@ -1978,12 +1646,6 @@ class FusionService
                 Copie::where('examen_id', $examenId)
                 ->where('session_exam_id', $sessionActive->id)
                 ->exists();
-
-            \Log::info('Validation rattrapage', [
-                'examen_id' => $examenId,
-                'session_id' => $sessionActive->id,
-                'has_data' => $hasData
-            ]);
 
             // Pour le rattrapage, OK même sans données (elles peuvent être créées)
             return ['valid' => true];

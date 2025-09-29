@@ -14,14 +14,16 @@ class CodeAnonymat extends Model
 
     protected $fillable = [
         'examen_id',
-        'session_exam_id', // ✅ AJOUTÉ
+        'session_exam_id',
         'ec_id',
         'code_complet',
-        'sequence'
+        'sequence',
+        'is_absent'
     ];
 
     protected $casts = [
         'sequence' => 'integer',
+        'is_absent' => 'boolean',
     ];
 
     /**
@@ -34,6 +36,16 @@ class CodeAnonymat extends Model
                 $codeAnonymat->sequence = $codeAnonymat->getSequenceFromCode();
             }
         });
+    }
+
+    public function scopeAbsents($query)
+    {
+        return $query->where('is_absent', true);
+    }
+
+    public function scopePresents($query)
+    {
+        return $query->where('is_absent', false);
     }
 
     // Relations de base

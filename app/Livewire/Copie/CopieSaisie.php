@@ -1046,4 +1046,54 @@ class CopieSaisie extends Component
         
         return max(0, $totalInscrits - $this->totalCopies);
     }
+
+
+    /**
+     * Récupère l'intervalle des codes anonymat disponibles
+     */
+    public function getIntervalleCodesProperty(): array
+    {
+        if (!$this->examenId || !$this->ecId) {
+            return [
+                'min' => null,
+                'max' => null,
+                'total' => 0
+            ];
+        }
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            // Récupérer tous les codes pour cette EC
+            $codes = CodeAnonymat::where('examen_id', $this->examenId)
+                ->where('session_exam_id', $sessionId)
+                ->where('ec_id', $this->ecId)
+                ->whereHas('allManchettes', function($q) use ($sessionId) {
+                    $q->where('session_exam_id', $sessionId);
+                })
+                ->orderBy('sequence', 'asc')
+                ->get();
+
+            if ($codes->isEmpty()) {
+                return [
+                    'min' => null,
+                    'max' => null,
+                    'total' => 0
+                ];
+            }
+
+            return [
+                'min' => $codes->first()->code_complet,
+                'max' => $codes->last()->code_complet,
+                'total' => $codes->count()
+            ];
+        } catch (\Exception $e) {
+            logger('Erreur getIntervalleCodesProperty: ' . $e->getMessage());
+            return [
+                'min' => null,
+                'max' => null,
+                'total' => 0
+            ];
+        }
+    }
 }

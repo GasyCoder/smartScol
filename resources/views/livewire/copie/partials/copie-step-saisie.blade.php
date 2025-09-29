@@ -438,10 +438,35 @@
                 @endif
             </h3>
             
+            <!-- Intervalle des codes anonymat -->
+            @if($this->intervalleCodes['min'] && $this->intervalleCodes['max'])
+                <div class="mb-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                    <div class="flex items-center justify-center gap-2 text-sm">
+                        <svg class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                        </svg>
+                        <span class="text-blue-800 dark:text-blue-300 font-medium font-body">
+                            Codes disponibles : 
+                            <span class="font-mono font-bold text-blue-600 dark:text-blue-400">
+                                {{ $this->intervalleCodes['min'] }}
+                            </span>
+                            @if($this->intervalleCodes['min'] !== $this->intervalleCodes['max'])
+                                <span class="text-blue-500 mx-1">→</span>
+                                <span class="font-mono font-bold text-blue-600 dark:text-blue-400">
+                                    {{ $this->intervalleCodes['max'] }}
+                                </span>
+                            @endif
+                            <span class="text-blue-600 dark:text-blue-400 ml-1">({{ $this->intervalleCodes['total'] }} codes)</span>
+                        </span>
+                    </div>
+                </div>
+            @endif
+            
+            <!-- Cartes statistiques -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div class="bg-white dark:bg-gray-800 p-3 rounded-lg border border-primary-200 dark:border-primary-800">
                     <div class="text-center">
-                         <div class="text-xs text-gray-600 dark:text-gray-400 font-medium font-body mt-0.5">Code salle</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400 font-medium font-body mb-1">Code salle</div>
                         <div class="text-xl font-bold font-heading text-primary-600 dark:text-primary-400">{{ $this->codeSalle }}</div>
                         @if($ecSelected && !empty($ecSelected->enseignant))
                             <div class="text-xs text-gray-500 dark:text-gray-400 font-bold mt-1 truncate">{{ $ecSelected->enseignant }}</div>

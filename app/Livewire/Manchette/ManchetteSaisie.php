@@ -385,6 +385,13 @@ class ManchetteSaisie extends Component
     
     public function backToStep($stepName)
     {
+        // ⚠️ VÉRIFICATION OBLIGATOIRE : Bloquer si absents non synchronisés
+        if ($this->step === 'saisie' && !$this->peutQuitterEtape) {
+            $this->showMessage('⚠️ Vous devez synchroniser les absents avant de continuer.', 'warning');
+            toastr()->warning('Synchronisez d\'abord les ' . $this->totalAbsents . ' absent(s).');
+            return; // Bloquer l'action
+        }
+        
         $this->step = $stepName;
         $this->clearMessage();
 
@@ -1836,6 +1843,217 @@ class ManchetteSaisie extends Component
         }
 
         return $etudiantsEligibles;
+    }
+
+
+    /**
+     * Synchronise automatiquement les manchettes pour les étudiants absents
+     * Les absents sont les étudiants inscrits qui n'ont PAS encore de manchette
+     */
+    public function synchroniserManchettesAbsents()
+    {
+        if (!$this->examenSelected || !$this->ecSelected || !$this->salleId) {
+            $this->showMessage('Configuration incomplète pour la synchronisation.', 'error');
+            toastr()->error('Configuration incomplète');
+            return;
+        }
+
+        // Vérifier que toutes les présences ont été saisies
+        if ($this->progressCount < $this->totalManchettesPresentes) {
+            $restantes = $this->totalManchettesPresentes - $this->progressCount;
+            $this->showMessage("Vous devez d'abord terminer la saisie des {$restantes} manchette(s) présente(s).", 'warning');
+            toastr()->warning("Il reste {$restantes} manchette(s) à saisir");
+            return;
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $sessionId = Manchette::getCurrentSessionId();
+            $sessionType = Manchette::getCurrentSessionType();
+            $lettresCode = $this->genererLettresCode();
+            
+            // 1️⃣ RÉCUPÉRER TOUS LES ÉTUDIANTS INSCRITS
+            $query = Etudiant::where('niveau_id', $this->niveauSelected->id)
+                ->where('is_active', true);
+                
+            if ($this->parcoursSelected) {
+                $query->where('parcours_id', $this->parcoursSelected->id);
+            }
+            
+            // Pour le rattrapage, filtrer uniquement les étudiants éligibles
+            if ($sessionType === 'rattrapage' && !empty($this->statistiquesRattrapage)) {
+                $etudiantsEligiblesIds = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
+                    ->pluck('etudiant_id')
+                    ->toArray();
+                
+                $query->whereIn('id', $etudiantsEligiblesIds);
+            }
+            
+            $tousLesEtudiants = $query->get();
+            
+            // 2️⃣ RÉCUPÉRER LES ÉTUDIANTS QUI ONT DÉJÀ UNE MANCHETTE (= présents)
+            $etudiantsPresentsIds = Manchette::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->whereHas('codeAnonymat', fn($q) => $q->where('ec_id', $this->ecSelected->id))
+                ->whereNotNull('etudiant_id') // Seulement les présents identifiés
+                ->pluck('etudiant_id')
+                ->toArray();
+            
+            // 3️⃣ IDENTIFIER LES ABSENTS (inscrits - présents)
+            $etudiantsAbsents = $tousLesEtudiants->whereNotIn('id', $etudiantsPresentsIds);
+            
+            if ($etudiantsAbsents->isEmpty()) {
+                $this->showMessage('Aucun étudiant absent à synchroniser.', 'info');
+                toastr()->info('Tous les étudiants ont déjà une manchette');
+                return;
+            }
+            
+            // 4️⃣ RÉCUPÉRER LES NUMÉROS DÉJÀ UTILISÉS
+            $numerosExistants = CodeAnonymat::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->where('ec_id', $this->ecSelected->id)
+                ->where('code_complet', 'LIKE', $lettresCode . '%')
+                ->pluck('sequence')
+                ->toArray();
+
+            $manchettesCreees = 0;
+            $prochainNumero = 1;
+
+            // 5️⃣ CRÉER LES MANCHETTES POUR CHAQUE ABSENT
+            foreach ($etudiantsAbsents as $etudiantAbsent) {
+                // Trouver le prochain numéro disponible
+                while (in_array($prochainNumero, $numerosExistants)) {
+                    $prochainNumero++;
+                }
+
+                $codeComplet = $lettresCode . $prochainNumero;
+
+                // Créer le code d'anonymat avec is_absent = true
+                $codeAnonymat = CodeAnonymat::create([
+                    'examen_id' => $this->examenSelected->id,
+                    'session_exam_id' => $sessionId,
+                    'ec_id' => $this->ecSelected->id,
+                    'code_base' => $lettresCode,
+                    'code_complet' => $codeComplet,
+                    'sequence' => $prochainNumero,
+                    'is_absent' => true, // ✅ Marquer comme absent
+                    'saisie_par' => Auth::id(),
+                ]);
+
+                // Créer la manchette AVEC l'etudiant_id de l'absent
+                Manchette::create([
+                    'etudiant_id' => $etudiantAbsent->id, // ✅ Étudiant identifié mais absent
+                    'code_anonymat_id' => $codeAnonymat->id,
+                    'examen_id' => $this->examenSelected->id,
+                    'session_exam_id' => $sessionId,
+                    'matricule' => $etudiantAbsent->matricule,
+                    'saisie_par' => Auth::id(),
+                ]);
+
+                // Ajouter à la liste des numéros utilisés
+                $numerosExistants[] = $prochainNumero;
+                $prochainNumero++;
+                $manchettesCreees++;
+            }
+
+            DB::commit();
+
+            // Recharger les statistiques
+            $this->loadStatistiques();
+            $this->progressCount = $this->getManchettesCount();
+
+            $successMessage = "✅ Synchronisation réussie : {$manchettesCreees} manchette(s) créée(s) pour les étudiants absents";
+            $this->showMessage($successMessage, 'success');
+            
+            toastr()->success($successMessage, [
+                'timeOut' => 6000,
+                'closeButton' => true
+            ]);
+
+            $this->dispatch('manchettes-absents-synchronisees', [
+                'total_crees' => $manchettesCreees,
+                'session_type' => ucfirst($sessionType),
+                'matiere' => $this->ecSelected->nom ?? 'Matière inconnue',
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            $errorMessage = 'Erreur lors de la synchronisation : ' . $e->getMessage();
+            $this->showMessage($errorMessage, 'error');
+            toastr()->error($errorMessage, [
+                'timeOut' => 8000
+            ]);
+            
+            logger('Erreur synchroniserManchettesAbsents: ' . $e->getMessage(), [
+                'examen_id' => $this->examenSelected->id,
+                'ec_id' => $this->ecSelected->id,
+                'session_id' => $sessionId
+            ]);
+        }
+    }
+
+
+    /**
+     * Vérifie si la synchronisation des absents est possible
+     */
+    public function getCanSynchroniserAbsentsProperty()
+    {
+        // Toutes les présences doivent être saisies
+        $toutesPresencesSaisies = $this->progressCount >= $this->totalManchettesPresentes;
+        
+        // Il doit y avoir des absents
+        $nombreAbsents = $this->totalEtudiantsTheorique - $this->totalManchettesPresentes;
+        
+        // Vérifier qu'on n'a pas déjà synchronisé
+        $sessionId = Manchette::getCurrentSessionId();
+        $manchettesAbsentesExistantes = 0;
+        
+        if ($this->examenSelected && $this->ecSelected && $sessionId) {
+            $manchettesAbsentesExistantes = CodeAnonymat::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->where('ec_id', $this->ecSelected->id)
+                ->where('is_absent', true)
+                ->count();
+        }
+        
+        return $toutesPresencesSaisies 
+            && $nombreAbsents > 0 
+            && $manchettesAbsentesExistantes == 0;
+    }
+
+    /**
+     * Compte le nombre de manchettes absentes déjà créées
+     */
+    public function getNombreManchettesAbsentesProperty()
+    {
+        if (!$this->examenSelected || !$this->ecSelected) {
+            return 0;
+        }
+        
+        $sessionId = Manchette::getCurrentSessionId();
+        
+        return CodeAnonymat::where('examen_id', $this->examenSelected->id)
+            ->where('session_exam_id', $sessionId)
+            ->where('ec_id', $this->ecSelected->id)
+            ->where('is_absent', true)
+            ->count();
+    }
+
+    /**
+     * Vérifie si l'utilisateur peut quitter cette étape
+     * (synchronisation des absents obligatoire)
+     */
+    public function getPeutQuitterEtapeProperty()
+    {
+        // Si toutes les présences sont saisies ET qu'il y a des absents non synchronisés
+        // alors on ne peut PAS quitter
+        if ($this->canSynchroniserAbsents) {
+            return false; // BLOQUÉ - doit synchroniser d'abord
+        }
+        
+        return true; // Peut quitter
     }
 
     // RENDER
