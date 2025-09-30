@@ -26,6 +26,12 @@ class CopieSaisie extends Component
     public $is_active;
     public string $codeAnonymat = ''; 
 
+    public bool $afficherRemplissageAuto = false;
+    public bool $enCoursRemplissage = false;
+    public array $copiesManquantes = [];
+    public int $nombreCopiesCreees = 0;
+    public bool $modeSync = false;
+
     // SÉLECTIONS
     public ?int $niveauId = null;
     public ?int $parcoursId = null;
@@ -1095,5 +1101,183 @@ class CopieSaisie extends Component
                 'total' => 0
             ];
         }
+    }
+
+
+    public function toggleModeSync(): void
+    {
+        $this->modeSync = !$this->modeSync;
+        
+        if ($this->modeSync) {
+            // Analyser automatiquement quand on active
+            $this->analyserCopiesManquantes();
+        }
+    }
+
+    public function toggleRemplissageAuto(): void
+    {
+        $this->afficherRemplissageAuto = !$this->afficherRemplissageAuto;
+        
+        if ($this->afficherRemplissageAuto) {
+            $this->analyserCopiesManquantes();
+        }
+    }
+
+    // Méthode pour analyser les copies manquantes
+    public function analyserCopiesManquantes(): void
+    {
+        if (!$this->examenId || !$this->ecId) {
+            $this->showMessage('❌ Veuillez sélectionner un examen et une EC.', 'error');
+            return;
+        }
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            // Récupérer toutes les manchettes pour cette EC
+            $manchettesAvecCodes = Manchette::where('examen_id', $this->examenId)
+                ->where('session_exam_id', $sessionId)
+                ->whereHas('codeAnonymat', fn($q) => $q->where('ec_id', $this->ecId))
+                ->with(['codeAnonymat', 'etudiant'])
+                ->get();
+
+            if ($manchettesAvecCodes->isEmpty()) {
+                $this->copiesManquantes = [];
+                $this->showMessage('ℹ️ Aucune manchette trouvée pour cette EC.', 'info');
+                return;
+            }
+
+            // Récupérer les codes anonymat qui ont déjà une copie
+            $codesAvecCopie = Copie::where('examen_id', $this->examenId)
+                ->where('session_exam_id', $sessionId)
+                ->whereHas('codeAnonymat', fn($q) => $q->where('ec_id', $this->ecId))
+                ->pluck('code_anonymat_id')
+                ->toArray();
+
+            // Filtrer les manchettes sans copie
+            $manchettesSansCopie = $manchettesAvecCodes->filter(function($manchette) use ($codesAvecCopie) {
+                return !in_array($manchette->code_anonymat_id, $codesAvecCopie);
+            });
+
+            // Préparer les données pour l'affichage
+            $this->copiesManquantes = $manchettesSansCopie->map(function($manchette) {
+                return [
+                    'code_anonymat_id' => $manchette->code_anonymat_id,
+                    'code_complet' => $manchette->codeAnonymat->code_complet,
+                    'matricule' => $manchette->etudiant->matricule ?? 'N/A',
+                    'nom_complet' => ($manchette->etudiant->nom ?? '') . ' ' . ($manchette->etudiant->prenoms ?? ''),
+                ];
+            })->sortBy('code_complet')->values()->toArray();
+
+            if (empty($this->copiesManquantes)) {
+                $this->showMessage('✅ Toutes les copies ont déjà été saisies !', 'success');
+            } else {
+                $this->showMessage(
+                    '📋 ' . count($this->copiesManquantes) . ' copie(s) manquante(s) détectée(s).', 
+                    'info'
+                );
+            }
+
+        } catch (\Exception $e) {
+            logger('Erreur analyserCopiesManquantes: ' . $e->getMessage());
+            $this->showMessage('❌ Erreur lors de l\'analyse : ' . $e->getMessage(), 'error');
+            $this->copiesManquantes = [];
+        }
+    }
+
+    // Méthode pour créer automatiquement les copies manquantes avec note 0
+    public function creerCopiesManquantes(): void
+    {
+        if (empty($this->copiesManquantes)) {
+            $this->showMessage('❌ Aucune copie à créer.', 'error');
+            return;
+        }
+
+        if (!$this->examenId || !$this->ecId) {
+            $this->showMessage('❌ Informations manquantes.', 'error');
+            return;
+        }
+
+        $this->enCoursRemplissage = true;
+        $this->nombreCopiesCreees = 0;
+        $erreurs = [];
+
+        DB::beginTransaction();
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            $userId = Auth::id();
+
+            foreach ($this->copiesManquantes as $copieManquante) {
+                try {
+                    // Vérifier une dernière fois que la copie n'existe pas (au cas où)
+                    $existe = Copie::where('examen_id', $this->examenId)
+                        ->where('code_anonymat_id', $copieManquante['code_anonymat_id'])
+                        ->where('session_exam_id', $sessionId)
+                        ->exists();
+
+                    if (!$existe) {
+                        Copie::create([
+                            'examen_id' => $this->examenId,
+                            'ec_id' => $this->ecId,
+                            'code_anonymat_id' => $copieManquante['code_anonymat_id'],
+                            'session_exam_id' => $sessionId,
+                            'note' => 0.00,
+                            'saisie_par' => $userId,
+                            'date_saisie' => now(),
+                            'commentaire' => 'Copie non remise - Note automatique',
+                        ]);
+
+                        $this->nombreCopiesCreees++;
+                    }
+                } catch (\Exception $e) {
+                    $erreurs[] = "Erreur pour {$copieManquante['code_complet']}: " . $e->getMessage();
+                    logger('Erreur création copie auto: ' . $e->getMessage(), [
+                        'code' => $copieManquante['code_complet']
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            // Recharger les statistiques
+            $this->loadStatistiques();
+            
+            // Réinitialiser l'analyse
+            $this->copiesManquantes = [];
+            $this->afficherRemplissageAuto = false;
+
+            // Message de succès
+            if ($this->nombreCopiesCreees > 0) {
+                $message = "✅ {$this->nombreCopiesCreees} copie(s) créée(s) avec succès avec la note 0/20.";
+                if (!empty($erreurs)) {
+                    $message .= " (" . count($erreurs) . " erreur(s))";
+                }
+                $this->showMessage($message, 'success');
+                toastr()->success($message);
+                
+                // Dispatcher événement
+                $this->dispatch('copiesAutomatiquesCreees', [
+                    'nombre' => $this->nombreCopiesCreees
+                ]);
+            } else {
+                $this->showMessage('⚠️ Aucune copie n\'a pu être créée.', 'warning');
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            logger('Erreur transaction creerCopiesManquantes: ' . $e->getMessage());
+            $this->showMessage('❌ Erreur lors de la création : ' . $e->getMessage(), 'error');
+        } finally {
+            $this->enCoursRemplissage = false;
+        }
+    }
+
+    // Méthode pour annuler l'opération
+    public function annulerRemplissageAuto(): void
+    {
+        $this->afficherRemplissageAuto = false;
+        $this->copiesManquantes = [];
+        $this->nombreCopiesCreees = 0;
     }
 }

@@ -2056,6 +2056,104 @@ class ManchetteSaisie extends Component
         return true; // Peut quitter
     }
 
+    /**
+     * Récupère le nombre de manchettes de présents (excluant les absents)
+     */
+    public function getTotalManchettesPresentsProperty()
+    {
+        // Vérifications de sécurité
+        if (!isset($this->examenSelected) || !$this->examenSelected) {
+            return 0;
+        }
+        
+        if (!isset($this->ecSelected) || !$this->ecSelected) {
+            return 0;
+        }
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            // Compter UNIQUEMENT les présents (is_absent = false)
+            return Manchette::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->whereHas('codeAnonymat', function($q) {
+                    $q->where('ec_id', $this->ecSelected->id)
+                    ->where('is_absent', false); // SEULEMENT les présents
+                })
+                ->count();
+        } catch (\Exception $e) {
+            logger('Erreur getTotalManchettesPresentsProperty: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Récupère le nombre de manchettes d'absents synchronisés
+     */
+    public function getTotalManchettesAbsentsProperty()
+    {
+        // Vérifications de sécurité
+        if (!isset($this->examenSelected) || !$this->examenSelected) {
+            return 0;
+        }
+        
+        if (!isset($this->ecSelected) || !$this->ecSelected) {
+            return 0;
+        }
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            return Manchette::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->whereHas('codeAnonymat', function($q) {
+                    $q->where('ec_id', $this->ecSelected->id)
+                    ->where('is_absent', true); // SEULEMENT les absents
+                })
+                ->count();
+        } catch (\Exception $e) {
+            logger('Erreur getTotalManchettesAbsentsProperty: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Nombre de copies restantes à saisir (sur les présents uniquement)
+     */
+    public function getCopiesRestantesProperty(): int
+    {
+        return max(0, $this->totalManchettesPresents - $this->progressCount);
+    }
+
+
+    /**
+     * Récupère les statistiques présents/absents pour une EC
+     */
+    public function getStatistiquesEC($ecId): array
+    {
+        if (!isset($this->examenSelected) || !$this->examenSelected || !$ecId) {
+            return ['presents' => 0, 'absents' => 0];
+        }
+
+        try {
+            $sessionId = Manchette::getCurrentSessionId();
+            
+            $manchettesEC = Manchette::where('examen_id', $this->examenSelected->id)
+                ->where('session_exam_id', $sessionId)
+                ->whereHas('codeAnonymat', fn($q) => $q->where('ec_id', $ecId))
+                ->with('codeAnonymat')
+                ->get();
+            
+            return [
+                'presents' => $manchettesEC->filter(fn($m) => $m->codeAnonymat && !$m->codeAnonymat->is_absent)->count(),
+                'absents' => $manchettesEC->filter(fn($m) => $m->codeAnonymat && $m->codeAnonymat->is_absent)->count(),
+            ];
+        } catch (\Exception $e) {
+            logger('Erreur getStatistiquesEC: ' . $e->getMessage());
+            return ['presents' => 0, 'absents' => 0];
+        }
+    }
+
     // RENDER
     public function render()
     {
