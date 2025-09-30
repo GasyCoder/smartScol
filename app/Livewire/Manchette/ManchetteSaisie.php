@@ -1779,7 +1779,6 @@ class ManchetteSaisie extends Component
             return;
         }
 
-        // Vérifier que toutes les présences ont été saisies
         if ($this->progressCount < $this->totalManchettesPresentes) {
             $restantes = $this->totalManchettesPresentes - $this->progressCount;
             $this->showMessage("Vous devez d'abord terminer la saisie des {$restantes} manchette(s) présente(s).", 'warning');
@@ -1788,8 +1787,6 @@ class ManchetteSaisie extends Component
         }
 
         try {
-            DB::beginTransaction();
-
             $sessionId = Manchette::getCurrentSessionId();
             $sessionType = Manchette::getCurrentSessionType();
             $lettresCode = $this->genererLettresCode();
@@ -1802,7 +1799,6 @@ class ManchetteSaisie extends Component
                 $query->where('parcours_id', $this->parcoursSelected->id);
             }
             
-            // Pour le rattrapage, filtrer uniquement les étudiants éligibles
             if ($sessionType === 'rattrapage' && !empty($this->statistiquesRattrapage)) {
                 $etudiantsEligiblesIds = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
                     ->pluck('etudiant_id')
@@ -1813,15 +1809,17 @@ class ManchetteSaisie extends Component
             
             $tousLesEtudiants = $query->get();
             
-            // 2️⃣ RÉCUPÉRER LES ÉTUDIANTS QUI ONT DÉJÀ UNE MANCHETTE (= présents)
-            $etudiantsPresentsIds = Manchette::where('examen_id', $this->examenSelected->id)
-                ->where('session_exam_id', $sessionId)
-                ->whereHas('codeAnonymat', fn($q) => $q->where('ec_id', $this->ecSelected->id))
-                ->whereNotNull('etudiant_id') // Seulement les présents identifiés
-                ->pluck('etudiant_id')
+            // 2️⃣ RÉCUPÉRER LES ÉTUDIANTS QUI ONT DÉJÀ UNE MANCHETTE (une seule requête)
+            $etudiantsPresentsIds = DB::table('manchettes')
+                ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
+                ->where('manchettes.examen_id', $this->examenSelected->id)
+                ->where('manchettes.session_exam_id', $sessionId)
+                ->where('codes_anonymat.ec_id', $this->ecSelected->id)
+                ->whereNotNull('manchettes.etudiant_id')
+                ->pluck('manchettes.etudiant_id')
                 ->toArray();
             
-            // 3️⃣ IDENTIFIER LES ABSENTS (inscrits - présents)
+            // 3️⃣ IDENTIFIER LES ABSENTS
             $etudiantsAbsents = $tousLesEtudiants->whereNotIn('id', $etudiantsPresentsIds);
             
             if ($etudiantsAbsents->isEmpty()) {
@@ -1830,61 +1828,91 @@ class ManchetteSaisie extends Component
                 return;
             }
             
-            // 4️⃣ RÉCUPÉRER LES NUMÉROS DÉJÀ UTILISÉS
-            $numerosExistants = CodeAnonymat::where('examen_id', $this->examenSelected->id)
+            // 4️⃣ RÉCUPÉRER TOUS LES CODES EXISTANTS (une seule requête)
+            $codesExistants = DB::table('codes_anonymat')
+                ->where('examen_id', $this->examenSelected->id)
                 ->where('session_exam_id', $sessionId)
                 ->where('ec_id', $this->ecSelected->id)
                 ->where('code_complet', 'LIKE', $lettresCode . '%')
-                ->pluck('sequence')
+                ->pluck('code_complet')
                 ->toArray();
 
-            $manchettesCreees = 0;
-            $prochainNumero = 1;
+            $numerosExistants = [];
+            foreach ($codesExistants as $codeComplet) {
+                if (preg_match('/^' . preg_quote($lettresCode, '/') . '([0-9]+)$/', $codeComplet, $matches)) {
+                    $numerosExistants[] = (int) $matches[1];
+                }
+            }
 
-            // 5️⃣ CRÉER LES MANCHETTES POUR CHAQUE ABSENT
+            // 5️⃣ PRÉPARER TOUTES LES DONNÉES EN MÉMOIRE
+            $codesAInserer = [];
+            $manchettesAInserer = [];
+            $prochainNumero = 1;
+            $now = now();
+
             foreach ($etudiantsAbsents as $etudiantAbsent) {
-                // Trouver le prochain numéro disponible
                 while (in_array($prochainNumero, $numerosExistants)) {
                     $prochainNumero++;
                 }
 
                 $codeComplet = $lettresCode . $prochainNumero;
 
-                // Créer le code d'anonymat avec is_absent = true
-                $codeAnonymat = CodeAnonymat::create([
+                $codesAInserer[] = [
                     'examen_id' => $this->examenSelected->id,
                     'session_exam_id' => $sessionId,
                     'ec_id' => $this->ecSelected->id,
-                    'code_base' => $lettresCode,
                     'code_complet' => $codeComplet,
                     'sequence' => $prochainNumero,
-                    'is_absent' => true, // ✅ Marquer comme absent
-                    'saisie_par' => Auth::id(),
-                ]);
+                    'is_absent' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
 
-                // Créer la manchette AVEC l'etudiant_id de l'absent
-                Manchette::create([
-                    'etudiant_id' => $etudiantAbsent->id, // ✅ Étudiant identifié mais absent
-                    'code_anonymat_id' => $codeAnonymat->id,
+                $manchettesAInserer[] = [
+                    'etudiant_id' => $etudiantAbsent->id,
+                    'code_complet' => $codeComplet, // Temporaire pour la jointure
                     'examen_id' => $this->examenSelected->id,
                     'session_exam_id' => $sessionId,
-                    'matricule' => $etudiantAbsent->matricule,
                     'saisie_par' => Auth::id(),
-                ]);
+                    'date_saisie' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
 
-                // Ajouter à la liste des numéros utilisés
                 $numerosExistants[] = $prochainNumero;
                 $prochainNumero++;
-                $manchettesCreees++;
             }
 
-            DB::commit();
+            // 6️⃣ INSERTION EN MASSE (2 requêtes au lieu de N*2)
+            DB::transaction(function() use ($codesAInserer, $manchettesAInserer) {
+                // Insérer tous les codes d'un coup
+                DB::table('codes_anonymat')->insert($codesAInserer);
 
-            // Recharger les statistiques
+                // Récupérer les IDs des codes fraîchement insérés
+                $codesMap = DB::table('codes_anonymat')
+                    ->where('examen_id', $this->examenSelected->id)
+                    ->where('session_exam_id', $manchettesAInserer[0]['session_exam_id'])
+                    ->where('ec_id', $this->ecSelected->id)
+                    ->whereIn('code_complet', collect($manchettesAInserer)->pluck('code_complet')->toArray())
+                    ->pluck('id', 'code_complet')
+                    ->toArray();
+
+                // Remplacer code_complet par code_anonymat_id
+                foreach ($manchettesAInserer as &$manchette) {
+                    $manchette['code_anonymat_id'] = $codesMap[$manchette['code_complet']];
+                    unset($manchette['code_complet']);
+                }
+
+                // Insérer toutes les manchettes d'un coup
+                DB::table('manchettes')->insert($manchettesAInserer);
+            });
+
+            $manchettesCreees = count($codesAInserer);
+
             $this->loadStatistiques();
             $this->progressCount = $this->getManchettesCount();
 
-            $successMessage = "✅ Synchronisation réussie : {$manchettesCreees} manchette(s) créée(s) pour les étudiants absents";
+            $successMessage = "Synchronisation réussie : {$manchettesCreees} manchette(s) créée(s) pour les étudiants absents";
             $this->showMessage($successMessage, 'success');
             
             toastr()->success($successMessage, [
@@ -1899,8 +1927,6 @@ class ManchetteSaisie extends Component
             ]);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-            
             $errorMessage = 'Erreur lors de la synchronisation : ' . $e->getMessage();
             $this->showMessage($errorMessage, 'error');
             toastr()->error($errorMessage, [
@@ -1914,7 +1940,6 @@ class ManchetteSaisie extends Component
             ]);
         }
     }
-
 
     /**
      * Vérifie si la synchronisation des absents est possible
