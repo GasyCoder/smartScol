@@ -1,4 +1,4 @@
-{{-- Onglet Rapport et Statistiques - UI/UX Optimisée --}}
+{{-- Onglet Rapport et Statistiques - Version Simplifiée --}}
 <div id="content-rapport-stats" 
      class="tab-content" 
      style="{{ $activeTab !== 'rapport-stats' ? 'display: none;' : '' }}">
@@ -38,107 +38,216 @@
 
     {{-- Rapport de cohérence disponible --}}
     @elseif(!empty($rapportCoherence) && isset($rapportCoherence['stats']))
-        @php
-            $stats = $rapportCoherence['stats'];
-            $totalMatieres = $stats['total'] ?? 0;
-            $matieresCompletes = $stats['complets'] ?? 0;
-            $matieresIncompletes = $stats['incomplets'] ?? 0;
-            $completionRate = $totalMatieres > 0 ? round(($matieresCompletes / $totalMatieres) * 100) : 0;
-        @endphp
+@php
+    // Infos examen
+    $niveauNom = $examen->niveau->nom ?? 'N/A';
+    $parcoursNom = $examen->parcours->nom ?? 'N/A';
+    
+    // ✅ UTILISER LA MÉTHODE HELPER DU MODÈLE
+    $statsPresence = \App\Models\PresenceExamen::getStatistiquesExamen(
+        $examen->id, 
+        $sessionActive->id
+    );
+    
+    $nbPresents = $statsPresence['presents'];
+    $nbAbsents = $statsPresence['absents'];
+    $totalInscrits = $statsPresence['total_attendu'];
+    
+    // Données saisies (somme sur toutes les matières)
+    $totalManchettesPresentes = 0;
+    $totalManchettesAbsentes = 0;
+    $totalCopies = 0;
+    
+    foreach($rapportCoherence['data'] as $item) {
+        $totalManchettesPresentes += ($item['manchettes_presentes'] ?? 0);
+        $totalManchettesAbsentes += ($item['manchettes_absentes'] ?? 0);
+        $totalCopies += ($item['copies_count'] ?? 0);
+    }
+    
+    // Stats matières
+    $stats = $rapportCoherence['stats'];
+    $totalMatieres = $stats['total'] ?? 0;
+    $matieresCompletes = $stats['complets'] ?? 0;
+    $matieresIncompletes = $stats['incomplets'] ?? 0;
+    
+    // Calcul attendus
+    $manchettesAttendues = $nbPresents * $totalMatieres;
+    $copiesAttendues = $nbPresents * $totalMatieres;
+    $absentsSyncAttendus = $nbAbsents * $totalMatieres;
+    
+    // Pourcentages
+    $pctManchettes = $manchettesAttendues > 0 
+        ? round(($totalManchettesPresentes / $manchettesAttendues) * 100, 1) 
+        : 0;
+    $pctCopies = $copiesAttendues > 0 
+        ? round(($totalCopies / $copiesAttendues) * 100, 1) 
+        : 0;
+    $pctAbsents = $absentsSyncAttendus > 0 
+        ? round(($totalManchettesAbsentes / $absentsSyncAttendus) * 100, 1) 
+        : 100;
+    
+    // Pourcentage de complétion global (matières complètes)
+    $completionRate = $totalMatieres > 0 
+        ? round(($matieresCompletes / $totalMatieres) * 100) 
+        : 0;
+@endphp
 
         <div class="space-y-4">
-            {{-- Résumé compact avec métriques --}}
+            
+            {{-- En-tête avec contexte --}}
             <div class="p-4 border rounded-lg {{ $completionRate === 100 ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : ($completionRate > 0 ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800') }}">
-                {{-- Header avec titre et pourcentage --}}
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-lg font-semibold {{ $completionRate === 100 ? 'text-green-800 dark:text-green-200' : ($completionRate > 0 ? 'text-yellow-800 dark:text-yellow-200' : 'text-red-800 dark:text-red-200') }}">
-                        Rapport de cohérence
-                        @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                            <span class="ml-2 px-2 py-0.5 text-xs font-medium text-orange-800 bg-orange-200 rounded dark:bg-orange-800 dark:text-orange-200">
-                                RATTRAPAGE
-                            </span>
-                        @endif
-                    </h3>
+                
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold {{ $completionRate === 100 ? 'text-green-800 dark:text-green-200' : ($completionRate > 0 ? 'text-yellow-800 dark:text-yellow-200' : 'text-red-800 dark:text-red-200') }}">
+                            Rapport de cohérence
+                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
+                                <span class="ml-2 px-2 py-0.5 text-xs font-medium text-orange-800 bg-orange-200 rounded dark:bg-orange-800 dark:text-orange-200">
+                                    RATTRAPAGE
+                                </span>
+                            @endif
+                        </h3>
+                        <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            <span class="font-medium">{{ $niveauNom }}</span>
+                            @if($parcoursNom && $parcoursNom !== 'N/A')
+                                <span class="mx-1">•</span>
+                                <span>{{ $parcoursNom }}</span>
+                            @endif
+                            <span class="mx-1">•</span>
+                            <span>{{ $totalInscrits }} inscrit(s)</span>
+                            <span class="mx-1">•</span>
+                            <span>{{ $totalMatieres }} matière(s)</span>
+                        </div>
+                    </div>
                     
-                    <div class="flex items-center space-x-4">
+                    <div class="text-right">
                         @if(isset($rapportCoherence['last_check']))
-                            <span class="text-xs text-gray-500 dark:text-gray-400">
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">
                                 {{ $rapportCoherence['last_check'] }}
-                            </span>
+                            </div>
                         @endif
-                        <div class="text-right">
-                            <div class="text-xl font-bold {{ $completionRate === 100 ? 'text-green-600 dark:text-green-400' : ($completionRate > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
-                                {{ $completionRate }}%
+                        
+                        {{-- DEBUG: Afficher les valeurs --}}
+                        @if(config('app.debug'))
+                            <div class="text-xs text-red-500 mb-1">
+                                DEBUG: {{ $matieresCompletes }}/{{ $totalMatieres }} = {{ $completionRate }}%
+                            </div>
+                        @endif
+                        
+                        <div class="text-2xl font-bold {{ $completionRate === 100 ? 'text-green-600 dark:text-green-400' : ($completionRate > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
+                            {{ $completionRate }}%
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ $matieresCompletes }}/{{ $totalMatieres }} matières
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Statistiques présents/absents --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    
+                    {{-- PRÉSENTS --}}
+                    <div class="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Présents</span>
+                            <span class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $nbPresents }}</span>
+                        </div>
+                        
+                        <div class="space-y-2">
+                            {{-- Manchettes --}}
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-600 dark:text-gray-400">Manchettes</span>
+                                    <span class="font-semibold {{ $pctManchettes >= 100 ? 'text-green-600' : 'text-orange-600' }}">
+                                        {{ $totalManchettesPresentes }}/{{ $manchettesAttendues }} ({{ $pctManchettes }}%)
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
+                                    <div class="h-1.5 rounded-full {{ $pctManchettes >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
+                                         style="width: {{ min($pctManchettes, 100) }}%"></div>
+                                </div>
+                            </div>
+                            
+                            {{-- Copies --}}
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-600 dark:text-gray-400">Copies</span>
+                                    <span class="font-semibold {{ $pctCopies >= 100 ? 'text-green-600' : 'text-orange-600' }}">
+                                        {{ $totalCopies }}/{{ $copiesAttendues }} ({{ $pctCopies }}%)
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
+                                    <div class="h-1.5 rounded-full {{ $pctCopies >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
+                                         style="width: {{ min($pctCopies, 100) }}%"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {{-- Métriques en ligne compactes --}}
-              <div class="grid grid-cols-3 gap-4 mb-3 md:grid-cols-5">
-                    <div class="text-center">
-                        <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $totalMatieres }}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">Total</div>
-                    </div>
-        
-                    <div class="text-center">
-                        <div class="text-lg font-semibold text-green-600 dark:text-green-400">{{ $matieresCompletes }}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">
-                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                Fusionnées
-                            @else
-                                Complètes
+                    {{-- ABSENTS --}}
+                    <div class="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Absents</span>
+                            <span class="text-2xl font-bold text-gray-600 dark:text-gray-400">{{ $nbAbsents }}</span>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-gray-600 dark:text-gray-400">Synchronisés</span>
+                                <span class="font-semibold {{ $pctAbsents >= 100 ? 'text-green-600' : 'text-orange-600' }}">
+                                    {{ $totalManchettesAbsentes }}/{{ $absentsSyncAttendus }} ({{ $pctAbsents }}%)
+                                </span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
+                                <div class="h-1.5 rounded-full {{ $pctAbsents >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
+                                     style="width: {{ min($pctAbsents, 100) }}%"></div>
+                            </div>
+                            @if($nbAbsents === 0)
+                                <div class="text-xs text-green-600 dark:text-green-400 mt-1">Aucun absent</div>
                             @endif
                         </div>
                     </div>
-    
-                    <div class="text-center">
-                        <div class="text-lg font-semibold text-orange-600 dark:text-orange-400">{{ $matieresIncompletes }}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">
-                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                Partielles
-                            @else
-                                Incomplètes
-                            @endif
-                        </div>
-                    </div>
+                </div>
 
-                    <div class="text-center">
-                        <div class="text-lg font-semibold text-blue-600 dark:text-blue-400">{{ $resultatsStats['etudiants'] ?? 0 }}</div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">Étudiants</div>
+                {{-- Métriques matières --}}
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                    <div class="text-center p-2 bg-white dark:bg-gray-800 rounded">
+                        <div class="text-lg font-bold text-green-600 dark:text-green-400">{{ $matieresCompletes }}</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Complètes</div>
                     </div>
-
-                    <div class="text-center">
-                        <div class="text-lg font-semibold {{ $statut === 'publie' ? 'text-green-600' : 'text-gray-600' }} dark:text-gray-400">
-                            {{ ucfirst($statut) }}
-                        </div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400">Statut</div>
+                    <div class="text-center p-2 bg-white dark:bg-gray-800 rounded">
+                        <div class="text-lg font-bold text-orange-600 dark:text-orange-400">{{ $matieresIncompletes }}</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Incomplètes</div>
+                    </div>
+                    <div class="text-center p-2 bg-white dark:bg-gray-800 rounded">
+                        <div class="text-lg font-bold text-gray-600 dark:text-gray-400">{{ $totalMatieres }}</div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Total EC</div>
                     </div>
                 </div>
 
-                {{-- Barre de progression compacte --}}
-                <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
-                    <div class="h-1.5 rounded-full transition-all duration-300 {{ $completionRate === 100 ? 'bg-green-500 dark:bg-green-400' : ($completionRate > 0 ? 'bg-yellow-500 dark:bg-yellow-400' : 'bg-red-500 dark:bg-red-400') }}" 
+                {{-- Barre progression globale --}}
+                <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                    <div class="h-2 rounded-full transition-all {{ $completionRate === 100 ? 'bg-green-500' : ($completionRate > 0 ? 'bg-yellow-500' : 'bg-red-500') }}" 
                          style="width: {{ $completionRate }}%"></div>
                 </div>
             </div>
 
-            {{-- Actions rapides dans le header --}}
+            {{-- Actions rapides --}}
             @if($statut !== 'initial')
                 <div class="flex flex-wrap items-center justify-between gap-2 p-3 bg-white border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-700">
                     <div class="text-sm text-gray-600 dark:text-gray-400">
                         @if($statut === 'verification' && $matieresCompletes > 0)
-                            ✅ Prêt pour la fusion
+                            Prêt pour la fusion
                         @elseif($statut === 'verification')
-                            ⚠️ Aucune matière complète
+                            Aucune matière complète
                         @elseif($statut === 'fusion')
-                            🔄 Fusion étape {{ $etapeFusion }}/3
+                            Fusion étape {{ $etapeFusion }}/3
                         @elseif($statut === 'valide')
-                            ✅ Prêt pour publication
+                            Prêt pour publication
                         @elseif($statut === 'publie')
-                            🚀 Résultats publiés
+                            Résultats publiés
                         @elseif($statut === 'annule')
-                            ❌ Résultats annulés
+                            Résultats annulés
                         @endif
                     </div>
 
@@ -147,21 +256,21 @@
                             <button wire:click="confirmVerification"
                                     wire:loading.attr="disabled"
                                     class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 transition-colors disabled:opacity-50">
-                                🔍 Re-vérifier
+                                Re-vérifier
                             </button>
                         @endif
 
                         @if($statut === 'publie')
                             <a href="{{ route('resultats.finale') }}" 
                                class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 rounded-md hover:bg-green-200 transition-colors">
-                                👁️ Voir résultats
+                                Voir résultats
                             </a>
                         @endif
                     </div>
                 </div>
             @endif
 
-            {{-- Tableau détaillé optimisé --}}
+            {{-- Tableau détaillé par matière --}}
             @if(isset($rapportCoherence['data']) && !empty($rapportCoherence['data']))
                 <div class="bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
                     <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
@@ -174,19 +283,19 @@
                         <table class="min-w-full">
                             <thead class="bg-gray-50 dark:bg-gray-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
                                         Matière
                                     </th>
-                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
-                                        M
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400" title="Manchettes Présentes">
+                                        M.P
                                     </th>
-                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
-                                        C
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400" title="Manchettes Absentes">
+                                        M.A
                                     </th>
-                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
-                                        P
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400" title="Copies">
+                                        Cop.
                                     </th>
-                                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
                                         Statut
                                     </th>
                                 </tr>
@@ -194,71 +303,56 @@
                             <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 @php
                                     $completes = collect($rapportCoherence['data'])->where('complet', true);
-                                    $partielles = collect($rapportCoherence['data'])->where('complet', false)->where(function($item) {
-                                        return ($item['manchettes_count'] ?? 0) > 0 || ($item['copies_count'] ?? 0) > 0;
+                                    $partielles = collect($rapportCoherence['data'])->where('complet', false)->filter(function($item) {
+                                        return ($item['manchettes_presentes'] ?? 0) > 0 || ($item['copies_count'] ?? 0) > 0;
                                     });
-                                    $vides = collect($rapportCoherence['data'])->where('complet', false)->where(function($item) {
-                                        return ($item['manchettes_count'] ?? 0) === 0 && ($item['copies_count'] ?? 0) === 0;
+                                    $vides = collect($rapportCoherence['data'])->where('complet', false)->filter(function($item) {
+                                        return ($item['manchettes_presentes'] ?? 0) === 0 && ($item['copies_count'] ?? 0) === 0;
                                     });
                                     $orderedData = $completes->concat($partielles)->concat($vides);
                                 @endphp
 
                                 @forelse($orderedData as $rapport)
-                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {{ $rapport['complet'] ? 'bg-green-50 dark:bg-green-900/10' : '' }}">
+                                    @php
+                                        $nbMP = $rapport['manchettes_presentes'] ?? 0;
+                                        $nbMA = $rapport['manchettes_absentes'] ?? 0;
+                                        $nbC = $rapport['copies_count'] ?? 0;
+                                        $attenduP = $rapport['etudiants_presents'] ?? 0;
+                                        $attenduA = $rapport['etudiants_absents_attendus'] ?? 0;
+                                        $estComplet = $rapport['complet'] ?? false;
+                                    @endphp
+                                    
+                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {{ $estComplet ? 'bg-green-50 dark:bg-green-900/10' : '' }}">
                                         <td class="px-4 py-2">
                                             <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                 {{ $rapport['ec_nom'] ?? 'N/A' }}
                                             </div>
                                         </td>
-                                            
-                                        <td class="px-3 py-2 text-center text-sm {{ ($rapport['manchettes_count'] ?? 0) > 0 ? 'text-green-600 font-semibold' : 'text-gray-400' }} dark:text-gray-100">
-                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                @if(isset($rapport['type_fusion']) && $rapport['type_fusion'] === 'recuperation_auto')
-                                                    {{-- AFFICHAGE SPÉCIAL pour récupération automatique --}}
-                                                    <span class="px-1 py-0.5 text-xs bg-blue-100 text-blue-800 rounded dark:bg-blue-900 dark:text-blue-200">
-                                                        AUTO
-                                                    </span>
-                                                @else
-                                                    {{-- Affichage normal pour fusion avec rattrapage --}}
-                                                    {{ $rapport['manchettes_count'] ?? 0 }}
-                                                @endif
-                                            @else
-                                                {{ $rapport['manchettes_count'] ?? 0 }}
-                                            @endif
-                                        </td>
-                                                                                
-                                        <td class="px-3 py-2 text-center text-sm {{ ($rapport['copies_count'] ?? 0) > 0 ? 'text-blue-600 font-semibold' : 'text-gray-400' }} dark:text-gray-100">
-                                            {{ $rapport['copies_count'] ?? 0 }}
+                                        
+                                        <td class="px-3 py-2 text-center text-sm {{ $nbMP >= $attenduP ? 'text-green-600 font-semibold' : 'text-orange-600' }}">
+                                            {{ $nbMP }}/{{ $attenduP }}
                                         </td>
 
-                                        <td class="px-3 py-2 text-center text-sm {{ ($rapport['etudiants_presents'] ?? 0) > 0 ? 'text-purple-600 font-semibold' : 'text-gray-400' }} dark:text-gray-100">
-                                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                                @if(isset($rapport['type_fusion']) && $rapport['type_fusion'] === 'recuperation_auto')
-                                                    {{-- Pour récupération auto, afficher le nombre de notes récupérées --}}
-                                                    {{ $rapport['notes_recuperees_auto'] ?? $rapport['total_etudiants'] ?? 0 }}
-                                                @else
-                                                    {{-- Pour fusion normale avec rattrapage --}}
-                                                    {{ $rapport['total_etudiants'] ?? $rapport['etudiants_presents'] ?? 0 }}
-                                                @endif
-                                            @else
-                                                {{-- Session normale : toujours afficher etudiants_presents --}}
-                                                {{ $rapport['etudiants_presents'] ?? $rapport['total_etudiants'] ?? 0 }}
-                                            @endif
-                                            
+                                        <td class="px-3 py-2 text-center text-sm {{ $nbMA >= $attenduA ? 'text-green-600 font-semibold' : 'text-gray-400' }}">
+                                            {{ $nbMA }}/{{ $attenduA }}
+                                        </td>
+
+                                        <td class="px-3 py-2 text-center text-sm {{ $nbC >= $attenduP ? 'text-green-600 font-semibold' : 'text-orange-600' }}">
+                                            {{ $nbC }}/{{ $attenduP }}
                                         </td>
 
                                         <td class="px-4 py-2 text-center">
-                                            @if($rapport['complet'] ?? false)
+                                            @if($estComplet)
                                                 <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-green-800 bg-green-100 rounded dark:bg-green-900 dark:text-green-300">
-                                                    ✓
+                                                    Complet
                                                 </span>
-                                            @elseif(($rapport['manchettes_count'] ?? 0) > 0 || ($rapport['copies_count'] ?? 0) > 0)
+                                            @elseif($nbMP > 0 || $nbC > 0)
                                                 <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-yellow-800 bg-yellow-100 rounded dark:bg-yellow-900 dark:text-yellow-300">
-                                                    ⚠
+                                                    Partiel
                                                 </span>
                                             @else
                                                 <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-gray-500 bg-gray-100 rounded dark:bg-gray-700 dark:text-gray-400">
-                                                    -
+                                                    Vide
                                                 </span>
                                             @endif
                                         </td>
@@ -274,19 +368,12 @@
                         </table>
                     </div>
 
-                    {{-- Légende compacte --}}
+                    {{-- Légende --}}
                     <div class="px-4 py-2 bg-gray-50 border-t border-gray-200 dark:bg-gray-900 dark:border-gray-700">
                         <div class="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-400">
-                            @if($sessionActive && $sessionActive->type === 'Rattrapage')
-                                <span><strong>M:</strong> Notes normales / AUTO = récupération auto</span>
-                                <span><strong>C:</strong> Copies rattrapage</span>
-                                <span><strong>P:</strong> Notes fusionnées</span>
-                            @else
-                                <span><strong>M:</strong> Manchettes</span>
-                                <span><strong>C:</strong> Copies</span>
-                                <span><strong>P:</strong> Présents</span>
-                            @endif
-                            <span class="ml-auto">{{ $matieresCompletes }} complète(s) sur {{ $totalMatieres }}</span>
+                            <span><strong>M.P:</strong> Manchettes Présentes</span>
+                            <span><strong>M.A:</strong> Manchettes Absentes</span>
+                            <span><strong>Cop.:</strong> Copies notées</span>
                         </div>
                     </div>
                 </div>

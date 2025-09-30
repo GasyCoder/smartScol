@@ -47,6 +47,102 @@ class PresenceExamen extends Model
         });
     }
 
+
+    /**
+     * Récupère les statistiques de présence pour un examen
+     */
+    public static function getStatistiquesExamen($examenId, $sessionId)
+    {
+        // Présence globale (ec_id = null)
+        $presenceGlobale = self::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->whereNull('ec_id')
+            ->first();
+
+        if ($presenceGlobale) {
+            return [
+                'presents' => $presenceGlobale->etudiants_presents,
+                'absents' => is_array($presenceGlobale->etudiants_absents) 
+                    ? count($presenceGlobale->etudiants_absents) 
+                    : 0,
+                'total_attendu' => $presenceGlobale->total_attendu,
+                'source' => 'presence_globale'
+            ];
+        }
+
+        // Fallback : calculer depuis les manchettes
+        return self::calculerDepuisManchettes($examenId, $sessionId);
+    }
+
+    /**
+     * Calcule la présence depuis les manchettes si pas de données PresenceExamen
+     */
+    private static function calculerDepuisManchettes($examenId, $sessionId)
+    {
+        // Compter les manchettes présentes (is_absent = false)
+        $presents = Manchette::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->whereHas('codeAnonymat', function($q) {
+                $q->where('is_absent', false)
+                ->orWhereNull('is_absent');
+            })
+            ->distinct('etudiant_id')
+            ->count('etudiant_id');
+
+        // Compter les manchettes absentes (is_absent = true)
+        $absents = Manchette::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->whereHas('codeAnonymat', function($q) {
+                $q->where('is_absent', true);
+            })
+            ->distinct('etudiant_id')
+            ->count('etudiant_id');
+
+        // Total théorique
+        $examen = Examen::find($examenId);
+        $totalAttendu = 0;
+        if ($examen) {
+            $totalAttendu = Etudiant::where('niveau_id', $examen->niveau_id)
+                ->where('parcours_id', $examen->parcours_id)
+                ->where('is_active', true)
+                ->count();
+        }
+
+        return [
+            'presents' => $presents,
+            'absents' => $absents,
+            'total_attendu' => $totalAttendu,
+            'source' => 'calcule_manchettes'
+        ];
+    }
+
+    /**
+     * Récupère les stats de présence pour une EC spécifique
+     */
+    public static function getStatistiquesEC($examenId, $sessionId, $ecId)
+    {
+        // Présence spécifique à l'EC
+        $presenceEC = self::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->where('ec_id', $ecId)
+            ->first();
+
+        if ($presenceEC) {
+            return [
+                'presents' => $presenceEC->etudiants_presents,
+                'absents' => is_array($presenceEC->etudiants_absents) 
+                    ? count($presenceEC->etudiants_absents) 
+                    : 0,
+                'total_attendu' => $presenceEC->total_attendu,
+                'source' => 'presence_ec_specifique'
+            ];
+        }
+
+        // Fallback : utiliser la présence globale
+        return self::getStatistiquesExamen($examenId, $sessionId);
+    }
+
+
     /**
      * Relations identiques au pattern de Manchette
      */

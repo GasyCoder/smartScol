@@ -1,3 +1,4 @@
+{{-- vue blade principale --}}
 <div class="container px-4 py-6 mx-auto">
     {{-- ========================================
          EN-TÊTE AVEC TITRE ET ACTIONS

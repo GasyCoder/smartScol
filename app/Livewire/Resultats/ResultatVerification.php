@@ -1295,12 +1295,12 @@ class ResultatVerification extends Component
                 return;
             }
             
-            if ($this->totalResultats > 10000) {
+            if ($this->totalResultats > 50000) {
                 toastr()->warning('Export volumineux détecté. Cela peut prendre du temps...');
             }
 
             ini_set('memory_limit', '2048M');
-            ini_set('max_execution_time', 300); // 5 minutes
+            ini_set('max_execution_time', 800); // 800 seconds (13 minutes and 20 seconds)
             
             // Utiliser la nouvelle méthode pour récupérer TOUTES les données
             $resultatsEnrichis = $this->prepareDataForExportComplet();

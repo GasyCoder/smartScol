@@ -33,10 +33,10 @@ class CopieSaisie extends Component
     public bool $modeSync = false;
 
     // SÉLECTIONS
-    public ?int $niveauId = null;
-    public ?int $parcoursId = null;
-    public ?int $examenId = null;
-    public ?int $ecId = null;
+    public $niveauId = null;
+    public $parcoursId = null;
+    public $examenId = null;
+    public $ecId = null;
 
     // OBJETS SÉLECTIONNÉS
     public ?Niveau $niveauSelected = null;
@@ -90,6 +90,27 @@ class CopieSaisie extends Component
         'perPage' => ['except' => 12],
     ];
 
+
+    public function updatedNiveauId($value)
+    {
+        $this->niveauId = $value ? (int) $value : null;
+    }
+
+    public function updatedParcoursId($value)
+    {
+        $this->parcoursId = $value ? (int) $value : null;
+    }
+
+    public function updatedExamenId($value)
+    {
+        $this->examenId = $value ? (int) $value : null;
+    }
+
+    public function updatedEcId($value)
+    {
+        $this->ecId = $value ? (int) $value : null;
+    }
+
     // VALIDATION
     protected function rules()
     {
@@ -117,6 +138,12 @@ class CopieSaisie extends Component
         'note.max' => 'La note ne peut pas dépasser 20.',
     ];
 
+    protected $casts = [
+        'niveauId' => 'integer',
+        'parcoursId' => 'integer',
+        'examenId' => 'integer',
+        'ecId' => 'integer',
+    ];
 
     public function mount(): void
     {

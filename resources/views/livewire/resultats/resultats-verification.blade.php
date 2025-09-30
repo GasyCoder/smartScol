@@ -107,7 +107,7 @@
                             </div>
 
                             <!-- Avertissement pour gros exports stylisé -->
-                            @if($totalResultats > 1000)
+                            @if($totalResultats > 50000)
                                 <div class="flex items-center px-3 py-2 space-x-2 bg-amber-50 border border-amber-200 rounded-lg shadow-sm dark:bg-amber-900/20 dark:border-amber-700">
                                     <em class="text-amber-600 icon ni ni-alert-circle dark:text-amber-400"></em>
                                     <span class="text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -119,12 +119,12 @@
                             <!-- Bouton d'export Excel uniquement -->
                             <div class="flex space-x-2">
                                 <button wire:click="exportExcel"
-                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 bg-green-600 rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 {{ $totalResultats > 5000 ? 'opacity-50 cursor-not-allowed' : '' }}"
+                                        class="inline-flex items-center px-4 py-2 text-sm font-medium text-white transition-all duration-200 bg-green-600 rounded-lg shadow-md hover:bg-green-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 {{ $totalResultats > 50000 ? 'opacity-50 cursor-not-allowed' : '' }}"
                                         wire:loading.attr="disabled"
-                                        {{ $totalResultats > 5000 ? 'disabled title="Trop de résultats - Filtrez pour réduire la taille"' : '' }}>
+                                        {{ $totalResultats > 50000 ? 'disabled title="Trop de résultats - Filtrez pour réduire la taille"' : '' }}>
                                     <em class="mr-2 icon ni ni-file-xls"></em>
                                     Export Excel
-                                    @if($totalResultats > 1000)
+                                    @if($totalResultats > 50000)
                                         <span class="ml-1 text-xs opacity-75">({{ number_format($totalResultats) }})</span>
                                     @endif
                                     <span wire:loading wire:target="exportExcel" class="ml-2 animate-spin icon ni ni-loader"></span>

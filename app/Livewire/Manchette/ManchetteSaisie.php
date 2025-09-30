@@ -1790,129 +1790,111 @@ class ManchetteSaisie extends Component
             $sessionId = Manchette::getCurrentSessionId();
             $sessionType = Manchette::getCurrentSessionType();
             $lettresCode = $this->genererLettresCode();
+            $now = now();
             
-            // 1️⃣ RÉCUPÉRER TOUS LES ÉTUDIANTS INSCRITS
-            $query = Etudiant::where('niveau_id', $this->niveauSelected->id)
-                ->where('is_active', true);
-                
-            if ($this->parcoursSelected) {
-                $query->where('parcours_id', $this->parcoursSelected->id);
-            }
-            
-            if ($sessionType === 'rattrapage' && !empty($this->statistiquesRattrapage)) {
-                $etudiantsEligiblesIds = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
-                    ->pluck('etudiant_id')
-                    ->toArray();
-                
-                $query->whereIn('id', $etudiantsEligiblesIds);
-            }
-            
-            $tousLesEtudiants = $query->get();
-            
-            // 2️⃣ RÉCUPÉRER LES ÉTUDIANTS QUI ONT DÉJÀ UNE MANCHETTE (une seule requête)
-            $etudiantsPresentsIds = DB::table('manchettes')
-                ->join('codes_anonymat', 'manchettes.code_anonymat_id', '=', 'codes_anonymat.id')
-                ->where('manchettes.examen_id', $this->examenSelected->id)
-                ->where('manchettes.session_exam_id', $sessionId)
-                ->where('codes_anonymat.ec_id', $this->ecSelected->id)
-                ->whereNotNull('manchettes.etudiant_id')
-                ->pluck('manchettes.etudiant_id')
+            // ✅ OPTIMISATION 1: Requête SQL directe pour trouver les absents (1 seule requête)
+            $etudiantsAbsentsIds = DB::table('etudiants as e')
+                ->select('e.id')
+                ->where('e.niveau_id', $this->niveauSelected->id)
+                ->where('e.is_active', true)
+                ->when($this->parcoursSelected, fn($q) => $q->where('e.parcours_id', $this->parcoursSelected->id))
+                ->when($sessionType === 'rattrapage' && !empty($this->statistiquesRattrapage), function($q) {
+                    $eligiblesIds = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
+                        ->pluck('etudiant_id')->toArray();
+                    if (!empty($eligiblesIds)) {
+                        $q->whereIn('e.id', $eligiblesIds);
+                    }
+                })
+                ->whereNotExists(function($q) use ($sessionId) {
+                    $q->select(DB::raw(1))
+                    ->from('manchettes as m')
+                    ->join('codes_anonymat as ca', 'm.code_anonymat_id', '=', 'ca.id')
+                    ->whereColumn('m.etudiant_id', 'e.id')
+                    ->where('m.examen_id', $this->examenSelected->id)
+                    ->where('m.session_exam_id', $sessionId)
+                    ->where('ca.ec_id', $this->ecSelected->id);
+                })
+                ->pluck('e.id')
                 ->toArray();
             
-            // 3️⃣ IDENTIFIER LES ABSENTS
-            $etudiantsAbsents = $tousLesEtudiants->whereNotIn('id', $etudiantsPresentsIds);
-            
-            if ($etudiantsAbsents->isEmpty()) {
+            if (empty($etudiantsAbsentsIds)) {
                 $this->showMessage('Aucun étudiant absent à synchroniser.', 'info');
                 toastr()->info('Tous les étudiants ont déjà une manchette');
                 return;
             }
             
-            // 4️⃣ RÉCUPÉRER TOUS LES CODES EXISTANTS (une seule requête)
-            $codesExistants = DB::table('codes_anonymat')
+            // ✅ OPTIMISATION 2: Trouver le prochain numéro libre (1 seule requête)
+            $maxSequence = DB::table('codes_anonymat')
                 ->where('examen_id', $this->examenSelected->id)
                 ->where('session_exam_id', $sessionId)
                 ->where('ec_id', $this->ecSelected->id)
                 ->where('code_complet', 'LIKE', $lettresCode . '%')
-                ->pluck('code_complet')
-                ->toArray();
-
-            $numerosExistants = [];
-            foreach ($codesExistants as $codeComplet) {
-                if (preg_match('/^' . preg_quote($lettresCode, '/') . '([0-9]+)$/', $codeComplet, $matches)) {
-                    $numerosExistants[] = (int) $matches[1];
-                }
+                ->max('sequence') ?? 0;
+            
+            // ✅ OPTIMISATION 3: Insertion par chunks (évite saturation mémoire)
+            $chunkSize = 100;
+            $totalCrees = 0;
+            $prochainNumero = $maxSequence + 1;
+            
+            foreach (array_chunk($etudiantsAbsentsIds, $chunkSize) as $chunkIds) {
+                DB::transaction(function() use ($chunkIds, &$prochainNumero, $lettresCode, $sessionId, $now, &$totalCrees) {
+                    $codesData = [];
+                    $codeCompletsMap = [];
+                    
+                    // Préparer les codes
+                    foreach ($chunkIds as $etudiantId) {
+                        $codeComplet = $lettresCode . $prochainNumero;
+                        $codesData[] = [
+                            'examen_id' => $this->examenSelected->id,
+                            'session_exam_id' => $sessionId,
+                            'ec_id' => $this->ecSelected->id,
+                            'code_complet' => $codeComplet,
+                            'sequence' => $prochainNumero,
+                            'is_absent' => true,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                        $codeCompletsMap[$codeComplet] = $etudiantId;
+                        $prochainNumero++;
+                    }
+                    
+                    // Insertion en masse des codes
+                    DB::table('codes_anonymat')->insert($codesData);
+                    
+                    // ✅ OPTIMISATION 4: Récupération efficace des IDs avec une seule requête
+                    $codesIds = DB::table('codes_anonymat')
+                        ->whereIn('code_complet', array_keys($codeCompletsMap))
+                        ->where('examen_id', $this->examenSelected->id)
+                        ->where('session_exam_id', $sessionId)
+                        ->where('ec_id', $this->ecSelected->id)
+                        ->pluck('id', 'code_complet')
+                        ->toArray();
+                    
+                    // Préparer les manchettes
+                    $manchettesData = [];
+                    foreach ($codeCompletsMap as $codeComplet => $etudiantId) {
+                        $manchettesData[] = [
+                            'etudiant_id' => $etudiantId,
+                            'code_anonymat_id' => $codesIds[$codeComplet],
+                            'examen_id' => $this->examenSelected->id,
+                            'session_exam_id' => $sessionId,
+                            'saisie_par' => Auth::id(),
+                            'date_saisie' => $now,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                    }
+                    
+                    // Insertion en masse des manchettes
+                    DB::table('manchettes')->insert($manchettesData);
+                    $totalCrees += count($manchettesData);
+                }, 3); // 3 tentatives en cas d'erreur
             }
-
-            // 5️⃣ PRÉPARER TOUTES LES DONNÉES EN MÉMOIRE
-            $codesAInserer = [];
-            $manchettesAInserer = [];
-            $prochainNumero = 1;
-            $now = now();
-
-            foreach ($etudiantsAbsents as $etudiantAbsent) {
-                while (in_array($prochainNumero, $numerosExistants)) {
-                    $prochainNumero++;
-                }
-
-                $codeComplet = $lettresCode . $prochainNumero;
-
-                $codesAInserer[] = [
-                    'examen_id' => $this->examenSelected->id,
-                    'session_exam_id' => $sessionId,
-                    'ec_id' => $this->ecSelected->id,
-                    'code_complet' => $codeComplet,
-                    'sequence' => $prochainNumero,
-                    'is_absent' => true,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-
-                $manchettesAInserer[] = [
-                    'etudiant_id' => $etudiantAbsent->id,
-                    'code_complet' => $codeComplet, // Temporaire pour la jointure
-                    'examen_id' => $this->examenSelected->id,
-                    'session_exam_id' => $sessionId,
-                    'saisie_par' => Auth::id(),
-                    'date_saisie' => $now,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-
-                $numerosExistants[] = $prochainNumero;
-                $prochainNumero++;
-            }
-
-            // 6️⃣ INSERTION EN MASSE (2 requêtes au lieu de N*2)
-            DB::transaction(function() use ($codesAInserer, $manchettesAInserer) {
-                // Insérer tous les codes d'un coup
-                DB::table('codes_anonymat')->insert($codesAInserer);
-
-                // Récupérer les IDs des codes fraîchement insérés
-                $codesMap = DB::table('codes_anonymat')
-                    ->where('examen_id', $this->examenSelected->id)
-                    ->where('session_exam_id', $manchettesAInserer[0]['session_exam_id'])
-                    ->where('ec_id', $this->ecSelected->id)
-                    ->whereIn('code_complet', collect($manchettesAInserer)->pluck('code_complet')->toArray())
-                    ->pluck('id', 'code_complet')
-                    ->toArray();
-
-                // Remplacer code_complet par code_anonymat_id
-                foreach ($manchettesAInserer as &$manchette) {
-                    $manchette['code_anonymat_id'] = $codesMap[$manchette['code_complet']];
-                    unset($manchette['code_complet']);
-                }
-
-                // Insérer toutes les manchettes d'un coup
-                DB::table('manchettes')->insert($manchettesAInserer);
-            });
-
-            $manchettesCreees = count($codesAInserer);
 
             $this->loadStatistiques();
             $this->progressCount = $this->getManchettesCount();
 
-            $successMessage = "Synchronisation réussie : {$manchettesCreees} manchette(s) créée(s) pour les étudiants absents";
+            $successMessage = "✅ Synchronisation réussie : {$totalCrees} manchette(s) créée(s) pour les étudiants absents";
             $this->showMessage($successMessage, 'success');
             
             toastr()->success($successMessage, [
@@ -1921,7 +1903,7 @@ class ManchetteSaisie extends Component
             ]);
 
             $this->dispatch('manchettes-absents-synchronisees', [
-                'total_crees' => $manchettesCreees,
+                'total_crees' => $totalCrees,
                 'session_type' => ucfirst($sessionType),
                 'matiere' => $this->ecSelected->nom ?? 'Matière inconnue',
             ]);
@@ -1929,14 +1911,14 @@ class ManchetteSaisie extends Component
         } catch (\Exception $e) {
             $errorMessage = 'Erreur lors de la synchronisation : ' . $e->getMessage();
             $this->showMessage($errorMessage, 'error');
-            toastr()->error($errorMessage, [
-                'timeOut' => 8000
-            ]);
+            toastr()->error($errorMessage, ['timeOut' => 8000]);
             
-            logger('Erreur synchroniserManchettesAbsents: ' . $e->getMessage(), [
+            \Log::error('Erreur synchroniserManchettesAbsents', [
                 'examen_id' => $this->examenSelected->id,
                 'ec_id' => $this->ecSelected->id,
-                'session_id' => $sessionId
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
     }
@@ -2097,6 +2079,49 @@ class ManchetteSaisie extends Component
         } catch (\Exception $e) {
             logger('Erreur getStatistiquesEC: ' . $e->getMessage());
             return ['presents' => 0, 'absents' => 0];
+        }
+    }
+
+
+    /**
+     * Actualise les données de la page de saisie sans changer d'étape
+     */
+    public function actualiserSaisie()
+    {
+        try {
+            // Recharger toutes les statistiques
+            $this->loadStatistiques();
+            $this->calculateNextSequence();
+            $this->loadPresenceData();
+            
+            // Recalculer le total d'étudiants
+            $this->calculateTotalEtudiants();
+            
+            // Vider le cache si présent
+            if ($this->examenSelected && $this->ecSelected) {
+                $sessionId = Manchette::getCurrentSessionId();
+                Cache::forget("manchettes_saisies_{$this->examenSelected->id}_{$this->ecSelected->id}_{$sessionId}");
+            }
+            
+            // Réinitialiser le formulaire
+            $this->resetSaisieComplete();
+            
+            // Forcer le rafraîchissement du composant
+            //$this->dispatch('$refresh');
+            return redirect()->route('manchettes.saisie', request()->query());
+            
+            $message = '✅ Page actualisée : ' . $this->progressCount . ' manchette(s) saisie(s)';
+            $this->showMessage($message, 'success');
+            toastr()->success($message, ['timeOut' => 2000]);
+            
+            // Focus sur le champ matricule
+            $this->dispatch('focus-matricule-input');
+            
+        } catch (\Exception $e) {
+            $errorMessage = 'Erreur lors de l\'actualisation : ' . $e->getMessage();
+            $this->showMessage($errorMessage, 'error');
+            toastr()->error($errorMessage);
+            logger('Erreur actualiserSaisie: ' . $e->getMessage());
         }
     }
 

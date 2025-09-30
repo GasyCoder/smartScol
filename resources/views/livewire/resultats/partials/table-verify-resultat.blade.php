@@ -43,15 +43,18 @@
                 <!-- Carte Étudiant -->
                 <div class="mx-6 mt-6 mb-4 overflow-hidden bg-slate-50 border border-slate-200 rounded-2xl shadow-lg dark:bg-slate-800 dark:border-slate-700 hover:shadow-xl transition-all duration-300">
                     <!-- En-tête étudiant -->
-                    <div class="px-6 py-4 bg-primary-600 text-white">
+                    <div class="px-6 py-4 dark:bg-gray-800 bg-primary-600 dark:text-yellow-400 text-gray-100">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center space-x-4">
+                                <!-- Icône utilisateur au lieu du numéro -->
                                 <div class="flex items-center justify-center w-10 h-10 bg-white bg-opacity-20 rounded-full backdrop-blur-sm">
-                                    <span class="text-lg font-bold">{{ $index }}</span>
+                                    <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                    </svg>
                                 </div>
                                 <div>
                                     <h4 class="text-xl font-bold">{{ $firstResultat['prenom'] }} {{ $firstResultat['nom'] }}</h4>
-                                    <p class="text-blue-100">Matricule: {{ $matricule }}</p>
+                                    <p class="text-blue-100 font-bold">N° matricule: <u>{{ $matricule }}</u></p>
                                 </div>
                             </div>
                             <div class="text-right">
@@ -215,6 +218,7 @@
                                                         
                                                         <!-- Bouton modifier -->
                                                         <button wire:click="startEditing('{{ $resultat['unique_key'] }}')" 
+                                                                wire:key="edit-{{ $resultat['unique_key'] }}"
                                                                 class="px-3 py-2 text-xs font-medium text-primary-700 bg-primary-100 rounded-lg shadow-sm hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 dark:bg-primary-900 dark:text-primary-200 dark:hover:bg-primary-800">
                                                             <em class="mr-1 icon ni ni-edit"></em>
                                                             Modifier
