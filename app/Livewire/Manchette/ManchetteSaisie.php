@@ -2107,8 +2107,8 @@ class ManchetteSaisie extends Component
             $this->resetSaisieComplete();
             
             // Forcer le rafraîchissement du composant
-            //$this->dispatch('$refresh');
-            return redirect()->route('manchettes.saisie', request()->query());
+            $this->dispatch('$refresh');
+            //return redirect()->route('manchettes.saisie', request()->query());
             
             $message = '✅ Page actualisée : ' . $this->progressCount . ' manchette(s) saisie(s)';
             $this->showMessage($message, 'success');
