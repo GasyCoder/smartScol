@@ -109,7 +109,7 @@
 
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
                 @forelse($parcours as $parcour)
-                    <button wire:click="$set('parcoursId', {{ $parcour->id }})" 
+                    <button wire:click="$set('parcoursId', {{ $parcour->id }})" wire:key="setParcour-({{ $parcour->id }})"
                             class="group p-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-all duration-200">
                         <div class="flex items-center space-x-4">
                             <div class="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center group-hover:bg-green-700 transition-colors">

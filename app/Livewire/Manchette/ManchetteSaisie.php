@@ -872,7 +872,7 @@ class ManchetteSaisie extends Component
                     }
                     
                     $etudiantExistant = $manchetteExistante->etudiant;
-                    $nomExistant = $etudiantExistant ? ($etudiantExistant->nom . ' ' . ($etudiantExistant->prenoms ?? '')) : 'Étudiant inconnu';
+                    $nomExistant = $etudiantExistant ? ($etudiantExistant->nom . ' ' . ($etudiantExistant->prenom ?? '')) : 'Étudiant inconnu';
                     $this->codeValidationErrors[] = "Ce code d'anonymat est déjà utilisé par {$nomExistant}";
                 }
             }
@@ -1081,8 +1081,8 @@ class ManchetteSaisie extends Component
 
     public function sauvegarderManchette()
     {
+        // Validations rapides
         if (!$this->etudiantTrouve || !is_object($this->etudiantTrouve)) {
-            //$this->showMessage('Étudiant non trouvé. Vérifiez le matricule.', 'error');
             return;
         }
 
@@ -1101,201 +1101,122 @@ class ManchetteSaisie extends Component
             return;
         }
 
-        // Validation finale du code anonymat
-        $this->validateCodeAnonymats();
-        if (!empty($this->codeValidationErrors)) {
-            $errorMessage = 'Code anonymat invalide : ' . implode(', ', $this->codeValidationErrors);
-            $this->showMessage($errorMessage, 'error');
-            return;
-        }
-
         try {
             $sessionId = Manchette::getCurrentSessionId();
-            $sessionType = Manchette::getCurrentSessionType();
-            $sessionLibelle = ucfirst($sessionType);
-            
-            if (!$sessionId) {
-                throw new \Exception("Aucune session active trouvée.");
-            }
-
-            if (!$this->salleId) {
-                throw new \Exception('Salle non trouvée pour cet examen.');
-            }
-
             $etudiantId = (int) $this->etudiantTrouve->id;
 
-            // Vérifications anti-doublons
-            $existingManchette = Manchette::where('etudiant_id', $etudiantId)
-                ->where('examen_id', $this->examenSelected->id)
-                ->where('session_exam_id', $sessionId)
-                ->whereHas('codeAnonymat', function ($query) {
-                    $query->where('ec_id', $this->ecSelected->id);
-                })
-                ->with('codeAnonymat')
-                ->first();
+            // ✅ CORRIGÉ : e.prenom au lieu de e.prenoms
+            $verifications = DB::select("
+                SELECT 
+                    m.id as manchette_id,
+                    m.deleted_at,
+                    ca.code_complet,
+                    ca.id as code_id,
+                    e.nom,
+                    e.prenom
+                FROM manchettes m
+                INNER JOIN codes_anonymat ca ON m.code_anonymat_id = ca.id
+                LEFT JOIN etudiants e ON m.etudiant_id = e.id
+                WHERE m.examen_id = ? 
+                    AND m.session_exam_id = ?
+                    AND ca.ec_id = ?
+                    AND (
+                        (m.etudiant_id = ? AND m.deleted_at IS NULL)
+                        OR ca.code_complet = ?
+                    )
+                LIMIT 5
+            ", [
+                $this->examenSelected->id,
+                $sessionId,
+                $this->ecSelected->id,
+                $etudiantId,
+                $this->codeAnonymatSaisi
+            ]);
 
-            if ($existingManchette) {
-                $codeExistant = $existingManchette->codeAnonymat->code_complet ?? 'Code inconnu';
-                throw new \Exception("Cet étudiant a déjà une manchette pour cette matière en session {$sessionLibelle} (Code: {$codeExistant}).");
-            }
-
-            if ($sessionType === 'rattrapage') {
-                // Vérifier que cet étudiant est éligible au rattrapage pour cette EC
-                if (!in_array($this->ecSelected->id, $this->ecsDisponibles ?? [])) {
-                    throw new \Exception("Cette matière n'est pas disponible en rattrapage.");
+            $manchetteSupprimeeTrouvee = null;
+            
+            // Analyser les résultats
+            foreach ($verifications as $verif) {
+                if ($verif->deleted_at && $verif->code_complet === $this->codeAnonymatSaisi) {
+                    $manchetteSupprimeeTrouvee = $verif;
+                    continue;
                 }
                 
-                // Vérifier que l'étudiant fait partie de ceux identifiés comme éligibles
-                $etudiantsEligibles = collect($this->statistiquesRattrapage['detail_etudiants'] ?? [])
-                    ->pluck('etudiant_id')->toArray();
+                if (!$verif->deleted_at && $verif->code_complet !== $this->codeAnonymatSaisi) {
+                    throw new \Exception("Cet étudiant a déjà une manchette (Code: {$verif->code_complet}).");
+                }
                 
-                if (!in_array($etudiantId, $etudiantsEligibles)) {
-                    throw new \Exception("Cet étudiant n'est pas éligible au rattrapage pour cette matière.");
+                // ✅ CORRIGÉ : $verif->prenom au lieu de $verif->prenoms
+                if (!$verif->deleted_at && $verif->code_complet === $this->codeAnonymatSaisi && $verif->nom) {
+                    $nomExistant = trim($verif->nom . ' ' . ($verif->prenom ?? ''));
+                    throw new \Exception("Ce code ({$this->codeAnonymatSaisi}) est déjà utilisé par {$nomExistant}.");
                 }
             }
 
-            // Vérifier que le code anonymat saisi n'est pas déjà utilisé
-            $existingCode = CodeAnonymat::where('examen_id', $this->examenSelected->id)
-                ->where('session_exam_id', $sessionId)
-                ->where('ec_id', $this->ecSelected->id)
-                ->where('code_complet', $this->codeAnonymatSaisi)
-                ->whereHas('allManchettes', function($query) use ($sessionId) {
-                    $query->where('session_exam_id', $sessionId);
-                })
-                ->with(['allManchettes.etudiant'])
-                ->first();
+            // Transaction ultra-rapide
+            DB::transaction(function() use ($sessionId, $etudiantId, $manchetteSupprimeeTrouvee) {
+                if ($manchetteSupprimeeTrouvee) {
+                    DB::table('manchettes')
+                        ->where('id', $manchetteSupprimeeTrouvee->manchette_id)
+                        ->update([
+                            'etudiant_id' => $etudiantId,
+                            'saisie_par' => Auth::id(),
+                            'date_saisie' => now(),
+                            'deleted_at' => null,
+                            'updated_at' => now()
+                        ]);
+                } else {
+                    $codeId = DB::table('codes_anonymat')->insertGetId([
+                        'examen_id' => $this->examenSelected->id,
+                        'session_exam_id' => $sessionId,
+                        'ec_id' => $this->ecSelected->id,
+                        'code_complet' => $this->codeAnonymatSaisi,
+                        'sequence' => (int) substr($this->codeAnonymatSaisi, 2),
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
 
-            if ($existingCode && $existingCode->allManchettes->isNotEmpty()) {
-                $manchetteExistante = $existingCode->allManchettes->first();
-                $etudiantExistant = $manchetteExistante->etudiant;
-                $nomExistant = ($etudiantExistant->nom ?? 'Nom inconnu') . ' ' . ($etudiantExistant->prenoms ?? '');
-                throw new \Exception("Ce code d'anonymat ({$this->codeAnonymatSaisi}) est déjà utilisé en session {$sessionLibelle} par l'étudiant {$nomExistant}.");
-            }
+                    DB::table('manchettes')->insert([
+                        'etudiant_id' => $etudiantId,
+                        'code_anonymat_id' => $codeId,
+                        'examen_id' => $this->examenSelected->id,
+                        'session_exam_id' => $sessionId,
+                        'saisie_par' => Auth::id(),
+                        'date_saisie' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                }
+            });
 
-            // Gestion manchettes supprimées
-            $deletedManchette = Manchette::withTrashed()
-                ->where('examen_id', $this->examenSelected->id)
-                ->where('session_exam_id', $sessionId)
-                ->whereHas('codeAnonymat', function($query) {
-                    $query->where('ec_id', $this->ecSelected->id)
-                        ->where('code_complet', $this->codeAnonymatSaisi);
-                })
-                ->whereNotNull('deleted_at')
-                ->first();
-
-            if ($deletedManchette) {
-                // Restaurer manchette supprimée
-                $deletedManchette->restore();
-                $deletedManchette->update([
-                    'etudiant_id' => $etudiantId,
-                    'matricule' => $this->matricule,
-                    'saisie_par' => Auth::id(),
-                    'date_saisie' => now(),
-                ]);
-                
-                $successMessage = "✅ Manchette restaurée : {$this->codeAnonymatSaisi}";
-            } else {
-                // Créer nouveau code avec le code saisi
-                $codeAnonymat = CodeAnonymat::create([
-                    'examen_id' => $this->examenSelected->id,
-                    'session_exam_id' => $sessionId,
-                    'ec_id' => $this->ecSelected->id,
-                    'code_base' => substr($this->codeAnonymatSaisi, 0, 2), // 2 premières lettres
-                    'code_complet' => $this->codeAnonymatSaisi,
-                    'sequence' => (int) substr($this->codeAnonymatSaisi, 2), // Chiffres après les lettres
-                    'saisie_par' => Auth::id(),
-                ]);
-
-                Manchette::create([
-                    'etudiant_id' => $etudiantId,
-                    'code_anonymat_id' => $codeAnonymat->id,
-                    'examen_id' => $this->examenSelected->id,
-                    'session_exam_id' => $sessionId,
-                    'matricule' => $this->matricule,
-                    'saisie_par' => Auth::id(),
-                ]);
-                
-                $successMessage = "✅ Manchette enregistrée : {$this->codeAnonymatSaisi}";
-            }
-
-            // Progression
             $this->progressCount++;
             $manchettesRestantes = $this->totalManchettesPresentes - $this->progressCount;
             
-            // Réinitialisation complète
             $this->resetSaisieComplete();
-            $this->loadStatistiques();
-
-             // Forcer le focus sur le champ matricule
-            $this->dispatch('focus-matricule-input');
-
-            // Messages intelligents avec toast
-            if ($manchettesRestantes <= 0) {
-                $finalMessage = "🎉 Félicitations ! Toutes les manchettes ont été saisies avec succès pour la session {$sessionLibelle} !";
-                 $this->showMessage($finalMessage, 'success');
-                
-                // Toast de célébration finale
-                toastr()->success($finalMessage, [
-                    'timeOut' => 8000,
-                    'extendedTimeOut' => 3000,
-                    'closeButton' => true
-                ]);
-                
-                $this->dispatch('saisie-terminee', [
-                    'total_manchettes' => $this->progressCount,
-                    'etudiants_presents' => $this->totalManchettesPresentes,
-                    'session_type' => $sessionLibelle,
-                    'matiere' => $this->ecSelected->nom ?? 'Matière inconnue',
-                    'code_salle' => $this->codeSalle ?? 'Salle inconnue'
-                ]);
-                
+            
+            if ($manchettesRestantes > 0) {
+                $this->dispatch('focus-matricule-input');
             } else {
-                $baseMessage = "{$successMessage} (Reste: {$manchettesRestantes})";
-                
-                // Messages motivants avec toast
-                if ($manchettesRestantes == 1) {
-                    $motivationalMessage = $baseMessage . " - Plus qu'une seule manchette ! Vous y êtes presque ! 🎯";
-                    $this->showMessage($motivationalMessage, 'success');
-                    toastr()->success($motivationalMessage, [
-                        'timeOut' => 5000,
-                        'closeButton' => true
-                    ]);
-                } elseif ($manchettesRestantes <= 3) {
-                    $motivationalMessage = $baseMessage . " - Plus que {$manchettesRestantes} manchettes ! Vous touchez au but ! 🚀";
-                    $this->showMessage($motivationalMessage, 'success');
-                    toastr()->success($motivationalMessage, [
-                        'timeOut' => 5000,
-                        'closeButton' => true
-                    ]);
-                } elseif ($manchettesRestantes <= 5) {
-                    $motivationalMessage = $baseMessage . " - Plus que {$manchettesRestantes} manchettes ! Courage ! 💪";
-                    $this->showMessage($motivationalMessage, 'success');
-                    toastr()->success($motivationalMessage, [
-                        'timeOut' => 4000
-                    ]);
-                } elseif ($manchettesRestantes <= 10) {
-                    $motivationalMessage = $baseMessage . " - Plus que {$manchettesRestantes} manchettes ! Excellent travail ! 👏";
-                    $this->showMessage($motivationalMessage, 'success');
-                    toastr()->success($motivationalMessage, [
-                        'timeOut' => 4000
-                    ]);
-                } else {
-                    $this->showMessage($baseMessage, 'success');
-                    toastr()->success($baseMessage, [
-                        'timeOut' => 3000
-                    ]);
-                }
-                
-                $this->dispatch('manchette-saved');
+                $this->loadStatistiques();
+            }
+
+            $successMessage = "Manchette enregistrée : {$this->codeAnonymatSaisi}";
+            
+            if ($manchettesRestantes <= 0) {
+                $finalMessage = "Toutes les manchettes ont été saisies !";
+                $this->showMessage($finalMessage, 'success');
+                toastr()->success($finalMessage, ['timeOut' => 8000]);
+            } else {
+                $message = "{$successMessage} (Reste: {$manchettesRestantes})";
+                toastr()->success($message, ['timeOut' => 2000]);
             }
 
         } catch (\Exception $e) {
-            $this->showMessage('Erreur lors de l\'enregistrement: ' . $e->getMessage(), 'error');
+            $this->showMessage('Erreur: ' . $e->getMessage(), 'error');
             logger('Erreur sauvegarderManchette: ' . $e->getMessage());
-            return;
         }
     }
-
+    
     public function calculateNextSequence()
     {
         if (!$this->examenSelected || !$this->ecSelected || !$this->codeSalle) {
