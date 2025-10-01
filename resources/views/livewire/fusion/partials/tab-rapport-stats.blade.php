@@ -1,4 +1,57 @@
 {{-- Onglet Rapport et Statistiques - Version Simplifiée --}}
+{{-- Affichage des erreurs de cohérence --}}
+@if(isset($rapportCoherence['erreurs_coherence']) && !empty($rapportCoherence['erreurs_coherence']))
+    <div class="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg dark:bg-red-900/20 dark:border-red-700">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+            </div>
+            
+            <div class="ml-3 flex-1">
+                <h3 class="text-sm font-semibold text-red-800 dark:text-red-200 mb-2">
+                    Données incohérentes détectées
+                </h3>
+                
+                <div class="text-sm text-red-700 dark:text-red-300 space-y-1 mb-3">
+                    @foreach($rapportCoherence['erreurs_coherence'] as $erreur)
+                        <div class="flex items-start">
+                            <span class="mr-2">•</span>
+                            <span>{{ $erreur }}</span>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button wire:click="nettoyerDonneesIncoherentes"
+                            wire:loading.attr="disabled"
+                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg wire:loading.remove wire:target="nettoyerDonneesIncoherentes" 
+                             class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <svg wire:loading wire:target="nettoyerDonneesIncoherentes"
+                             class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span wire:loading.remove wire:target="nettoyerDonneesIncoherentes">
+                            Nettoyer automatiquement
+                        </span>
+                        <span wire:loading wire:target="nettoyerDonneesIncoherentes">
+                            Nettoyage en cours...
+                        </span>
+                    </button>
+
+                    <span class="text-xs text-red-600 dark:text-red-400">
+                        Cette action supprimera les données invalides
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif
 <div id="content-rapport-stats" 
      class="tab-content" 
      style="{{ $activeTab !== 'rapport-stats' ? 'display: none;' : '' }}">
@@ -277,25 +330,41 @@
                         <h4 class="text-base font-semibold text-gray-900 dark:text-gray-100">
                             Détail par matière ({{ count($rapportCoherence['data']) }})
                         </h4>
+                        
+                        {{-- Debug en mode développement --}}
+                        @if(config('app.debug'))
+                            <div class="mt-2 text-xs text-gray-500">
+                                @php
+                                    $debugComplets = collect($rapportCoherence['data'])->where('complet', true)->count();
+                                    $debugTotal = count($rapportCoherence['data']);
+                                @endphp
+                                <span class="bg-yellow-100 px-2 py-1 rounded">
+                                    DEBUG: {{ $debugComplets }}/{{ $debugTotal }} matières complètes détectées
+                                </span>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="overflow-x-auto">
                         <table class="min-w-full">
                             <thead class="bg-gray-50 dark:bg-gray-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
                                         Matière
                                     </th>
-                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400" title="Manchettes Présentes">
-                                        M.P
+                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                        Présents
                                     </th>
-                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400" title="Manchettes Absentes">
-                                        M.A
+                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                        Absents
                                     </th>
-                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400" title="Copies">
-                                        Cop.
+                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                        Manchettes
                                     </th>
-                                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase dark:text-gray-400">
+                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                        Copies
+                                    </th>
+                                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
                                         Statut
                                     </th>
                                 </tr>
@@ -304,54 +373,56 @@
                                 @php
                                     $completes = collect($rapportCoherence['data'])->where('complet', true);
                                     $partielles = collect($rapportCoherence['data'])->where('complet', false)->filter(function($item) {
-                                        return ($item['manchettes_presentes'] ?? 0) > 0 || ($item['copies_count'] ?? 0) > 0;
+                                        return ($item['manchettes'] ?? 0) > 0 || ($item['copies'] ?? 0) > 0;
                                     });
                                     $vides = collect($rapportCoherence['data'])->where('complet', false)->filter(function($item) {
-                                        return ($item['manchettes_presentes'] ?? 0) === 0 && ($item['copies_count'] ?? 0) === 0;
+                                        return ($item['manchettes'] ?? 0) === 0 && ($item['copies'] ?? 0) === 0;
                                     });
                                     $orderedData = $completes->concat($partielles)->concat($vides);
                                 @endphp
 
                                 @forelse($orderedData as $rapport)
                                     @php
-                                        $nbMP = $rapport['manchettes_presentes'] ?? 0;
-                                        $nbMA = $rapport['manchettes_absentes'] ?? 0;
-                                        $nbC = $rapport['copies_count'] ?? 0;
-                                        $attenduP = $rapport['etudiants_presents'] ?? 0;
-                                        $attenduA = $rapport['etudiants_absents_attendus'] ?? 0;
+                                        $presents = $rapport['presents'] ?? 0;
+                                        $absents = $rapport['absents'] ?? 0;
+                                        $manchettes = $rapport['manchettes'] ?? 0;
+                                        $copies = $rapport['copies'] ?? 0;
+                                        $pctSync = $rapport['pct_sync'] ?? 0;
                                         $estComplet = $rapport['complet'] ?? false;
                                     @endphp
                                     
                                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {{ $estComplet ? 'bg-green-50 dark:bg-green-900/10' : '' }}">
-                                        <td class="px-4 py-2">
-                                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                {{ $rapport['ec_nom'] ?? 'N/A' }}
-                                            </div>
+                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                            {{ $rapport['ec_nom'] ?? 'N/A' }}
                                         </td>
                                         
-                                        <td class="px-3 py-2 text-center text-sm {{ $nbMP >= $attenduP ? 'text-green-600 font-semibold' : 'text-orange-600' }}">
-                                            {{ $nbMP }}/{{ $attenduP }}
+                                        <td class="px-3 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                            {{ $presents }}
                                         </td>
-
-                                        <td class="px-3 py-2 text-center text-sm {{ $nbMA >= $attenduA ? 'text-green-600 font-semibold' : 'text-gray-400' }}">
-                                            {{ $nbMA }}/{{ $attenduA }}
+                                        
+                                        <td class="px-3 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                            {{ $absents }}
                                         </td>
-
-                                        <td class="px-3 py-2 text-center text-sm {{ $nbC >= $attenduP ? 'text-green-600 font-semibold' : 'text-orange-600' }}">
-                                            {{ $nbC }}/{{ $attenduP }}
+                                        
+                                        <td class="px-3 py-3 text-center text-sm font-semibold {{ $manchettes >= ($presents + $absents) ? 'text-green-600' : 'text-orange-600' }}">
+                                            {{ $manchettes }}
                                         </td>
-
-                                        <td class="px-4 py-2 text-center">
+                                        
+                                        <td class="px-3 py-3 text-center text-sm font-semibold {{ $copies >= ($presents + $absents) ? 'text-green-600' : 'text-orange-600' }}">
+                                            {{ $copies }}
+                                        </td>
+                                        
+                                        <td class="px-4 py-3 text-center">
                                             @if($estComplet)
-                                                <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-green-800 bg-green-100 rounded dark:bg-green-900 dark:text-green-300">
-                                                    Complet
+                                                <span class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-green-800 bg-green-100 rounded dark:bg-green-900 dark:text-green-300">
+                                                    ✓ Complet {{ $pctSync }}%
                                                 </span>
-                                            @elseif($nbMP > 0 || $nbC > 0)
-                                                <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-yellow-800 bg-yellow-100 rounded dark:bg-yellow-900 dark:text-yellow-300">
-                                                    Partiel
+                                            @elseif($manchettes > 0 || $copies > 0)
+                                                <span class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-yellow-800 bg-yellow-100 rounded dark:bg-yellow-900 dark:text-yellow-300">
+                                                    ⚠ Partiel {{ $pctSync }}%
                                                 </span>
                                             @else
-                                                <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium text-gray-500 bg-gray-100 rounded dark:bg-gray-700 dark:text-gray-400">
+                                                <span class="inline-flex items-center px-2.5 py-1 text-xs font-medium text-gray-500 bg-gray-100 rounded dark:bg-gray-700 dark:text-gray-400">
                                                     Vide
                                                 </span>
                                             @endif
@@ -359,7 +430,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                                             Aucune donnée disponible
                                         </td>
                                     </tr>
@@ -368,12 +439,24 @@
                         </table>
                     </div>
 
-                    {{-- Légende --}}
+                    {{-- Légende simplifiée --}}
+                    <div class="px-4 py-2 bg-gray-50 border-t border-gray-200 dark:bg-gray-900 dark:border-gray-700">
+                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                            <strong>Complet :</strong> Manchettes ET Copies ≥ (Présents + Absents)
+                        </div>
+                    </div>
+
+                    {{-- Légende améliorée --}}
                     <div class="px-4 py-2 bg-gray-50 border-t border-gray-200 dark:bg-gray-900 dark:border-gray-700">
                         <div class="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-400">
-                            <span><strong>M.P:</strong> Manchettes Présentes</span>
-                            <span><strong>M.A:</strong> Manchettes Absentes</span>
-                            <span><strong>Cop.:</strong> Copies notées</span>
+                            <span><strong>Inscrits:</strong> Total (Présents + Absents)</span>
+                            <span><strong>Manchettes:</strong> Total manchettes saisies</span>
+                            <span><strong>Copies:</strong> Total copies saisies</span>
+                            <span><strong>P:</strong> Présents</span>
+                            <span><strong>A:</strong> Absents</span>
+                            <span class="text-orange-600 dark:text-orange-400">
+                                ⚠ Les absents doivent aussi avoir manchette ET copie
+                            </span>
                         </div>
                     </div>
                 </div>

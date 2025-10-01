@@ -43,7 +43,7 @@
                     @if($sessionActive->type === 'Rattrapage')
                         Choisir l'examen de rattrapage :
                     @else
-                        Choisir l'examen :
+                        Choisir options :
                     @endif
                 </h3>
                 @if($niveau_id || $parcours_id)

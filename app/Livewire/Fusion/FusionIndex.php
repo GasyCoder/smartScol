@@ -236,10 +236,10 @@ class FusionIndex extends Component
             $result = $fusionService->verifierCoherence($this->examen_id);
 
             if ($result['success']) {
-                // CORRECTION: Sauvegarder la structure complète
                 $this->rapportCoherence = [
                     'data' => $result['data'] ?? [],
                     'stats' => $result['stats'] ?? ['total' => 0, 'complets' => 0, 'incomplets' => 0],
+                    'erreurs_coherence' => [], // Réinitialiser si succès
                     'last_check' => now()->format('d/m/Y H:i')
                 ];
                 
@@ -273,12 +273,36 @@ class FusionIndex extends Component
                     $this->setEtat('initial', 0, 0, false, false, true);
                 }
             } else {
-                toastr()->error($result['message'] ?? 'Erreur lors de la vérification');
-                $this->rapportCoherence = [];
+                // En cas d'échec, stocker les erreurs de cohérence
+                $this->rapportCoherence = [
+                    'data' => [],
+                    'stats' => ['total' => 0, 'complets' => 0, 'incomplets' => 0],
+                    'erreurs_coherence' => $result['erreurs_coherence'] ?? ['Erreur inconnue'],
+                    'last_check' => now()->format('d/m/Y H:i')
+                ];
+
+                $messageErreur = $result['message'] ?? 'Erreur lors de la vérification';
+                toastr()->error($messageErreur);
+                
+                // Afficher l'onglet rapport pour montrer les erreurs
+                $this->switchTab('rapport-stats');
             }
         } catch (\Exception $e) {
+            Log::error('Erreur verifierCoherence', [
+                'examen_id' => $this->examen_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->rapportCoherence = [
+                'data' => [],
+                'stats' => ['total' => 0, 'complets' => 0, 'incomplets' => 0],
+                'erreurs_coherence' => ['Erreur système : ' . $e->getMessage()],
+                'last_check' => now()->format('d/m/Y H:i')
+            ];
+
             toastr()->error('Erreur lors de la vérification: ' . $e->getMessage());
-            $this->rapportCoherence = [];
+            $this->switchTab('rapport-stats');
         }
 
         $this->isProcessing = false;
@@ -1130,5 +1154,145 @@ class FusionIndex extends Component
             'showResetButton' => $this->showResetButton,
             'showFusionButton' => $this->showFusionButton,
         ]);
+    }
+
+
+    public function nettoyerDonneesIncoherentes()
+    {
+        if (!$this->examen_id || !$this->sessionActive) {
+            toastr()->error('Aucun examen ou session sélectionné');
+            return;
+        }
+
+        $this->isProcessing = true;
+
+        try {
+            DB::beginTransaction();
+
+            $totalNettoye = 0;
+            $details = [];
+
+            // 1. Récupération des EC valides pour cet examen
+            $ecIdsExamen = DB::table('examen_ec')
+                ->where('examen_id', $this->examen_id)
+                ->pluck('ec_id')
+                ->toArray();
+
+            $ecIdsValides = EC::whereIn('id', $ecIdsExamen)
+                ->whereNull('deleted_at')
+                ->where('is_active', true)
+                ->pluck('id')
+                ->toArray();
+
+            $ecIdsInvalides = array_diff($ecIdsExamen, $ecIdsValides);
+
+            // 2. Suppression des EC invalides de examen_ec
+            if (!empty($ecIdsInvalides)) {
+                $deletedExamenEc = DB::table('examen_ec')
+                    ->where('examen_id', $this->examen_id)
+                    ->whereIn('ec_id', $ecIdsInvalides)
+                    ->delete();
+                
+                if ($deletedExamenEc > 0) {
+                    $details[] = "$deletedExamenEc association(s) EC invalide(s) dans examen_ec";
+                    $totalNettoye += $deletedExamenEc;
+                }
+            }
+
+            // 3. Suppression des copies avec EC invalides (toutes sessions)
+            $copiesInvalides = Copie::where('examen_id', $this->examen_id)
+                ->whereNotNull('ec_id')
+                ->where(function($query) use ($ecIdsValides) {
+                    $query->whereNotIn('ec_id', $ecIdsValides)
+                        ->orWhereDoesntHave('ec', function($q) {
+                            $q->whereNull('deleted_at')->where('is_active', true);
+                        });
+                })
+                ->delete();
+
+            if ($copiesInvalides > 0) {
+                $details[] = "$copiesInvalides copie(s) avec EC invalide";
+                $totalNettoye += $copiesInvalides;
+            }
+
+            // 4. Suppression des codes d'anonymat avec EC invalides
+            $codesInvalides = CodeAnonymat::where('examen_id', $this->examen_id)
+                ->whereNotNull('ec_id')
+                ->where(function($query) use ($ecIdsValides) {
+                    $query->whereNotIn('ec_id', $ecIdsValides)
+                        ->orWhereDoesntHave('ec', function($q) {
+                            $q->whereNull('deleted_at')->where('is_active', true);
+                        });
+                })
+                ->delete();
+
+            if ($codesInvalides > 0) {
+                $details[] = "$codesInvalides code(s) d'anonymat avec EC invalide";
+                $totalNettoye += $codesInvalides;
+            }
+
+            // 5. Suppression des manchettes orphelines (sans code valide)
+            $manchettesOrphelines = Manchette::where('examen_id', $this->examen_id)
+                ->where(function($query) {
+                    $query->whereNull('code_anonymat_id')
+                        ->orWhereDoesntHave('codeAnonymat');
+                })
+                ->delete();
+
+            if ($manchettesOrphelines > 0) {
+                $details[] = "$manchettesOrphelines manchette(s) orpheline(s)";
+                $totalNettoye += $manchettesOrphelines;
+            }
+
+            // 6. Suppression des ResultatFusion avec EC invalides
+            $resultatsFusionInvalides = ResultatFusion::where('examen_id', $this->examen_id)
+                ->whereNotNull('ec_id')
+                ->where(function($query) use ($ecIdsValides) {
+                    $query->whereNotIn('ec_id', $ecIdsValides)
+                        ->orWhereDoesntHave('ec', function($q) {
+                            $q->whereNull('deleted_at')->where('is_active', true);
+                        });
+                })
+                ->delete();
+
+            if ($resultatsFusionInvalides > 0) {
+                $details[] = "$resultatsFusionInvalides résultat(s) fusion avec EC invalide";
+                $totalNettoye += $resultatsFusionInvalides;
+            }
+
+            DB::commit();
+
+            if ($totalNettoye > 0) {
+                $message = "Nettoyage effectué : " . implode(', ', $details);
+                toastr()->success($message);
+                
+                \Log::info('Nettoyage données incohérentes effectué', [
+                    'examen_id' => $this->examen_id,
+                    'session_id' => $this->sessionActive->id,
+                    'total_nettoye' => $totalNettoye,
+                    'details' => $details,
+                    'user_id' => Auth::id()
+                ]);
+            } else {
+                toastr()->info('Aucune donnée incohérente à nettoyer');
+            }
+
+            // Recharger la vérification
+            $this->verifierCoherence();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            \Log::error('Erreur nettoyage données incohérentes', [
+                'examen_id' => $this->examen_id,
+                'session_id' => $this->sessionActive->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            toastr()->error('Erreur lors du nettoyage : ' . $e->getMessage());
+        }
+
+        $this->isProcessing = false;
     }
 }

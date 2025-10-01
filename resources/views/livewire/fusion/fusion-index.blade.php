@@ -3,7 +3,7 @@
     {{-- ========================================
          EN-TÊTE AVEC TITRE ET ACTIONS
     ======================================== --}}
-    <header class="sticky top-0 z-10 px-5 py-4 mb-6 bg-white border-b border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+    <header class="sticky top-0 z-10 px-5 py-4 mb-6 shadow-sm">
         <div class="flex items-center justify-between">
             {{-- Titre principal --}}
             <div class="flex items-center space-x-3">
