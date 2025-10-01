@@ -126,58 +126,90 @@
             </div>
 
             <!-- Section synchronisation des absents -->
-            @if($this->canSynchroniserAbsents)
-                <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-600 rounded-lg p-4 mb-4">
-                    <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-3">
-                        <svg class="h-5 w-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        <div class="flex-1">
-                            <h4 class="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                                Synchronisation des absents
-                            </h4>
-                            <p class="text-xs text-blue-700 dark:text-blue-400 mb-2">
-                                <strong>{{ $this->totalAbsents }} étudiant(s) absent(s)</strong> à synchroniser.
-                            </p>
-                            <div class="bg-white/50 dark:bg-gray-800/50 rounded p-2 text-xs text-blue-600 dark:text-blue-400">
-                                <p class="font-medium mb-1">Ce qui sera fait :</p>
-                                <ul class="space-y-0.5 ml-4 list-disc">
-                                    <li>{{ $this->totalAbsents }} code(s) d'anonymat (marqués absents)</li>
-                                    <li>{{ $this->totalAbsents }} manchette(s) pour les étudiants absents</li>
-                                    <li>Numérotation automatique continue</li>
-                                </ul>
-                            </div>
-                        </div>
+<!-- Section synchronisation des absents -->
+@if($this->canSynchroniserAbsents)
+    <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-600 rounded-lg p-4 mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-3">
+            <svg class="h-5 w-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="flex-1">
+                <h4 class="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                    Synchronisation des absents
+                </h4>
+                
+                <!-- Afficher la progression -->
+                @if($this->nombreManchettesAbsentes > 0)
+                    <div class="mb-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-600 rounded">
+                        <p class="text-xs font-medium text-yellow-800 dark:text-yellow-300">
+                            ⚠️ Synchronisation en cours : {{ $this->nombreManchettesAbsentes }}/{{ $this->totalAbsents }} absents traités
+                        </p>
                     </div>
-
-                    <button wire:click="synchroniserManchettesAbsents" 
-                            wire:loading.attr="disabled"
-                            wire:target="synchroniserManchettesAbsents"
-                            class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
-                        
-                        <span wire:loading.remove wire:target="synchroniserManchettesAbsents" class="flex items-center">
-                            <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                            </svg>
-                            Synchroniser les {{ $this->totalAbsents }} absent(s)
-                        </span>
-                        
-                        <span wire:loading wire:target="synchroniserManchettesAbsents" class="flex items-center">
-                            <svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Synchronisation...
-                        </span>
-                    </button>
+                @endif
+                
+                <p class="text-xs text-blue-700 dark:text-blue-400 mb-2">
+                    <strong>{{ $this->totalAbsents - $this->nombreManchettesAbsentes }} étudiant(s) absent(s)</strong> restant(s) à synchroniser.
+                </p>
+                <div class="bg-white/50 dark:bg-gray-800/50 rounded p-2 text-xs text-blue-600 dark:text-blue-400">
+                    <p class="font-medium mb-1">Ce qui sera fait :</p>
+                    <ul class="space-y-0.5 ml-4 list-disc">
+                        <li>{{ $this->totalAbsents - $this->nombreManchettesAbsentes }} code(s) d'anonymat (marqués absents)</li>
+                        <li>{{ $this->totalAbsents - $this->nombreManchettesAbsentes }} manchette(s) pour les étudiants absents</li>
+                        <li>Numérotation automatique continue</li>
+                    </ul>
                 </div>
-            @elseif($this->nombreManchettesAbsentes > 0)
-                <div class="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3 mb-4 text-center">
-                    <p class="text-xs text-gray-600 dark:text-gray-400">
-                        Les manchettes des absents ont déjà été synchronisées
+            </div>
+        </div>
+
+        <button wire:click="synchroniserManchettesAbsents" 
+                wire:loading.attr="disabled"
+                wire:target="synchroniserManchettesAbsents"
+                class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center relative">
+            
+            <span wire:loading.remove wire:target="synchroniserManchettesAbsents" class="flex items-center">
+                <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Synchroniser les {{ $this->totalAbsents - $this->nombreManchettesAbsentes }} absent(s) restant(s)
+            </span>
+            
+            <!-- Indicateur de chargement amélioré -->
+            <span wire:loading wire:target="synchroniserManchettesAbsents" class="flex flex-col items-center">
+                <span class="flex items-center mb-1">
+                    <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Synchronisation en cours...
+                </span>
+                <span class="text-xs opacity-75">Cela peut prendre jusqu'à 2 minutes</span>
+            </span>
+        </button>
+
+        <!-- Message d'avertissement -->
+        <div wire:loading wire:target="synchroniserManchettesAbsents" 
+            class="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-600 rounded-lg">
+            <p class="text-xs text-yellow-800 dark:text-yellow-300 flex items-center">
+                <svg class="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                Veuillez patienter, ne fermez pas cette page...
+            </p>
+        </div>
+            </div>
+        @elseif($this->synchronisationComplete)
+            <!-- Message de confirmation de synchronisation complète -->
+            <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-600 rounded-lg p-3 mb-4">
+                <div class="flex items-center gap-2">
+                    <svg class="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    <p class="text-sm font-medium text-green-800 dark:text-green-300">
+                        ✅ Tous les absents ont été synchronisés ({{ $this->nombreManchettesAbsentes }}/{{ $this->totalAbsents }})
                     </p>
                 </div>
-            @endif
+            </div>
+        @endif
 
             <!-- Boutons d'action -->
             <div class="space-y-3">
