@@ -521,18 +521,6 @@
 
                                             {{-- Informations de planning --}}
                                             <div class="space-y-2 mb-4 text-sm text-gray-600 dark:text-gray-400">
-                                                <div class="flex items-center">
-                                                    <svg class="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                                    </svg>
-                                                    <span>{{ $dateStr }}</span>
-                                                </div>
-                                                <div class="flex items-center">
-                                                    <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                                    </svg>
-                                                    <span>{{ $timeStr }}</span>
-                                                </div>
                                                 @if($salle)
                                                 <div class="flex items-center">
                                                     <em class="ni ni-building mr-2 text-purple-500"></em>
@@ -666,36 +654,7 @@
                 </p>
             @endif
         </div>
-
         <div class="space-y-4">
-            {{-- Date --}}
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    <em class="ni ni-calendar-grid-58 mr-1"></em>
-                    Date *
-                </label>
-                <input type="date" 
-                       wire:model="editingECData.date_specifique"
-                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                @error('editingECData.date_specifique')
-                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
-                @enderror
-            </div>
-
-            {{-- Heure --}}
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    <em class="ni ni-time-alarm mr-1"></em>
-                    Heure *
-                </label>
-                <input type="time" 
-                       wire:model="editingECData.heure_specifique"
-                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                @error('editingECData.heure_specifique')
-                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
-                @enderror
-            </div>
-
             {{-- Salle --}}
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

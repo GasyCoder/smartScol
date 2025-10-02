@@ -142,6 +142,18 @@
             }, 150);
         });
 
+        // ✅ NOUVEAU : Event pour vider et focus sur numeroCode
+        Livewire.on('focusNumeroCode', () => {
+            setTimeout(() => {
+                const field = document.getElementById('numeroCode');
+                if (field) {
+                    field.value = ''; // Vider le champ
+                    field.focus();
+                    field.select();
+                }
+            }, 150);
+        });
+
         Livewire.on('focusNote', () => {
             setTimeout(() => focusField('note'), 100);
         });
@@ -165,10 +177,12 @@
             setTimeout(() => {
                 const matricule = document.getElementById('matricule');
                 const codeAnonymat = document.getElementById('codeAnonymat');
+                const numeroCode = document.getElementById('numeroCode'); // ✅ AJOUTÉ
                 const note = document.getElementById('note');
                 
                 if (matricule) matricule.value = '';
                 if (codeAnonymat) codeAnonymat.value = '';
+                if (numeroCode) numeroCode.value = ''; // ✅ AJOUTÉ
                 if (note) note.value = '';
             }, 50);
         });
@@ -181,10 +195,12 @@
                 // Vider tous les champs
                 const matricule = document.getElementById('matricule');
                 const codeAnonymat = document.getElementById('codeAnonymat');
+                const numeroCode = document.getElementById('numeroCode'); // ✅ AJOUTÉ
                 const note = document.getElementById('note');
                 
                 if (matricule) matricule.value = '';
                 if (codeAnonymat) codeAnonymat.value = '';
+                if (numeroCode) numeroCode.value = ''; // ✅ AJOUTÉ - IMPORTANT!
                 if (note) note.value = '';
                 
                 // Focus sur le bon champ selon le mode
@@ -197,9 +213,10 @@
                     }, 100);
                 } else {
                     setTimeout(() => {
-                        if (codeAnonymat) {
-                            codeAnonymat.focus();
-                            codeAnonymat.select();
+                        // ✅ MODIFIÉ : Focus sur numeroCode au lieu de codeAnonymat
+                        if (numeroCode) {
+                            numeroCode.focus();
+                            numeroCode.select();
                         }
                     }, 100);
                 }
@@ -227,7 +244,7 @@
             if (@this.is_active) {
                 focusField('matricule');
             } else {
-                focusField('codeAnonymat');
+                focusField('numeroCode'); // ✅ MODIFIÉ : numeroCode au lieu de codeAnonymat
             }
         }, 500);
     });
@@ -238,7 +255,7 @@
         const field = document.getElementById(fieldId);
         if (field && field.offsetParent !== null) {
             field.focus();
-            if (fieldId === 'matricule' || fieldId === 'codeAnonymat') {
+            if (fieldId === 'matricule' || fieldId === 'codeAnonymat' || fieldId === 'numeroCode') { // ✅ AJOUTÉ numeroCode
                 field.select();
             }
         }
@@ -269,11 +286,10 @@
                     }
                 } catch (error) {
                     console.warn('Erreur lors de la vérification périodique:', error);
-                    // En cas d'erreur, arrêter la vérification pour éviter les logs d'erreur répétés
                     stopVerificationPeriodique();
                 }
             }
-        }, 15000); // 15 secondes
+        }, 15000);
     }
 
     function stopVerificationPeriodique() {
@@ -290,8 +306,8 @@
         if (e.key === 'Enter' && !e.ctrlKey && !e.altKey && !e.shiftKey && !isSubmitting) {
             const target = e.target;
             
-            // Si on est dans le formulaire de saisie
-            if (target.id === 'matricule' || target.id === 'codeAnonymat' || target.id === 'note') {
+            // ✅ AJOUTÉ : Gérer numeroCode aussi
+            if (target.id === 'matricule' || target.id === 'codeAnonymat' || target.id === 'numeroCode' || target.id === 'note') {
                 e.preventDefault();
                 
                 // SEULEMENT enregistrer si tout est prêt
@@ -299,7 +315,7 @@
                     @this.sauvegarderCopie();
                 } 
                 // Si identifiant et étudiant trouvé, aller au champ note
-                else if ((target.id === 'matricule' || target.id === 'codeAnonymat') && @this.etudiantTrouve && @this.afficherChampNote) {
+                else if ((target.id === 'matricule' || target.id === 'codeAnonymat' || target.id === 'numeroCode') && @this.etudiantTrouve && @this.afficherChampNote) {
                     focusField('note');
                 }
             }
@@ -308,22 +324,18 @@
 
     // NETTOYAGE LORS DE LA FERMETURE DE LA PAGE
 
-    // Nettoyer quand on quitte la page
     window.addEventListener('beforeunload', () => {
         stopVerificationPeriodique();
     });
 
-    // Nettoyer quand le composant Livewire est détruit
     document.addEventListener('livewire:navigating', () => {
         stopVerificationPeriodique();
     });
 
-    // Si l'utilisateur change d'onglet/fenêtre, arrêter temporairement la vérification
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
             stopVerificationPeriodique();
         } else if (@this.etudiantTrouve && !isSubmitting) {
-            // Relancer la vérification quand l'utilisateur revient
             startVerificationPeriodique();
         }
     });

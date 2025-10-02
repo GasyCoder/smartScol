@@ -309,8 +309,8 @@
                                 @endif
                             </svg>
                             <div>
-                                <h4 class="text-sm font-medium {{ ($matriculeExisteDeja || isset($etudiantTrouve->message_erreur)) ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300' }}">
-                                    {{ $etudiantTrouve->nom }} {{ $etudiantTrouve->prenoms }}
+                                <h4 class="text-xl font-bold {{ ($matriculeExisteDeja || isset($etudiantTrouve->message_erreur)) ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300' }}">
+                                    {{ $etudiantTrouve->nom }} {{ $etudiantTrouve->prenom }}
                                 </h4>
                                 <p class="text-xs {{ ($matriculeExisteDeja || isset($etudiantTrouve->message_erreur)) ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }} mt-0.5">
                                     @if(isset($etudiantTrouve->message_erreur))
@@ -367,7 +367,7 @@
                         <input type="text" 
                             wire:model.live="codeAnonymatSaisi" 
                             id="codeAnonymat"
-                            class="w-full px-3 py-2.5 text-base font-mono text-center border {{ $this->codeEstValide ? 'border-green-300 bg-green-50 dark:bg-green-900/20' : 'border-blue-300 bg-blue-50 dark:bg-blue-900/20' }} dark:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white"
+                            class="w-full px-3 text-2xl py-2.5 font-bold text-center border {{ $this->codeEstValide ? 'border-green-300 bg-green-50 dark:bg-green-900/20' : 'border-blue-300 bg-blue-50 dark:bg-blue-900/20' }} dark:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white"
                             placeholder="AB1"
                             autocomplete="off"
                             style="letter-spacing: 0.1em;"
@@ -380,20 +380,20 @@
                                     <p class="text-red-600 dark:text-red-400 mb-0.5">{{ $error }}</p>
                                 @endforeach
                             @elseif(!empty($codeAnonymatSaisi))
-                                <p class="text-green-600 dark:text-green-400">Code valide</p>
+                                <p class="text-green-600 dark:text-green-400 font-bold">Code valide</p>
                             @endif
                         </div>
                     </div>
 
                     <!-- Format -->
-                    <div class="mb-3 p-2 bg-white/50 dark:bg-gray-800/50 rounded border text-xs">
+                    {{-- <div class="mb-3 p-2 bg-white/50 dark:bg-gray-800/50 rounded border text-xs">
                         <p class="font-medium text-blue-800 dark:text-blue-300 mb-1">Format :</p>
                         <ul class="text-blue-700 dark:text-blue-400 space-y-0.5 ml-4 list-disc">
                             <li>2 lettres MAJUSCULES + chiffres</li>
                             <li>Ex: AB1, XY25, ZZ100</li>
                             <li>Max {{ $totalManchettesPresentes }}</li>
                         </ul>
-                    </div>
+                    </div> --}}
 
                     <!-- Bouton validation -->
                     <button wire:click="validerEtConfirmer" 

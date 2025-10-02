@@ -79,6 +79,9 @@ class CopieSaisie extends Component
     public string $message = '';
     public string $messageType = 'info';
 
+    public string $numeroCode = ''; // Nouveau : pour le numéro seul
+    public string $prefixeCode = ''; // Nouveau : pour afficher le préfixe
+
     // QUERYSTRING
     protected $queryString = [
         'step' => ['except' => 'niveau'],
@@ -89,6 +92,36 @@ class CopieSaisie extends Component
         'search' => ['except' => ''],
         'perPage' => ['except' => 12],
     ];
+
+
+    public function updatedNumeroCode($value): void
+    {
+        // Reset
+        $this->etudiantTrouve = null;
+        $this->codeAnonymatCourant = null;
+        $this->afficherChampNote = false;
+        $this->peutEnregistrer = false;
+        $this->noteDejaExiste = false;
+        $this->noteExistante = null;
+        $this->note = '';
+        $this->resetErrorBag();
+
+        // Nettoyer et valider l'entrée
+        $numero = trim((string)$value);
+        
+        // Si vide ou non numérique, ne rien faire
+        if (empty($numero) || !is_numeric($numero)) {
+            $this->codeAnonymat = '';
+            return;
+        }
+
+        // Construire le code complet avec le préfixe
+        $prefixe = $this->codeSalle; // Récupère "AS", "TA", etc.
+        $this->codeAnonymat = strtoupper($prefixe . $numero);
+        
+        // Vérification automatique
+        $this->rechercherCodeAnonymat();
+    }
 
 
     public function updatedNiveauId($value)
@@ -646,13 +679,17 @@ class CopieSaisie extends Component
         $this->resetSaisieForm();
         $this->loadStatistiques();
         
+        // Initialiser le préfixe de code
+        $this->prefixeCode = $this->codeSalle;
+        
         // Focus sur le bon champ selon le mode
         if ($this->is_active) {
             $this->dispatch('focusMatricule');
         } else {
-            $this->dispatch('focusCodeAnonymat');
+            $this->dispatch('focusNumeroCode'); // Nouveau dispatch
         }
     }
+
 
 
     public function updatedMatricule($value): void
@@ -873,18 +910,11 @@ class CopieSaisie extends Component
             // Dispatch événement de sauvegarde
             $this->dispatch('copieSauvegardee');
             
-            // Reset complet du formulaire
+            // Reset complet du formulaire (CECI VA VIDER numeroCode automatiquement)
             $this->resetSaisieForm();
             
             // Recharger les statistiques
             $this->loadStatistiques();
-            
-            // Focus sur le bon champ selon le mode
-            if ($this->is_active) {
-                $this->dispatch('focusMatricule');
-            } else {
-                $this->dispatch('focusCodeAnonymat');
-            }
             
         } catch (\Illuminate\Database\QueryException $e) {
             DB::rollBack();
@@ -1009,6 +1039,7 @@ class CopieSaisie extends Component
     {
         $this->matricule = '';
         $this->codeAnonymat = '';
+        $this->numeroCode = ''; // Reset du numéro
         $this->note = '';
         $this->etudiantTrouve = null;
         $this->manchetteCorrespondante = null;
@@ -1019,9 +1050,16 @@ class CopieSaisie extends Component
         $this->noteExistante = null;
         $this->clearMessage();
         
-        // Dispatcher l'événement de reset
         $this->dispatch('resetForm');
+        
+        // Refocus automatiquement sur le bon champ
+        if (!$this->is_active) {
+            $this->dispatch('focusNumeroCode');
+        } else {
+            $this->dispatch('focusMatricule');
+        }
     }
+        
 
     protected function showMessage(string $message, string $type = 'info'): void
     {

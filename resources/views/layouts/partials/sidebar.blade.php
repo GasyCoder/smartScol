@@ -154,8 +154,8 @@
                             <a href="{{ route('manchettes.saisie') }}"
                             class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
                                     {{ request()->routeIs('manchettes.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                                <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
-                                <span class="flex-grow">Saisie Manchettes</span>
+                                <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-task-c"></em></span>
+                                <span class="flex-grow">Manchettes</span>
                             </a>
                         </li>
                         @endcan
@@ -164,8 +164,8 @@
                             <a href="{{ route('copies.saisie') }}"
                             class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
                                     {{ request()->routeIs('copies.saisie') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                                <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
-                                <span class="flex-grow">Saisie Copies</span>
+                                <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-article"></em></span>
+                                <span class="flex-grow">Copies/Notes</span>
                             </a>
                         </li>
                         @endcan

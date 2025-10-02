@@ -80,17 +80,13 @@ class IndexExamen extends Component
     public $showAdvancedFilters = false;
 
     protected $rules = [
-        'editingECData.date_specifique' => 'required|date',
-        'editingECData.heure_specifique' => 'required|date_format:H:i',
+        'editingECData.date_specifique' => 'nullable|date',
+        'editingECData.heure_specifique' => 'nullable|date_format:H:i',
         'editingECData.salle_id' => 'nullable|exists:salles,id',
         'editingECData.code_base' => 'nullable|string|max:10',
     ];
 
     protected $messages = [
-        'editingECData.date_specifique.required' => 'La date est obligatoire.',
-        'editingECData.date_specifique.date' => 'La date doit être au format valide.',
-        'editingECData.heure_specifique.required' => 'L\'heure est obligatoire.',
-        'editingECData.heure_specifique.date_format' => 'L\'heure doit être au format HH:MM.',
         'editingECData.salle_id.exists' => 'La salle sélectionnée n\'existe pas.',
         'editingECData.code_base.max' => 'Le code ne peut pas dépasser 10 caractères.',
     ];
@@ -309,12 +305,6 @@ class IndexExamen extends Component
 
             $this->showEditECModal = true;
 
-            Log::info("✏️ DÉBUT ÉDITION EC", [
-                'examen_id' => $examenId,
-                'ec_id' => $ecId,
-                'ec_nom' => $this->editingEC->nom,
-                'user_id' => Auth::id()
-            ]);
             
         } catch (\Exception $e) {
             Log::error("❌ ERREUR OUVERTURE ÉDITION EC", [
@@ -332,23 +322,8 @@ class IndexExamen extends Component
         $this->validate();
 
         try {
-            // Vérifier les conflits de salle si une salle est sélectionnée
-            if (!empty($this->editingECData['salle_id'])) {
-                $examen = Examen::find($this->editingExamenId);
-                $conflits = Examen::verifierConflitsSalles([[
-                    'ec_id' => $this->editingEC->id,
-                    'date' => $this->editingECData['date_specifique'],
-                    'heure' => $this->editingECData['heure_specifique'],
-                    'salle_id' => $this->editingECData['salle_id'],
-                ]], $examen->duree, $this->editingExamenId);
 
-                if (!empty($conflits)) {
-                    toastr()->warning('Conflit de salle détecté pour cette matière !');
-                    return;
-                }
-            }
-
-            // Validation supplémentaire de la date
+            // Validation supplémentaire de la date (garder cette partie)
             $dateExamen = \Carbon\Carbon::parse($this->editingECData['date_specifique']);
             if ($dateExamen->isPast() && !$dateExamen->isToday()) {
                 toastr()->warning('Attention: Vous programmez un examen dans le passé.');
@@ -366,18 +341,9 @@ class IndexExamen extends Component
                     'updated_at' => now(),
                 ]);
 
-            Log::info("✅ EC MODIFIÉE", [
-                'examen_id' => $this->editingExamenId,
-                'ec_id' => $this->editingEC->id,
-                'ec_nom' => $this->editingEC->nom,
-                'nouvelles_donnees' => $this->editingECData,
-                'user_id' => Auth::id()
-            ]);
-
             toastr()->success("Matière \"{$this->editingEC->nom}\" modifiée avec succès !");
             $this->closeEditECModal();
 
-            // Rafraîchir les données
             $this->dispatch('examensUpdated');
 
         } catch (\Exception $e) {
@@ -390,6 +356,7 @@ class IndexExamen extends Component
             toastr()->error('Une erreur est survenue lors de la modification.');
         }
     }
+
 
     public function closeEditECModal()
     {

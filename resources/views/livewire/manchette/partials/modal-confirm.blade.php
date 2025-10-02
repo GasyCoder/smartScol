@@ -22,8 +22,13 @@
                         </div>
                     </div>
                 </div>
-                <h3 class="text-center text-lg font-semibold mb-3 text-yellow-500"> {{ Auth::user()->name }}, Vakio tsara sao diso io Code io!</h3>
-                
+                <h3 class="text-center text-base font-semibold mt-2 text-yellow-500">
+                    {{ Auth::user()->name }}
+                </h3>
+                <p class="text-center text-lg font-bold text-yellow-500 mb-4">
+                    Vakio tsara ny Code!
+                </p>
+
                 <div class="flex space-x-3">
                     <button wire:click="annulerConfirmation" 
                             type="button"
