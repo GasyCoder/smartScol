@@ -153,6 +153,7 @@
                                         <div class="flex justify-end space-x-2">
                                             @can('releve-note.view-detail')
                                             <button wire:click="voirReleve({{ $etudiant->id }})"
+                                                wire:key="view-{{ $etudiant->id }}"
                                                     class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                                     @if(!$selectedSession) disabled @endif>
                                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,6 +165,7 @@
                                             @endcan
                                             @can('releve-note.exportPDF')
                                             <button wire:click="genererPDF({{ $etudiant->id }})"
+                                                    wire:key="pdf-button-{{ $etudiant->id }}"
                                                     class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                                                     @if(!$selectedSession) disabled @endif>
                                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
