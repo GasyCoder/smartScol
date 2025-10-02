@@ -30,6 +30,7 @@ class Copie extends Model
         'note' => 'decimal:2',
         'note_old' => 'decimal:2',
         'is_checked' => 'boolean',
+        'updated_at' => 'datetime'
     ];
 
     /**
