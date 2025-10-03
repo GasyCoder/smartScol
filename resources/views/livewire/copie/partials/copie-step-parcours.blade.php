@@ -11,6 +11,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     @foreach($parcours as $parcour)
                         <button wire:click="selectParcours({{ $parcour->id }})"
+                             wire:key="setParcour-({{ $parcour->id }})"
                             class="p-5 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 text-left group">
                             <div class="flex items-center justify-between">
                                 <div>

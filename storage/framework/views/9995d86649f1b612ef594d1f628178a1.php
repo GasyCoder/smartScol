@@ -1,0 +1,496 @@
+<div class="space-y-6">
+<!--[if BLOCK]><![endif]--><?php if(auth()->user()->hasRole('secretaire')): ?>
+    <?php
+$__split = function ($name, $params = []) {
+    return [$name, $params];
+};
+[$__name, $__params] = $__split('secretaire-dashboard');
+
+$__html = app('livewire')->mount($__name, $__params, 'lw-2602972478-0', $__slots ?? [], get_defined_vars());
+
+echo $__html;
+
+unset($__html);
+unset($__name);
+unset($__params);
+unset($__split);
+if (isset($__slots)) unset($__slots);
+?>
+<?php else: ?>
+<div class="font-body">
+    <!-- Header -->
+    <div class="container mx-auto px-6 py-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-heading font-bold text-gray-800 dark:text-gray-100">Dashboard</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-1 text-sm">Vue d'ensemble des performances académiques</p>
+            </div>
+            <button wire:click="refresh" 
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 <?php echo e($refreshing ? 'opacity-75' : ''); ?>">
+                <svg class="w-4 h-4 mr-2 <?php echo e($refreshing ? 'animate-spin' : ''); ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <?php echo e($refreshing ? 'Actualisation...' : 'Actualiser'); ?>
+
+            </button>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-6 py-8">
+        <!-- Main Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <!-- Total Étudiants -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-gray-900 dark:text-gray-100"><?php echo e(number_format($totalEtudiants)); ?></p>
+                            <!--[if BLOCK]><![endif]--><?php if($progressionEtudiants != 0): ?>
+                                <span class="ml-2 text-sm font-semibold <?php echo e($progressionEtudiants >= 0 ? 'text-green-600' : 'text-red-600'); ?>">
+                                    <?php echo e($progressionEtudiants >= 0 ? '+' : ''); ?><?php echo e($progressionEtudiants); ?>%
+                                </span>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admis -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Admis</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-green-700 dark:text-green-400"><?php echo e(number_format($etudiantsAdmis)); ?></p>
+                            <!--[if BLOCK]><![endif]--><?php if($totalEtudiants > 0): ?>
+                                <span class="ml-2 text-sm font-medium text-green-600 dark:text-green-500">
+                                    <?php echo e(round(($etudiantsAdmis / $totalEtudiants) * 100, 1)); ?>%
+                                </span>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </div>
+                        <!--[if BLOCK]><![endif]--><?php if($progressionAdmis != 0): ?>
+                            <div class="mt-1 text-xs <?php echo e($progressionAdmis >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'); ?>">
+                                <?php echo e($progressionAdmis >= 0 ? '↗' : '↘'); ?> <?php echo e(abs($progressionAdmis)); ?>% vs précédent
+                            </div>
+                        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Redoublants -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Redoublants</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-yellow-700 dark:text-yellow-400"><?php echo e(number_format($redoublants)); ?></p>
+                            <!--[if BLOCK]><![endif]--><?php if($totalEtudiants > 0): ?>
+                                <span class="ml-2 text-sm font-medium text-yellow-600 dark:text-yellow-500">
+                                    <?php echo e(round(($redoublants / $totalEtudiants) * 100, 1)); ?>%
+                                </span>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </div>
+                        <!--[if BLOCK]><![endif]--><?php if($progressionRedoublants != 0): ?>
+                            <div class="mt-1 text-xs <?php echo e($progressionRedoublants >= 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'); ?>">
+                                <?php echo e($progressionRedoublants >= 0 ? '↗' : '↘'); ?> <?php echo e(abs($progressionRedoublants)); ?>% vs précédent
+                            </div>
+                        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rattrapage -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Rattrapage</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-cyan-700 dark:text-cyan-400"><?php echo e(number_format($rattrapage)); ?></p>
+                            <!--[if BLOCK]><![endif]--><?php if($totalEtudiants > 0): ?>
+                                <span class="ml-2 text-sm font-medium text-cyan-600 dark:text-cyan-500">
+                                    <?php echo e(round(($rattrapage / $totalEtudiants) * 100, 1)); ?>%
+                                </span>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </div>
+                        <!--[if BLOCK]><![endif]--><?php if($progressionRattrapage != 0): ?>
+                            <div class="mt-1 text-xs <?php echo e($progressionRattrapage >= 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'); ?>">
+                                <?php echo e($progressionRattrapage >= 0 ? '↗' : '↘'); ?> <?php echo e(abs($progressionRattrapage)); ?>% vs précédent
+                            </div>
+                        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exclus -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6 hover:shadow-md transition-shadow duration-200">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Exclus</p>
+                        <div class="flex items-baseline mt-1">
+                            <p class="text-2xl font-bold text-red-700 dark:text-red-400"><?php echo e(number_format($exclus)); ?></p>
+                            <!--[if BLOCK]><![endif]--><?php if($totalEtudiants > 0): ?>
+                                <span class="ml-2 text-sm font-medium text-red-600 dark:text-red-500">
+                                    <?php echo e(round(($exclus / $totalEtudiants) * 100, 1)); ?>%
+                                </span>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </div>
+                        <!--[if BLOCK]><![endif]--><?php if($progressionExclus != 0): ?>
+                            <div class="mt-1 text-xs <?php echo e($progressionExclus >= 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'); ?>">
+                                <?php echo e($progressionExclus >= 0 ? '↗' : '↘'); ?> <?php echo e(abs($progressionExclus)); ?>% vs précédent
+                            </div>
+                        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Overview -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Taux de Réussite -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Taux de Réussite</h3>
+                    <div class="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                        <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                <?php
+                    $tauxReussite = $totalEtudiants > 0 ? round(($etudiantsAdmis / $totalEtudiants) * 100, 1) : 0;
+                ?>
+                <div class="flex items-end space-x-2">
+                    <span class="text-3xl font-bold text-green-600 dark:text-green-400"><?php echo e($tauxReussite); ?>%</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400 pb-1"><?php echo e($etudiantsAdmis); ?>/<?php echo e($totalEtudiants); ?></span>
+                </div>
+                <div class="mt-3 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500" 
+                         style="width: <?php echo e($tauxReussite); ?>%"></div>
+                </div>
+            </div>
+
+            <!-- Taux d'Échec -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Taux d'Échec</h3>
+                    <div class="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+                        <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                        </svg>
+                    </div>
+                </div>
+                <?php
+                    $tauxEchec = $totalEtudiants > 0 ? round((($redoublants + $exclus) / $totalEtudiants) * 100, 1) : 0;
+                ?>
+                <div class="flex items-end space-x-2">
+                    <span class="text-3xl font-bold text-red-600 dark:text-red-400"><?php echo e($tauxEchec); ?>%</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400 pb-1"><?php echo e($redoublants + $exclus); ?>/<?php echo e($totalEtudiants); ?></span>
+                </div>
+                <div class="mt-3 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div class="bg-gradient-to-r from-red-500 to-red-600 h-2 rounded-full transition-all duration-500" 
+                         style="width: <?php echo e($tauxEchec); ?>%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Taux de Réussite Mensuel -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">
+                        <i class="fas fa-chart-line mr-2 text-green-500"></i>
+                        Taux de Réussite Mensuel
+                    </h3>
+                    <div class="flex items-center space-x-3">
+                        <select wire:model="selectedYear" wire:change="changeYear($event.target.value)" 
+                                class="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                            <!--[if BLOCK]><![endif]--><?php $__currentLoopData = $anneesUniversitaires; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $annee): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($annee->id); ?>"><?php echo e($annee->libelle); ?></option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?><!--[if ENDBLOCK]><![endif]-->
+                        </select>
+                        <div class="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                            <button wire:click="changeChartType('line')" 
+                                    class="px-3 py-1 text-xs font-medium transition-colors <?php echo e($selectedChartType === 'line' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'); ?>">
+                                Ligne
+                            </button>
+                            <button wire:click="changeChartType('bar')" 
+                                    class="px-3 py-1 text-xs font-medium transition-colors <?php echo e($selectedChartType === 'bar' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'); ?>">
+                                Barres
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="h-80">
+                    <canvas id="tauxReussiteChart" class="w-full h-full"></canvas>
+                </div>
+                <div class="mt-4 grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-green-600">
+                            <?php echo e($totalEtudiants > 0 ? round(($etudiantsAdmis / $totalEtudiants) * 100, 1) : 0); ?>%
+                        </div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Taux Global</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600"><?php echo e($etudiantsAdmis); ?></div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Total Admis</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-gray-600"><?php echo e($totalEtudiants); ?></div>
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Total Candidats</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Académique Détaillée -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">
+                        <i class="fas fa-graduation-cap mr-2 text-blue-500"></i>
+                        Performance Académique
+                    </h3>
+                </div>
+                <div class="h-80">
+                    <canvas id="performanceChart" class="w-full h-full"></canvas>
+                </div>
+                <div class="mt-4 grid grid-cols-4 gap-2 text-center">
+                    <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-green-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Admis</p>
+                        <p class="font-semibold text-green-600 dark:text-green-400"><?php echo e($etudiantsAdmis); ?></p>
+                    </div>
+                    <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-yellow-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Rattrapage</p>
+                        <p class="font-semibold text-yellow-600 dark:text-yellow-400"><?php echo e($rattrapage); ?></p>
+                    </div>
+                    <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-orange-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Redoublants</p>
+                        <p class="font-semibold text-orange-600 dark:text-orange-400"><?php echo e($redoublants); ?></p>
+                    </div>
+                    <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                        <div class="w-3 h-3 bg-red-500 rounded-full mx-auto mb-1"></div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Exclus</p>
+                        <p class="font-semibold text-red-600 dark:text-red-400"><?php echo e($exclus); ?></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Statistics Tables -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <!-- Statistiques par Niveau -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Statistiques par Niveau</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Niveau</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Étudiants</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Admis</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Taux</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                            <!--[if BLOCK]><![endif]--><?php $__empty_1 = true; $__currentLoopData = $statistiquesNiveaux; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $niveau): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-white"><?php echo e($niveau->abr); ?></span>
+                                                </div>
+                                            </div>
+                                            <div class="ml-3">
+                                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100"><?php echo e($niveau->nom); ?></div>
+                                                <div class="flex space-x-1 mt-1">
+                                                    <!--[if BLOCK]><![endif]--><?php if($niveau->is_concours): ?>
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                                                            Concours
+                                                        </span>
+                                                    <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                                                    <!--[if BLOCK]><![endif]--><?php if($niveau->has_rattrapage): ?>
+                                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200">
+                                                            Rattrapage
+                                                        </span>
+                                                    <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-gray-900 dark:text-gray-100"><?php echo e(number_format($niveau->etudiants_count)); ?></div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-green-600 dark:text-green-400"><?php echo e($niveau->admis_count ?? 0); ?></div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100"><?php echo e($niveau->taux_reussite ?? 0); ?>%</div>
+                                            <div class="ml-2 w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                                <div class="bg-green-500 h-2 rounded-full transition-all duration-300" 
+                                                     style="width: <?php echo e($niveau->taux_reussite ?? 0); ?>%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Aucun niveau trouvé</td>
+                                </tr>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Statistiques par Parcours -->
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800">
+                <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-heading font-semibold text-gray-800 dark:text-gray-100">Statistiques par Parcours</h3>
+                        <div class="flex space-x-2">
+                            <select wire:model="selectedNiveauFilter" 
+                                    class="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500">
+                                <option value="">Tous les niveaux</option>
+                                <!--[if BLOCK]><![endif]--><?php $__currentLoopData = $statistiquesNiveaux; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $niveau): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <option value="<?php echo e($niveau->id); ?>"><?php echo e($niveau->nom); ?></option>
+                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?><!--[if ENDBLOCK]><![endif]-->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Parcours</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Niveau</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Admis/Total</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Taux</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                            <?php
+                                $filteredParcours = $selectedNiveauFilter ? 
+                                    $statistiquesParcours->where('niveau.id', $selectedNiveauFilter) : 
+                                    $statistiquesParcours;
+                            ?>
+                            <!--[if BLOCK]><![endif]--><?php $__empty_1 = true; $__currentLoopData = $filteredParcours; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $parcours): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0">
+                                                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-medium text-white"><?php echo e(substr($parcours->abr, 0, 2)); ?></span>
+                                                </div>
+                                            </div>
+                                            <div class="ml-3">
+                                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100"><?php echo e($parcours->nom); ?></div>
+                                                <div class="text-xs text-gray-500 dark:text-gray-400"><?php echo e($parcours->abr); ?></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200">
+                                            <?php echo e($parcours->niveau->abr); ?>
+
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                            <span class="text-green-600 dark:text-green-400"><?php echo e($parcours->admis_count ?? 0); ?></span>/<span><?php echo e($parcours->etudiants_count); ?></span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100"><?php echo e($parcours->taux_reussite ?? 0); ?>%</div>
+                                            <div class="ml-2 w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                                                <div class="bg-green-500 h-1.5 rounded-full transition-all duration-300" 
+                                                     style="width: <?php echo e($parcours->taux_reussite ?? 0); ?>%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Aucun parcours trouvé</td>
+                                </tr>
+                            <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Status Alert -->
+        <!--[if BLOCK]><![endif]--><?php if($sessionDeliberee): ?>
+            <div class="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-green-800 dark:text-green-200">
+                            <span class="font-medium">Session délibérée</span> - Les résultats ont été validés par le jury.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+    </div>
+</div>
+<?php endif; ?><!--[if ENDBLOCK]><![endif]-->
+</div>
+<?php $__env->startPush('scripts'); ?>
+<?php echo app('Illuminate\Foundation\Vite')(['resources/js/dashboard-charts.js']); ?>
+<script>
+    window.chartData = {
+        tauxReussite: <?php echo json_encode($chartDataTauxReussite ?? array_fill(0, 12, 0)) ?>,
+        admis: <?php echo json_encode($chartDataAdmis ?? array_fill(0, 12, 0)) ?>,
+        moyennes: <?php echo json_encode($chartDataMoyennes ?? array_fill(0, 12, 10)) ?>,
+        etudiantsAdmis: <?php echo e($etudiantsAdmis ?? 0); ?>,
+        rattrapage: <?php echo e($rattrapage ?? 0); ?>,
+        redoublants: <?php echo e($redoublants ?? 0); ?>,
+        exclus: <?php echo e($exclus ?? 0); ?>
+
+    };
+    
+    window.chartConfig = {
+        type: '<?php echo e($selectedChartType ?? "line"); ?>'
+    };
+</script>
+<?php $__env->stopPush(); ?><?php /**PATH /var/www/smartScol/resources/views/livewire/dashboard.blade.php ENDPATH**/ ?>
