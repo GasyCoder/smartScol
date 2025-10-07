@@ -91,62 +91,94 @@
 
     {{-- Rapport de cohérence disponible --}}
     @elseif(!empty($rapportCoherence) && isset($rapportCoherence['stats']))
-@php
-    // Infos examen
-    $niveauNom = $examen->niveau->nom ?? 'N/A';
-    $parcoursNom = $examen->parcours->nom ?? 'N/A';
-    
-    // ✅ UTILISER LA MÉTHODE HELPER DU MODÈLE
-    $statsPresence = \App\Models\PresenceExamen::getStatistiquesExamen(
-        $examen->id, 
-        $sessionActive->id
-    );
-    
-    $nbPresents = $statsPresence['presents'];
-    $nbAbsents = $statsPresence['absents'];
-    $totalInscrits = $statsPresence['total_attendu'];
-    
-    // Données saisies (somme sur toutes les matières)
-    $totalManchettesPresentes = 0;
-    $totalManchettesAbsentes = 0;
-    $totalCopies = 0;
-    
-    foreach($rapportCoherence['data'] as $item) {
-        $totalManchettesPresentes += ($item['manchettes_presentes'] ?? 0);
-        $totalManchettesAbsentes += ($item['manchettes_absentes'] ?? 0);
-        $totalCopies += ($item['copies_count'] ?? 0);
-    }
-    
-    // Stats matières
-    $stats = $rapportCoherence['stats'];
-    $totalMatieres = $stats['total'] ?? 0;
-    $matieresCompletes = $stats['complets'] ?? 0;
-    $matieresIncompletes = $stats['incomplets'] ?? 0;
-    
-    // Calcul attendus
-    $manchettesAttendues = $nbPresents * $totalMatieres;
-    $copiesAttendues = $nbPresents * $totalMatieres;
-    $absentsSyncAttendus = $nbAbsents * $totalMatieres;
-    
-    // Pourcentages
-    $pctManchettes = $manchettesAttendues > 0 
-        ? round(($totalManchettesPresentes / $manchettesAttendues) * 100, 1) 
-        : 0;
-    $pctCopies = $copiesAttendues > 0 
-        ? round(($totalCopies / $copiesAttendues) * 100, 1) 
-        : 0;
-    $pctAbsents = $absentsSyncAttendus > 0 
-        ? round(($totalManchettesAbsentes / $absentsSyncAttendus) * 100, 1) 
-        : 100;
-    
-    // Pourcentage de complétion global (matières complètes)
-    $completionRate = $totalMatieres > 0 
-        ? round(($matieresCompletes / $totalMatieres) * 100) 
-        : 0;
-@endphp
+
+    @php
+        // Infos examen
+        $niveauNom = $examen->niveau->nom ?? 'N/A';
+        $parcoursNom = $examen->parcours->nom ?? 'N/A';
+        
+        // ✅ Données RÉELLES depuis presences_examens
+        $totalMatieres = count($rapportCoherence['data'] ?? []);
+        
+        // ✅ Récupérer les vraies données depuis la table
+        $presencesEC = \App\Models\PresenceExamen::where('examen_id', $examen->id)
+            ->where('session_exam_id', $sessionActive->id)
+            ->whereNotNull('ec_id')
+            ->get();
+        
+        // ✅ CALCUL SIMPLE : Absents = Attendu - Présents
+        if ($presencesEC->isNotEmpty()) {
+            $totalAttendu = $presencesEC->first()->total_attendu ?? 0;
+            $nbPresentsMin = $presencesEC->min('etudiants_presents');
+            $nbPresentsMax = $presencesEC->max('etudiants_presents');
+            $nbPresentsMoy = round($presencesEC->avg('etudiants_presents'));
+            
+            // Calcul des absents
+            $nbAbsentsMin = $totalAttendu - $nbPresentsMax;
+            $nbAbsentsMax = $totalAttendu - $nbPresentsMin;
+            $nbAbsentsMoy = $totalAttendu - $nbPresentsMoy;
+            
+            $nbAbsentsUniques = $nbAbsentsMoy;
+            $nbPresentsUniques = $nbPresentsMoy;
+            $totalInscrits = $totalAttendu;
+        } else {
+            $nbAbsentsMin = 0;
+            $nbAbsentsMax = 0;
+            $nbAbsentsMoy = 0;
+            $nbPresentsMin = 0;
+            $nbPresentsMax = 0;
+            $nbPresentsMoy = 0;
+            $totalAttendu = 0;
+            $nbAbsentsUniques = 0;
+            $nbPresentsUniques = 0;
+            $totalInscrits = 0;
+        }
+        
+        // ✅ Agrégation des données par EC
+        $totalPresentsReel = 0;
+        $totalAbsentsReel = 0;
+        $totalManchettes = 0;
+        $totalManchettesPresentes = 0;
+        $totalManchettesAbsentes = 0;
+        $totalCopies = 0;
+        
+        foreach($rapportCoherence['data'] as $item) {
+            $totalPresentsReel += ($item['presents'] ?? 0);
+            $totalAbsentsReel += ($item['absents'] ?? 0);
+            $totalManchettes += ($item['manchettes'] ?? 0);
+            $totalManchettesPresentes += ($item['manchettes_presentes'] ?? 0);
+            $totalManchettesAbsentes += ($item['manchettes_absentes'] ?? 0);
+            $totalCopies += ($item['copies'] ?? 0);
+        }
+        
+        // ✅ CORRECTION : Comparer avec le TOTAL DE MANCHETTES RÉELLES
+        $manchettesAttendues = $totalManchettes; // Au lieu de $totalAttenduReel
+        $copiesAttendues = $totalManchettes;
+        $absentsSyncAttendus = $nbAbsentsUniques * $totalMatieres;
+        
+        // Pourcentages
+        $pctManchettes = 100; // ✅ Toujours 100% car on compare les manchettes avec elles-mêmes
+        $pctCopies = $totalManchettes > 0 
+            ? round(($totalCopies / $totalManchettes) * 100, 1) 
+            : 0;
+        $pctAbsents = $absentsSyncAttendus > 0 
+            ? round(($totalManchettesAbsentes / $absentsSyncAttendus) * 100, 1) 
+            : ($nbAbsentsUniques === 0 ? 100 : 0);
+        
+        // Détection d'anomalie
+        $anomalieCopies = $totalCopies > $totalManchettes;
+        $ecartCopies = abs($totalCopies - $totalManchettes);
+        
+        // Stats matières
+        $stats = $rapportCoherence['stats'];
+        $matieresCompletes = $stats['complets'] ?? 0;
+        $matieresIncompletes = $stats['incomplets'] ?? 0;
+        $completionRate = $totalMatieres > 0 
+            ? round(($matieresCompletes / $totalMatieres) * 100) 
+            : 0;
+    @endphp
 
         <div class="space-y-4">
-            
             {{-- En-tête avec contexte --}}
             <div class="p-4 border rounded-lg {{ $completionRate === 100 ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : ($completionRate > 0 ? 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800') }}">
                 
@@ -179,14 +211,7 @@
                                 {{ $rapportCoherence['last_check'] }}
                             </div>
                         @endif
-                        
-                        {{-- DEBUG: Afficher les valeurs --}}
-                        @if(config('app.debug'))
-                            <div class="text-xs text-red-500 mb-1">
-                                DEBUG: {{ $matieresCompletes }}/{{ $totalMatieres }} = {{ $completionRate }}%
-                            </div>
-                        @endif
-                        
+                    
                         <div class="text-2xl font-bold {{ $completionRate === 100 ? 'text-green-600 dark:text-green-400' : ($completionRate > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
                             {{ $completionRate }}%
                         </div>
@@ -202,37 +227,63 @@
                     {{-- PRÉSENTS --}}
                     <div class="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Présents</span>
-                            <span class="text-2xl font-bold text-green-600 dark:text-green-400">{{ $nbPresents }}</span>
+                            <div>
+                                <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Présents</span>
+                                @if($nbPresentsMin !== $nbPresentsMax)
+                                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Plage : {{ $nbPresentsMin }}-{{ $nbPresentsMax }} par EC
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="text-right">
+                                <span class="text-2xl font-bold text-green-600 dark:text-green-400">
+                                    {{ $nbPresentsUniques }}
+                                </span>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    moy. par EC
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="space-y-2">
                             {{-- Manchettes --}}
                             <div>
                                 <div class="flex justify-between text-xs mb-1">
-                                    <span class="text-gray-600 dark:text-gray-400">Manchettes</span>
+                                    <span class="text-gray-600 dark:text-gray-400">Manchettes (P+A)</span>
                                     <span class="font-semibold {{ $pctManchettes >= 100 ? 'text-green-600' : 'text-orange-600' }}">
-                                        {{ $totalManchettesPresentes }}/{{ $manchettesAttendues }} ({{ $pctManchettes }}%)
+                                        {{ $totalManchettes }}/{{ $manchettesAttendues }} ({{ $pctManchettes }}%)
                                     </span>
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
                                     <div class="h-1.5 rounded-full {{ $pctManchettes >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
-                                         style="width: {{ min($pctManchettes, 100) }}%"></div>
+                                        style="width: {{ min($pctManchettes, 100) }}%"></div>
+                                </div>
+                                {{-- Détail présents/absents --}}
+                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    P: {{ $totalManchettesPresentes }} • A: {{ $totalManchettesAbsentes }}
                                 </div>
                             </div>
-                            
                             {{-- Copies --}}
                             <div>
                                 <div class="flex justify-between text-xs mb-1">
                                     <span class="text-gray-600 dark:text-gray-400">Copies</span>
                                     <span class="font-semibold {{ $pctCopies >= 100 ? 'text-green-600' : 'text-orange-600' }}">
-                                        {{ $totalCopies }}/{{ $copiesAttendues }} ({{ $pctCopies }}%)
+                                        {{ $totalCopies }}/{{ $totalManchettes }} ({{ $pctCopies }}%)
                                     </span>
                                 </div>
                                 <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
                                     <div class="h-1.5 rounded-full {{ $pctCopies >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
-                                         style="width: {{ min($pctCopies, 100) }}%"></div>
+                                        style="width: {{ min($pctCopies, 100) }}%"></div>
                                 </div>
+                                
+                                @if($anomalieCopies)
+                                    <div class="mt-1 flex items-start text-xs text-red-600 dark:text-red-400">
+                                        <svg class="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                        </svg>
+                                        <span>{{ $ecartCopies }} copie(s) en excès</span>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -240,23 +291,66 @@
                     {{-- ABSENTS --}}
                     <div class="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Absents</span>
-                            <span class="text-2xl font-bold text-gray-600 dark:text-gray-400">{{ $nbAbsents }}</span>
+                            <div>
+                                <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Absents</span>
+                                @if($nbAbsentsMin !== $nbAbsentsMax)
+                                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Plage : {{ $nbAbsentsMin }}-{{ $nbAbsentsMax }} par EC
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="text-right">
+                                <span class="text-2xl font-bold {{ $nbAbsentsUniques > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400' }}">
+                                    {{ $nbAbsentsUniques }}
+                                </span>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    moy. par EC
+                                </div>
+                            </div>
                         </div>
                         
-                        <div>
-                            <div class="flex justify-between text-xs mb-1">
-                                <span class="text-gray-600 dark:text-gray-400">Synchronisés</span>
-                                <span class="font-semibold {{ $pctAbsents >= 100 ? 'text-green-600' : 'text-orange-600' }}">
-                                    {{ $totalManchettesAbsentes }}/{{ $absentsSyncAttendus }} ({{ $pctAbsents }}%)
-                                </span>
+                        @if($nbAbsentsUniques > 0)
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-600 dark:text-gray-400">Synchronisés</span>
+                                    <span class="font-semibold {{ $pctAbsents >= 100 ? 'text-green-600' : 'text-orange-600' }}">
+                                        {{ $totalManchettesAbsentes }}/{{ $absentsSyncAttendus }} ({{ $pctAbsents }}%)
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
+                                    <div class="h-1.5 rounded-full {{ $pctAbsents >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
+                                        style="width: {{ min($pctAbsents, 100) }}%"></div>
+                                </div>
+                                
+                                {{-- Info calcul --}}
+                                <div class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                    Attendu : {{ $nbAbsentsUniques }} abs. × {{ $totalMatieres }} EC = {{ $absentsSyncAttendus }}
+                                </div>
                             </div>
-                            <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700">
-                                <div class="h-1.5 rounded-full {{ $pctAbsents >= 100 ? 'bg-green-500' : 'bg-orange-500' }}" 
-                                     style="width: {{ min($pctAbsents, 100) }}%"></div>
+                        @else
+                            <div class="flex items-center justify-center h-16 text-sm text-green-600 dark:text-green-400">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Aucun absent
                             </div>
-                            @if($nbAbsents === 0)
-                                <div class="text-xs text-green-600 dark:text-green-400 mt-1">Aucun absent</div>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Info contextuelle améliorée --}}
+                <div class="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <div class="flex items-start">
+                        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                        <div class="text-xs text-blue-800 dark:text-blue-300">
+                            <strong>Statistiques de présence :</strong><br>
+                            @if($presencesEC->isNotEmpty())
+                                Les absences varient selon les matières ({{ $nbAbsentsMin }}-{{ $nbAbsentsMax }} absents par EC).
+                                Le système utilise la moyenne ({{ $nbAbsentsUniques }}) pour le calcul des manchettes attendues.
+                            @else
+                                Aucune donnée de présence enregistrée. Veuillez saisir les présences par matière.
                             @endif
                         </div>
                     </div>
@@ -356,9 +450,6 @@
                                         Présents
                                     </th>
                                     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
-                                        Absents
-                                    </th>
-                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
                                         Manchettes
                                     </th>
                                     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">
@@ -399,11 +490,7 @@
                                         <td class="px-3 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
                                             {{ $presents }}
                                         </td>
-                                        
-                                        <td class="px-3 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                            {{ $absents }}
-                                        </td>
-                                        
+                                    
                                         <td class="px-3 py-3 text-center text-sm font-semibold {{ $manchettes >= ($presents + $absents) ? 'text-green-600' : 'text-orange-600' }}">
                                             {{ $manchettes }}
                                         </td>

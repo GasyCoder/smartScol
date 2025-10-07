@@ -29,7 +29,7 @@ class PresenceExamen extends Model
     protected $casts = [
         'date_saisie' => 'datetime',
         'etudiants_presents' => 'integer',
-        'etudiants_absents' => 'array',
+        'etudiants_absents' => 'integer',
         'total_attendu' => 'integer',
     ];
 

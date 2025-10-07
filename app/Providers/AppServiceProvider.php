@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use App\Services\DeliberationPacesService;
+use App\Services\FusionService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -12,7 +14,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+    //    $this->app->singleton(DeliberationPacesService::class);
+    //    $this->app->singleton(FusionService::class);
     }
 
     /**

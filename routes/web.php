@@ -11,20 +11,22 @@ use App\Livewire\Copie\CopiesIndex;
 use App\Livewire\Examen\EditExamen;
 use App\Livewire\UEEC\UniteElement;
 use App\Livewire\Examen\IndexExamen;
+use App\Livewire\Fusion\FusionIndex;
 use App\Livewire\Student\AddEtudiant;
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Student\EditEtudiant;
 use App\Livewire\Copie\CopiesCorbeille;
-use App\Livewire\Fusion\FusionIndex;
 use App\Livewire\Resultats\ReleveNotes;
 use App\Livewire\Settings\SessionExamens;
 use App\Livewire\Settings\UserManagement;
+use App\Livewire\Resultats\ResultatsPACES;
 use App\Livewire\Manchette\ManchetteSaisie;
 use App\Livewire\Manchette\ManchettesIndex;
 use App\Livewire\Resultats\ResultatsFinale;
 use App\Livewire\Settings\AnneeUniversites;
 use App\Livewire\Settings\RolesPermissions;
 use App\Livewire\Manchette\ManchettesCorbeille;
+use App\Livewire\Resultats\ListeResultatsPACES;
 use App\Livewire\Resultats\ResultatVerification;
 
 Route::redirect('/', '/login');
@@ -86,6 +88,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/fusion', FusionIndex::class)->name('fusion');
             Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
             Route::get('/finale', ResultatsFinale::class)->name('finale');
+            Route::get('/resultats-paces', ListeResultatsPACES::class)->name('paces-concours');
 
             Route::get('/releve-notes', ReleveNotes::class)->name('releve-notes.index');
 

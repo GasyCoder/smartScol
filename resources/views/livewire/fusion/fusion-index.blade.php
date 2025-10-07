@@ -22,17 +22,6 @@
                     </svg>
                     Voir les Résultats
                 </a>
-
-                {{-- Bouton Diagnostic (rattrapage uniquement) --}}
-                @if($sessionActive && $sessionActive->type === 'Rattrapage' && $examen)
-                    <button wire:click="diagnosticEligiblesRattrapage" 
-                            class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-300 rounded-md shadow-sm hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 dark:bg-orange-900 dark:text-orange-200 dark:border-orange-600 dark:hover:bg-orange-800">
-                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        Diagnostic
-                    </button>
-                @endif
             </div>
         </div>
     </header>
@@ -158,12 +147,30 @@
 
                 {{-- Onglet Rapport de la fusion --}}
                 <button id="tab-rapport-stats"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition-colors duration-200 focus:outline-none
+                        class="px-6 py-3 text-sm font-medium border-b-2 transition-colors duration-200 focus:outline-none relative
                         {{ $activeTab === 'rapport-stats' 
                             ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-300' 
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600' }}"
-                        wire:click="switchTab('rapport-stats')">
-                    Rapport de la fusion
+                        wire:click="switchTab('rapport-stats')"
+                        wire:loading.attr="disabled"
+                        wire:target="switchTab">
+                    <div class="flex items-center space-x-2">
+                        {{-- Icône de chargement (visible seulement pendant le loading) --}}
+                        <em wire:loading wire:target="switchTab" class="ni ni-loader animate-spin text-base"></em>
+                        
+                        {{-- Texte toujours visible --}}
+                        <span>Rapport de la fusion</span>
+                        
+                        {{-- Badge nombre de matières si disponible --}}
+                        @if(!empty($rapportCoherence['stats']) && $activeTab !== 'rapport-stats')
+                            <span class="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full 
+                                {{ ($rapportCoherence['stats']['complets'] ?? 0) === ($rapportCoherence['stats']['total'] ?? 0) 
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' 
+                                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' }}">
+                                {{ $rapportCoherence['stats']['complets'] ?? 0 }}/{{ $rapportCoherence['stats']['total'] ?? 0 }}
+                            </span>
+                        @endif
+                    </div>
                 </button>
             </nav>
 

@@ -57,7 +57,8 @@ class ResultatsFinale extends Component
     public $resultatsSession2 = [];
     public $statistiquesSession1 = [];
     public $statistiquesSession2 = [];
-    public $uesStructure = [];
+    /** @var \Illuminate\Support\Collection */
+    public $uesStructure; // ✅ Documentation du type
 
     // PROPRIÉTÉS DÉLIBÉRATION
     public $deliberationParams = [
@@ -117,7 +118,7 @@ class ResultatsFinale extends Component
         $this->niveaux = collect();
         $this->parcours = collect();
         $this->anneesUniversitaires = collect();
-        $this->uesStructure = collect();
+        $this->uesStructure = collect(); // ✅ CHANGÉ de [] à collect()
         
         // ✅ AJOUT : Sauvegarder les valeurs avant setDefaultValues
         $savedNiveau = $this->selectedNiveau;
@@ -276,6 +277,7 @@ class ResultatsFinale extends Component
         $this->updatePeutChargerResultats();
     }
 
+
     public function chargerResultats()
     {
         if (!$this->peut_charger_resultats) {
@@ -284,6 +286,14 @@ class ResultatsFinale extends Component
         }
         
         try {
+            $this->loadUEStructure();
+            
+            // ✅ Maintenant fonctionne car $this->uesStructure est toujours une Collection
+            if ($this->uesStructure->isEmpty()) {
+                toastr()->warning('Aucune UE trouvée pour ce niveau/parcours.');
+                return;
+            }
+            
             $this->loadSessions();
             $this->checkSession2Availability();
             $this->loadResultats();
@@ -292,9 +302,9 @@ class ResultatsFinale extends Component
             $totalSession1 = count($this->resultatsSession1);
             $totalSession2 = count($this->resultatsSession2);
             
-            $message = "Résultats chargés ! Session 1: {$totalSession1} étudiants";
+            $message = "Résultats chargés ! Session 1: {$totalSession1} étudiant(s)";
             if ($totalSession2 > 0) {
-                $message .= ", Session 2: {$totalSession2} étudiants";
+                $message .= ", Session 2: {$totalSession2} étudiant(s)";
             }
             
             toastr()->success($message);
@@ -304,6 +314,7 @@ class ResultatsFinale extends Component
             toastr()->error('Erreur lors du chargement des résultats: ' . $e->getMessage());
         }
     }
+
 
     private function updateEtapeActuelle()
     {
@@ -409,38 +420,39 @@ class ResultatsFinale extends Component
         if (!$session) return [];
 
         try {
-            // S'assurer que le service est initialisé
             if (!$this->calculAcademiqueService) {
                 $this->calculAcademiqueService = new CalculAcademiqueService();
             }
             
             $calculService = $this->calculAcademiqueService;
 
-            // ✅ CORRECTION : Trouver l'examen spécifique pour ce niveau/parcours
+            // ✅ CORRECTION : Trouver TOUS les examens pour ce niveau/parcours
             $examenQuery = Examen::where('niveau_id', $this->selectedNiveau);
             if ($this->selectedParcours) {
                 $examenQuery->where('parcours_id', $this->selectedParcours);
             }
             
-            $examen = $examenQuery->first();
+            $examens = $examenQuery->get(); // ✅ Tous les examens
             
-            if (!$examen) {
-                Log::warning('Aucun examen trouvé pour ce niveau/parcours', [
+            if ($examens->isEmpty()) {
+                Log::warning('❌ Aucun examen trouvé', [
                     'niveau_id' => $this->selectedNiveau,
                     'parcours_id' => $this->selectedParcours,
                     'session_id' => $session->id
                 ]);
                 return [];
             }
+            
+            $examenIds = $examens->pluck('id')->toArray();
 
-            // ✅ REQUÊTE CORRIGÉE avec filtrage par examen spécifique
+            // ✅ REQUÊTE CORRIGÉE avec tous les examens du niveau/parcours
             $query = ResultatFinal::with([
                 'etudiant:id,nom,prenom,matricule,niveau_id,parcours_id',
-                'ec.ue:id,nom,abr,credits',
+                'ec.ue:id,nom,abr,credits,parcours_id,niveau_id',
                 'examen:id,niveau_id,parcours_id'
             ])
+            ->whereIn('examen_id', $examenIds) // ✅ TOUS les examens concernés
             ->where('session_exam_id', $session->id)
-            ->where('examen_id', $examen->id) // ✅ FILTRAGE CRUCIAL PAR EXAMEN
             ->whereHas('etudiant', function($q) {
                 $q->where('niveau_id', $this->selectedNiveau);
                 if ($this->selectedParcours) {
@@ -452,8 +464,8 @@ class ResultatsFinale extends Component
             $resultats = $query->get();
             
             if ($resultats->isEmpty()) {
-                Log::info('Aucun résultat trouvé pour cet examen', [
-                    'examen_id' => $examen->id,
+                Log::info('ℹ️ Aucun résultat publié trouvé', [
+                    'examen_ids' => $examenIds,
                     'session_id' => $session->id,
                     'niveau_id' => $this->selectedNiveau,
                     'parcours_id' => $this->selectedParcours
@@ -461,34 +473,58 @@ class ResultatsFinale extends Component
                 return [];
             }
 
-            // ✅ FILTRER les résultats avec relations valides
+            // ✅ FILTRAGE STRICT : Valider chaque résultat
             $resultatsValides = $resultats->filter(function($resultat) {
-                return $resultat->etudiant && 
-                       $resultat->ec && 
-                       $resultat->ec->ue &&
-                       $resultat->examen &&
-                       $resultat->examen->id &&
-                       $resultat->etudiant->niveau_id == $this->selectedNiveau &&
-                       (!$this->selectedParcours || $resultat->etudiant->parcours_id == $this->selectedParcours);
+                // Vérifier que l'étudiant correspond bien
+                if (!$resultat->etudiant) return false;
+                if ($resultat->etudiant->niveau_id != $this->selectedNiveau) return false;
+                if ($this->selectedParcours && $resultat->etudiant->parcours_id != $this->selectedParcours) return false;
+                
+                // Vérifier que l'EC/UE correspondent
+                if (!$resultat->ec || !$resultat->ec->ue) return false;
+                if ($resultat->ec->ue->niveau_id != $this->selectedNiveau) return false;
+                
+                // ✅ NOUVEAU : Vérifier que l'EC appartient à ce parcours
+                if ($this->selectedParcours) {
+                    $ecParcoursId = $resultat->ec->parcours_id;
+                    // Accepter si EC est du même parcours OU commune (null)
+                    if ($ecParcoursId !== null && $ecParcoursId != $this->selectedParcours) {
+                        return false;
+                    }
+                }
+                
+                // Vérifier que l'examen correspond
+                if (!$resultat->examen) return false;
+                if ($resultat->examen->niveau_id != $this->selectedNiveau) return false;
+                if ($this->selectedParcours && $resultat->examen->parcours_id != $this->selectedParcours) return false;
+                
+                return true;
             });
 
             if ($resultatsValides->isEmpty()) {
-                Log::warning('Aucun résultat avec relations valides', [
+                Log::warning('⚠️ Aucun résultat avec relations valides', [
                     'total_resultats' => $resultats->count(),
-                    'examen_id' => $examen->id,
-                    'session_id' => $session->id
+                    'resultats_valides' => 0,
+                    'niveau_id' => $this->selectedNiveau,
+                    'parcours_id' => $this->selectedParcours
                 ]);
                 return [];
             }
 
+            Log::info('✅ Résultats filtrés', [
+                'total_brut' => $resultats->count(),
+                'total_valide' => $resultatsValides->count(),
+                'niveau_id' => $this->selectedNiveau,
+                'parcours_id' => $this->selectedParcours
+            ]);
+
             $resultatsGroupes = $resultatsValides->groupBy('etudiant_id');
 
-            return $resultatsGroupes->map(function($resultatsEtudiant, $etudiantId) use ($session, $calculService, $examen) {
+            return $resultatsGroupes->map(function($resultatsEtudiant, $etudiantId) use ($session, $calculService) {
                 $etudiant = $resultatsEtudiant->first()->etudiant;
                 if (!$etudiant) return null;
 
                 try {
-                    // ✅ PASSER LES PARAMÈTRES DE NIVEAU/PARCOURS AU SERVICE
                     $calculComplet = $calculService->calculerResultatsComplets(
                         $etudiantId, 
                         $session->id, 
@@ -499,28 +535,23 @@ class ResultatsFinale extends Component
                     
                     $premierResultat = $resultatsEtudiant->first();
 
-                    // ✅ CORRECTION : S'assurer que la vraie moyenne est utilisée
                     return [
                         'etudiant' => $etudiant,
                         'notes' => $resultatsEtudiant->keyBy('ec_id'),
                         'moyennes_ue' => collect($calculComplet['resultats_ue'])->pluck('moyenne_ue', 'ue_id')->toArray(),
-                        'moyenne_generale' => $calculComplet['synthese']['moyenne_generale'], // ✅ VRAIE MOYENNE
-                        'moyenne_generale_reelle' => $calculComplet['synthese']['moyenne_generale'], // ✅ Pour compatibilité
+                        'moyenne_generale' => $calculComplet['synthese']['moyenne_generale'],
+                        'moyenne_generale_reelle' => $calculComplet['synthese']['moyenne_generale'],
                         'credits_valides' => $calculComplet['synthese']['credits_valides'],
                         'total_credits' => $calculComplet['synthese']['total_credits'],
                         'has_note_eliminatoire' => $calculComplet['synthese']['a_note_eliminatoire'],
                         'decision' => $premierResultat->decision,
                         'details_ue' => $calculComplet['resultats_ue'],
                         'jury_validated' => $premierResultat->jury_validated ?? false,
-                        'examen_id' => $examen->id // ✅ AJOUT POUR TRAÇABILITÉ
                     ];
                 } catch (\Exception $e) {
-                    Log::error('Erreur calcul étudiant: ' . $e->getMessage(), [
+                    Log::error('❌ Erreur calcul étudiant: ' . $e->getMessage(), [
                         'etudiant_id' => $etudiantId,
-                        'session_id' => $session->id,
-                        'examen_id' => $examen->id,
-                        'niveau_id' => $etudiant->niveau_id,
-                        'parcours_id' => $etudiant->parcours_id
+                        'session_id' => $session->id
                     ]);
                     return null;
                 }
@@ -528,13 +559,13 @@ class ResultatsFinale extends Component
             ->filter()
             ->sortBy([
                 ['credits_valides', 'desc'],
-                ['moyenne_generale', 'desc'] // ✅ Tri par vraie moyenne
+                ['moyenne_generale', 'desc']
             ])
             ->values()
             ->toArray();
 
         } catch (\Exception $e) {
-            Log::error('Erreur loadResultatsForSession: ' . $e->getMessage());
+            Log::error('❌ Erreur loadResultatsForSession: ' . $e->getMessage());
             return [];
         }
     }
@@ -545,32 +576,53 @@ class ResultatsFinale extends Component
     private function loadUEStructure()
     {
         if (!$this->selectedNiveau) {
-            $this->uesStructure = [];
+            $this->uesStructure = collect(); // ✅ CHANGÉ de [] à collect()
             return;
         }
 
         try {
-            $ues = UE::where('niveau_id', $this->selectedNiveau)
-                ->where('is_active', true)
-                ->with(['ecs' => function($query) {
+            $uesQuery = UE::where('niveau_id', $this->selectedNiveau)
+                ->where('is_active', true);
+            
+            if ($this->selectedParcours) {
+                $uesQuery->where(function($q) {
+                    $q->where('parcours_id', $this->selectedParcours)
+                    ->orWhereNull('parcours_id');
+                });
+            }
+            
+            $ues = $uesQuery->with(['ecs' => function($query) {
                     $query->where('is_active', true)->orderBy('id');
                 }])
                 ->orderBy('id')
                 ->get();
 
             $this->uesStructure = $ues->map(function($ue) {
+                $ecsFiltered = $ue->ecs;
+                
+                if ($this->selectedParcours) {
+                    $ecsFiltered = $ecsFiltered->filter(function($ec) {
+                        return $ec->parcours_id == $this->selectedParcours || 
+                            $ec->parcours_id === null;
+                    });
+                }
+                
                 return [
                     'ue' => $ue,
-                    'ecs' => $ue->ecs->map(function($ec) {
+                    'ecs' => $ecsFiltered->map(function($ec) {
                         return ['ec' => $ec];
                     })
                 ];
-            });
+            })->filter(function($ueStructure) {
+                return $ueStructure['ecs']->isNotEmpty();
+            }); // ✅ Résultat est déjà une Collection
+            
         } catch (\Exception $e) {
             Log::error('Erreur loadUEStructure: ' . $e->getMessage());
-            $this->uesStructure = collect();
+            $this->uesStructure = collect(); // ✅ CHANGÉ de collect() déjà correct
         }
     }
+
 
     private function calculateStatistics()
     {
@@ -1027,6 +1079,7 @@ class ResultatsFinale extends Component
             $parcours = $this->selectedParcours ? Parcour::find($this->selectedParcours) : null;
             $anneeUniv = AnneeUniversitaire::find($this->selectedAnneeUniversitaire);
 
+            /** @var \App\Exports\AdmisDeliberationPDF $pdfExporter */
             $pdfExporter = new AdmisDeliberationPDF(
                 $resultats,
                 $session,
@@ -1035,6 +1088,7 @@ class ResultatsFinale extends Component
                 []
             );
 
+            // ✅ IntelliSense devrait maintenant reconnaître la méthode
             $result = $pdfExporter->generateAndSaveToPublic();
             
             toastr()->success("PDF généré et sauvegardé ! URL : " . $result['url']);
@@ -1048,6 +1102,7 @@ class ResultatsFinale extends Component
             toastr()->error('Erreur lors de l\'export PDF: ' . $e->getMessage());
         }
     }
+
 
     public function ouvrirModalExport($type = 'pdf', $source = 'simulation')
     {

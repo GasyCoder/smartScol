@@ -137,17 +137,46 @@
                         </h6>
                     </li>
                     @endif
-                    {{-- === MANCHETTES (même niveau) === --}}
-                    @can('manchettes.view')
-                    <li class="nk-menu-item {{ request()->routeIs('manchette.index') ? 'active' : '' }}">
-                        <a href="{{ route('manchette.index') }}"
-                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('manchette.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notice"></em></span>
-                            <span class="flex-grow">Listes des Manchettes</span>
+                    {{-- === DROPDOWN LISTES (Manchettes & Copies) === --}}
+                    @if(auth()->user()->canAny(['manchettes.view', 'copies.view']))
+                    <li class="nk-menu-item py-0.5 has-sub group/item {{ request()->routeIs('manchette.index', 'copie.index') ? 'active' : '' }}">
+                        <a href="#" class="nk-menu-link sub nk-menu-toggle flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
+                            <span class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
+                                <em class="text-xl leading-none text-current transition-all duration-300 icon ni ni-folder-list"></em>
+                            </span>
+                            <span class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
+                                Listes & Documents
+                            </span>
+                            <em class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-base leading-none text-slate-400 group-[.active]/item:text-primary-500 absolute end-5 top-1/2 -translate-y-1/2 rtl:-scale-x-100 group-[.active]/item:rotate-90 group-[.active]/item:rtl:-rotate-90 transition-all duration-300 icon ni ni-chevron-right"></em>
                         </a>
+                        
+                        <ul class="nk-menu-sub mb-1 hidden group-[&.is-compact:not(.has-hover)]/sidebar:!hidden" {{ request()->routeIs('manchette.index', 'copie.index') ? 'style=display:block' : '' }}>
+                            @can('manchettes.view')
+                            <li class="nk-menu-item py-px sub group/sub1 {{ request()->routeIs('manchette.index') ? 'active' : '' }}">
+                                <a href="{{ route('manchette.index') }}" 
+                                class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
+                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
+                                        <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-notice"></em>
+                                        Listes des Manchettes
+                                    </span>
+                                </a>
+                            </li>
+                            @endcan
+                            
+                            @can('copies.view')
+                            <li class="nk-menu-item py-px sub group/sub1 {{ request()->routeIs('copie.index') ? 'active' : '' }}">
+                                <a href="{{ route('copie.index') }}" 
+                                class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
+                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
+                                        <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-notes-alt"></em>
+                                        Listes des Copies
+                                    </span>
+                                </a>
+                            </li>
+                            @endcan
+                        </ul>
                     </li>
-                    @endcan
+                    @endif
                     @if(auth()->user()->hasRole('secretaire'))
                         @can('manchettes.create')
                         <li class="nk-menu-item {{ request()->routeIs('manchettes.saisie') ? 'active' : '' }}">
@@ -170,18 +199,6 @@
                         </li>
                         @endcan
                     @endif
-                    {{-- === COPIES (même niveau) === --}}
-                    @can('copies.view')
-                    <li class="nk-menu-item {{ request()->routeIs('copie.index') ? 'active' : '' }}">
-                        <a href="{{ route('copie.index') }}"
-                        class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                {{ request()->routeIs('copie.index') ? 'text-primary-500' : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                            <span class="w-9 flex-shrink-0 text-slate-400"><em class="text-2xl ni ni-notes-alt"></em></span>
-                            <span class="flex-grow">Listes des Copies</span>
-                        </a>
-                    </li>
-                    @endcan
-
                     @can('resultats.fusion')
                     <li class="nk-menu-item {{ request()->routeIs('resultats.fusion', 'resultats.verification') ? 'active' : '' }}">
                         <a href="{{ route('resultats.fusion') }}"
@@ -197,18 +214,39 @@
                     </li>
                     @endcan
                     @can('resultats.view')
-                        <li class="nk-menu-item {{ request()->routeIs('resultats.finale') ? 'active' : '' }}">
-                            <a href="{{ route('resultats.finale') }}"
-                            class="nk-menu-link flex items-center py-2.5 ps-6 pe-10 font-bold transition
-                                    {{ request()->routeIs('resultats.finale') 
-                                            ? 'text-primary-500' 
-                                            : 'text-slate-600 dark:text-slate-500 hover:text-primary-500' }}">
-                                <span class="w-9 flex-shrink-0 text-slate-400">
-                                    <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-award"></em>
-                                </span>
-                                <span class="flex-grow">Résultats finaux</span>
-                            </a>
-                        </li>
+                    <li class="nk-menu-item py-0.5 has-sub group/item {{ request()->routeIs('resultats.finale', 'resultats.paces-concours', 'resultats.finale.examens') ? 'active' : '' }}">
+                        <a href="#" class="nk-menu-link sub nk-menu-toggle flex relative items-center align-middle py-2.5 ps-6 pe-10 font-heading font-bold tracking-snug group">
+                            <span class="font-normal tracking-normal w-9 inline-flex flex-grow-0 flex-shrink-0 text-slate-400 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
+                                <em class="text-2xl leading-none text-current transition-all duration-300 icon ni ni-award"></em>
+                            </span>
+                            <span class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 flex-grow-1 inline-block whitespace-nowrap transition-all duration-300 text-slate-600 dark:text-slate-500 group-[.active]/item:text-primary-500 group-hover:text-primary-500">
+                                Résultats d'examens
+                            </span>
+                            <em class="group-[&.is-compact:not(.has-hover)]/sidebar:opacity-0 text-base leading-none text-slate-400 group-[.active]/item:text-primary-500 absolute end-5 top-1/2 -translate-y-1/2 rtl:-scale-x-100 group-[.active]/item:rotate-90 group-[.active]/item:rtl:-rotate-90 transition-all duration-300 icon ni ni-chevron-right"></em>
+                        </a>
+                        
+                        <ul class="nk-menu-sub mb-1 hidden group-[&.is-compact:not(.has-hover)]/sidebar:!hidden" {{ request()->routeIs('resultats.finale', 'resultats.paces-concours', 'resultats.finale.examens') ? 'style=display:block' : '' }}>
+                            <li class="nk-menu-item py-px sub group/sub1 {{ request()->routeIs('resultats.paces-concours') ? 'active' : '' }}">
+                                <a href="{{ route('resultats.paces-concours') }}" 
+                                class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
+                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
+                                        <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-list-ol"></em>
+                                        PACES Concours
+                                    </span>
+                                </a>
+                            </li>
+                            
+                            <li class="nk-menu-item py-px sub group/sub1 {{ request()->routeIs('resultats.finale') ? 'active' : '' }}">
+                                <a href="{{ route('resultats.finale') }}" 
+                                class="nk-menu-link flex relative items-center align-middle py-1.5 pe-10 ps-[calc(theme(spacing.6)+theme(spacing.9))] font-normal leading-5 text-sm tracking-normal normal-case">
+                                    <span class="text-slate-600 dark:text-slate-500 group-[.active]/sub1:text-primary-500 hover:text-primary-500 whitespace-nowrap flex-grow inline-block">
+                                        <em class="mr-2 text-lg leading-none text-current transition-all duration-300 icon ni ni-list-round"></em>   
+                                        Examens 2A-6A
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
                     @endcan
                     @can('releve-note.view')
                     <li class="nk-menu-item {{ request()->routeIs('resultats.releve-notes.index') ? 'active' : '' }}">

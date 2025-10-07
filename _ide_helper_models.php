@@ -161,6 +161,52 @@ namespace App\Models{
 /**
  * @property int $id
  * @property int $niveau_id
+ * @property int $parcours_id
+ * @property int $session_exam_id
+ * @property int|null $quota_admission Quota d'admission appliqué
+ * @property int $credits_requis Crédits requis
+ * @property string $moyenne_requise Moyenne minimale
+ * @property bool $note_eliminatoire Note 0 éliminatoire
+ * @property int $nb_admis Nombre d'admis
+ * @property int $nb_redoublants Nombre de redoublants
+ * @property int $nb_exclus Nombre d'exclus
+ * @property int $applique_par Utilisateur ayant appliqué
+ * @property \Illuminate\Support\Carbon $applique_at Date d'application
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\Niveau $niveau
+ * @property-read \App\Models\Parcour $parcours
+ * @property-read \App\Models\SessionExam $sessionExam
+ * @property-read \App\Models\User $utilisateur
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces deliberations()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces enCours()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces simulations()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereAppliqueAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereAppliquePar($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreditsRequis($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereMoyenneRequise($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNbAdmis($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNbExclus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNbRedoublants($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNiveauId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNoteEliminatoire($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereParcoursId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereQuotaAdmission($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereSessionExamId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereUpdatedAt($value)
+ */
+	class DeliberPaces extends \Eloquent {}
+}
+
+namespace App\Models{
+/**
+ * @property int $id
+ * @property int $niveau_id
  * @property int|null $parcours_id
  * @property int $session_id
  * @property int $credits_admission_s1
@@ -467,6 +513,7 @@ namespace App\Models{
  * @property string $nom Ex: Médecine générale, Dentaire, Infirmier
  * @property int $niveau_id Niveau auquel appartient ce parcours
  * @property bool $is_active
+ * @property int $quota_admission
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Etudiant> $etudiants
@@ -487,6 +534,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereIsActive($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereNom($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereQuotaAdmission($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereUpdatedAt($value)
  */
 	class Parcour extends \Eloquent {}
@@ -533,7 +581,7 @@ namespace App\Models{
  * @property int $salle_id Salle concernée
  * @property int|null $ec_id Matière spécifique (optionnel)
  * @property int $etudiants_presents Nombre d'étudiants présents
- * @property array<array-key, mixed> $etudiants_absents Nombre d'étudiants absents
+ * @property int $etudiants_absents Nombre d'étudiants absents
  * @property int|null $total_attendu Total d'étudiants attendus
  * @property string|null $observations Observations sur la présence
  * @property int $saisie_par Utilisateur ayant saisi
@@ -602,6 +650,9 @@ namespace App\Models{
  * @property \Illuminate\Support\Carbon|null $date_publication
  * @property string|null $hash_verification
  * @property bool $jury_validated Indique si la décision a été validée par le jury
+ * @property bool $is_deliber Indique si une délibération a été appliquée pour ce résultat
+ * @property \Illuminate\Support\Carbon|null $deliber_at Date et heure de la délibération
+ * @property int|null $deliber_by Utilisateur ayant appliqué la délibération
  * @property int|null $fusion_id ID du résultat fusion source
  * @property \Illuminate\Support\Carbon|null $date_fusion Date du transfert depuis fusion
  * @property \Illuminate\Support\Carbon|null $created_at
@@ -630,12 +681,14 @@ namespace App\Models{
  * @property-read \App\Models\ResultatFusion|null $resultatFusion
  * @property-read \App\Models\SessionExam|null $sessionExam
  * @property-read \App\Models\User|null $utilisateurAnnulation
+ * @property-read \App\Models\User|null $utilisateurDeliberation
  * @property-read \App\Models\User $utilisateurGeneration
  * @property-read \App\Models\User|null $utilisateurModification
  * @property-read \App\Models\User|null $utilisateurReactivation
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal admis()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal annule()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal avecDeliberation()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal delibere()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal echoue()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal eliminatoire()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal enAttente()
@@ -646,6 +699,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal forSession($sessionId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal nonDelibere()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parAnneeUniversitaire($anneeId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parNiveau($niveauId)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal parParcours($parcoursId)
@@ -669,6 +723,8 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDatePublication($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDateReactivation($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDecision($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDeliberAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereDeliberBy($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEcId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereEtudiantId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereExamenId($value)
@@ -676,6 +732,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereGenerePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereHashVerification($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereIsDeliber($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereJuryValidated($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereModifiePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|ResultatFinal whereMotifAnnulation($value)

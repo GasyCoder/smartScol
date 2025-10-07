@@ -48,6 +48,9 @@ class ResultatFinal extends Model
         'jury_validated',
         'fusion_id',
         'date_fusion',
+        'is_deliber',        // Ajouter
+        'deliber_at',        // Ajouter
+        'deliber_by',        // Ajouter
     ];
 
     protected $casts = [
@@ -58,6 +61,8 @@ class ResultatFinal extends Model
         'date_annulation' => 'datetime',
         'date_reactivation' => 'datetime',
         'jury_validated' => 'boolean',
+        'is_deliber' => 'boolean',      // Ajouter
+        'deliber_at' => 'datetime',     // Ajouter
     ];
 
     /**
@@ -77,6 +82,25 @@ class ResultatFinal extends Model
     /**
      * Relations
      */
+
+
+    public function utilisateurDeliberation()
+    {
+        return $this->belongsTo(User::class, 'deliber_by');
+    }
+
+    // Ajouter un scope utile
+    public function scopeDelibere($query)
+    {
+        return $query->where('is_deliber', true);
+    }
+
+    public function scopeNonDelibere($query)
+    {
+        return $query->where('is_deliber', false);
+    }
+
+    
     public function etudiant()
     {
         return $this->belongsTo(Etudiant::class);

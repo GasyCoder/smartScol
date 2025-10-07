@@ -568,16 +568,20 @@
 
                                             {{-- Actions EC individuelles --}}
                                             <div class="flex space-x-2">
+                                                @can('examens.edit')
                                                 <button wire:click="editEC({{ $examen->id }}, {{ $ec->id }})" 
                                                         class="flex-1 px-3 py-2 text-xs font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 transition-colors">
                                                     <em class="ni ni-settings mr-1"></em>
                                                     Modifier
                                                 </button>
+                                                @endcan
+                                                @can('examens.delete')
                                                 <button wire:click="confirmDeleteEC({{ $examen->id }}, {{ $ec->id }})" 
                                                         class="flex-1 px-3 py-2 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 transition-colors">
                                                     <em class="ni ni-fat-remove mr-1"></em>
                                                     Supprimer
                                                 </button>
+                                                @endcan
                                             </div>
                                         </div>
                                     </div>
