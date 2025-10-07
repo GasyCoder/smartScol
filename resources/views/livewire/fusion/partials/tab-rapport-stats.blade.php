@@ -91,92 +91,59 @@
 
     {{-- Rapport de cohérence disponible --}}
     @elseif(!empty($rapportCoherence) && isset($rapportCoherence['stats']))
-
-    @php
-        // Infos examen
-        $niveauNom = $examen->niveau->nom ?? 'N/A';
-        $parcoursNom = $examen->parcours->nom ?? 'N/A';
-        
-        // ✅ Données RÉELLES depuis presences_examens
-        $totalMatieres = count($rapportCoherence['data'] ?? []);
-        
-        // ✅ Récupérer les vraies données depuis la table
-        $presencesEC = \App\Models\PresenceExamen::where('examen_id', $examen->id)
-            ->where('session_exam_id', $sessionActive->id)
-            ->whereNotNull('ec_id')
-            ->get();
-        
-        // ✅ CALCUL SIMPLE : Absents = Attendu - Présents
-        if ($presencesEC->isNotEmpty()) {
-            $totalAttendu = $presencesEC->first()->total_attendu ?? 0;
-            $nbPresentsMin = $presencesEC->min('etudiants_presents');
-            $nbPresentsMax = $presencesEC->max('etudiants_presents');
-            $nbPresentsMoy = round($presencesEC->avg('etudiants_presents'));
-            
-            // Calcul des absents
-            $nbAbsentsMin = $totalAttendu - $nbPresentsMax;
-            $nbAbsentsMax = $totalAttendu - $nbPresentsMin;
-            $nbAbsentsMoy = $totalAttendu - $nbPresentsMoy;
-            
-            $nbAbsentsUniques = $nbAbsentsMoy;
-            $nbPresentsUniques = $nbPresentsMoy;
-            $totalInscrits = $totalAttendu;
-        } else {
-            $nbAbsentsMin = 0;
-            $nbAbsentsMax = 0;
-            $nbAbsentsMoy = 0;
-            $nbPresentsMin = 0;
-            $nbPresentsMax = 0;
-            $nbPresentsMoy = 0;
-            $totalAttendu = 0;
-            $nbAbsentsUniques = 0;
-            $nbPresentsUniques = 0;
-            $totalInscrits = 0;
-        }
-        
-        // ✅ Agrégation des données par EC
-        $totalPresentsReel = 0;
-        $totalAbsentsReel = 0;
-        $totalManchettes = 0;
-        $totalManchettesPresentes = 0;
-        $totalManchettesAbsentes = 0;
-        $totalCopies = 0;
-        
-        foreach($rapportCoherence['data'] as $item) {
-            $totalPresentsReel += ($item['presents'] ?? 0);
-            $totalAbsentsReel += ($item['absents'] ?? 0);
-            $totalManchettes += ($item['manchettes'] ?? 0);
-            $totalManchettesPresentes += ($item['manchettes_presentes'] ?? 0);
-            $totalManchettesAbsentes += ($item['manchettes_absentes'] ?? 0);
-            $totalCopies += ($item['copies'] ?? 0);
-        }
-        
-        // ✅ CORRECTION : Comparer avec le TOTAL DE MANCHETTES RÉELLES
-        $manchettesAttendues = $totalManchettes; // Au lieu de $totalAttenduReel
-        $copiesAttendues = $totalManchettes;
-        $absentsSyncAttendus = $nbAbsentsUniques * $totalMatieres;
-        
-        // Pourcentages
-        $pctManchettes = 100; // ✅ Toujours 100% car on compare les manchettes avec elles-mêmes
-        $pctCopies = $totalManchettes > 0 
-            ? round(($totalCopies / $totalManchettes) * 100, 1) 
-            : 0;
-        $pctAbsents = $absentsSyncAttendus > 0 
-            ? round(($totalManchettesAbsentes / $absentsSyncAttendus) * 100, 1) 
-            : ($nbAbsentsUniques === 0 ? 100 : 0);
-        
-        // Détection d'anomalie
-        $anomalieCopies = $totalCopies > $totalManchettes;
-        $ecartCopies = abs($totalCopies - $totalManchettes);
-        
-        // Stats matières
-        $stats = $rapportCoherence['stats'];
-        $matieresCompletes = $stats['complets'] ?? 0;
-        $matieresIncompletes = $stats['incomplets'] ?? 0;
-        $completionRate = $totalMatieres > 0 
-            ? round(($matieresCompletes / $totalMatieres) * 100) 
-            : 0;
-    @endphp
+@php
+    // Infos examen
+    $niveauNom = $examen->niveau->nom ?? 'N/A';
+    $parcoursNom = $examen->parcours->nom ?? 'N/A';
+    
+    // ✅ UTILISER LA MÉTHODE HELPER DU MODÈLE
+    $statsPresence = \App\Models\PresenceExamen::getStatistiquesExamen(
+        $examen->id, 
+        $sessionActive->id
+    );
+    
+    $nbPresents = $statsPresence['presents'];
+    $nbAbsents = $statsPresence['absents'];
+    $totalInscrits = $statsPresence['total_attendu'];
+    
+    // Données saisies (somme sur toutes les matières)
+    $totalManchettesPresentes = 0;
+    $totalManchettesAbsentes = 0;
+    $totalCopies = 0;
+    
+    foreach($rapportCoherence['data'] as $item) {
+        $totalManchettesPresentes += ($item['manchettes_presentes'] ?? 0);
+        $totalManchettesAbsentes += ($item['manchettes_absentes'] ?? 0);
+        $totalCopies += ($item['copies_count'] ?? 0);
+    }
+    
+    // Stats matières
+    $stats = $rapportCoherence['stats'];
+    $totalMatieres = $stats['total'] ?? 0;
+    $matieresCompletes = $stats['complets'] ?? 0;
+    $matieresIncompletes = $stats['incomplets'] ?? 0;
+    
+    // Calcul attendus
+    $manchettesAttendues = $nbPresents * $totalMatieres;
+    $copiesAttendues = $nbPresents * $totalMatieres;
+    $absentsSyncAttendus = $nbAbsents * $totalMatieres;
+    
+    // Pourcentages
+    $pctManchettes = $manchettesAttendues > 0 
+        ? round(($totalManchettesPresentes / $manchettesAttendues) * 100, 1) 
+        : 0;
+    $pctCopies = $copiesAttendues > 0 
+        ? round(($totalCopies / $copiesAttendues) * 100, 1) 
+        : 0;
+    $pctAbsents = $absentsSyncAttendus > 0 
+        ? round(($totalManchettesAbsentes / $absentsSyncAttendus) * 100, 1) 
+        : 100;
+    
+    // Pourcentage de complétion global (matières complètes)
+    $completionRate = $totalMatieres > 0 
+        ? round(($matieresCompletes / $totalMatieres) * 100) 
+        : 0;
+@endphp
 
         <div class="space-y-4">
             {{-- En-tête avec contexte --}}
@@ -211,7 +178,14 @@
                                 {{ $rapportCoherence['last_check'] }}
                             </div>
                         @endif
-                    
+                        
+                        {{-- DEBUG: Afficher les valeurs --}}
+                        @if(config('app.debug'))
+                            <div class="text-xs text-red-500 mb-1">
+                                DEBUG: {{ $matieresCompletes }}/{{ $totalMatieres }} = {{ $completionRate }}%
+                            </div>
+                        @endif
+                        
                         <div class="text-2xl font-bold {{ $completionRate === 100 ? 'text-green-600 dark:text-green-400' : ($completionRate > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') }}">
                             {{ $completionRate }}%
                         </div>

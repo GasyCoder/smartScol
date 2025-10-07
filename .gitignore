@@ -1,24 +1,47 @@
-/.phpunit.cache
+# Node & Vendor
 /node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
 /vendor
+
+# Environment files
 /.env
-/.env.backup
-/.env.production
-.phpactor.json
+/.env.*
+!.env.example
+
+# Laravel specific
+/public/storage
+/public/hot
+/public/build
+
+# Storage (cache, logs, sessions, etc.)
+/storage/*.key
+/storage/debugbar
+/storage/pail
+/storage/logs/*
+/storage/framework/*
+/storage/app/*
+/storage/*.log
+/.phpunit.cache
 .phpunit.result.cache
-Homestead.json
+
+# IDEs & Editors
+/.idea
+/.vscode
+/.fleet
+/.zed
+/.nova
+
+# Homestead & local config
 Homestead.yaml
+Homestead.json
+auth.json
+
+# Cache and temporary files
 npm-debug.log
 yarn-error.log
-/auth.json
-/.fleet
-/.idea
-/.nova
-/.vscode
-/.zed
+.phpactor.json
+
+# Database dump
+*.sql
+
+# Optional local files
 /.smartscol.sql
