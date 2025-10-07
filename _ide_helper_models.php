@@ -160,6 +160,9 @@ namespace App\Models{
 namespace App\Models{
 /**
  * @property int $id
+ * @property string $type
+ * @property string|null $status
+ * @property int $progress
  * @property int $niveau_id
  * @property int $parcours_id
  * @property int $session_exam_id
@@ -170,8 +173,13 @@ namespace App\Models{
  * @property int $nb_admis Nombre d'admis
  * @property int $nb_redoublants Nombre de redoublants
  * @property int $nb_exclus Nombre d'exclus
+ * @property array<array-key, mixed>|null $resultats
+ * @property array<array-key, mixed>|null $groupes
+ * @property array<array-key, mixed>|null $statistiques
+ * @property string|null $error_message
+ * @property numeric|null $duree_secondes
  * @property int $applique_par Utilisateur ayant appliqué
- * @property \Illuminate\Support\Carbon $applique_at Date d'application
+ * @property \Illuminate\Support\Carbon|null $applique_at
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \App\Models\Niveau $niveau
@@ -188,6 +196,9 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereAppliquePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreditsRequis($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereDureeSecondes($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereErrorMessage($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereGroupes($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereMoyenneRequise($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNbAdmis($value)
@@ -196,8 +207,13 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNoteEliminatoire($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereParcoursId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereProgress($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereQuotaAdmission($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereResultats($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereSessionExamId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereStatistiques($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereUpdatedAt($value)
  */
 	class DeliberPaces extends \Eloquent {}

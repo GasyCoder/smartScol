@@ -53,7 +53,7 @@ class PresenceExamen extends Model
      */
     public static function getStatistiquesExamen($examenId, $sessionId)
     {
-        // Présence globale (ec_id = null)
+        // 1. Présence globale (ec_id = null)
         $presenceGlobale = self::where('examen_id', $examenId)
             ->where('session_exam_id', $sessionId)
             ->whereNull('ec_id')
@@ -61,16 +61,33 @@ class PresenceExamen extends Model
 
         if ($presenceGlobale) {
             return [
-                'presents' => $presenceGlobale->etudiants_presents,
-                'absents' => is_array($presenceGlobale->etudiants_absents) 
-                    ? count($presenceGlobale->etudiants_absents) 
-                    : 0,
-                'total_attendu' => $presenceGlobale->total_attendu,
+                'presents' => (int)($presenceGlobale->etudiants_presents ?? 0),
+                'absents' => (int)($presenceGlobale->etudiants_absents ?? 0), // ✅ CORRECTION : cast en int direct
+                'total_attendu' => (int)($presenceGlobale->total_attendu ?? 0),
                 'source' => 'presence_globale'
             ];
         }
 
-        // Fallback : calculer depuis les manchettes
+        // 2. Moyenne des présences par EC
+        $presencesEC = self::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->whereNotNull('ec_id')
+            ->get();
+
+        if ($presencesEC->isNotEmpty()) {
+            $avgPresents = (int)round($presencesEC->avg('etudiants_presents'));
+            $avgAbsents = (int)round($presencesEC->avg('etudiants_absents'));
+            $avgTotal = (int)round($presencesEC->avg('total_attendu'));
+
+            return [
+                'presents' => $avgPresents,
+                'absents' => $avgAbsents,
+                'total_attendu' => $avgTotal,
+                'source' => 'moyenne_ec'
+            ];
+        }
+
+        // 3. Fallback : calculer depuis les manchettes
         return self::calculerDepuisManchettes($examenId, $sessionId);
     }
 
@@ -79,24 +96,13 @@ class PresenceExamen extends Model
      */
     private static function calculerDepuisManchettes($examenId, $sessionId)
     {
-        // Compter les manchettes présentes (is_absent = false)
-        $presents = Manchette::where('examen_id', $examenId)
+        // ✅ CORRECTION : Compter les étudiants uniques avec manchettes
+        $etudiantsAvecManchettes = Manchette::where('examen_id', $examenId)
             ->where('session_exam_id', $sessionId)
-            ->whereHas('codeAnonymat', function($q) {
-                $q->where('is_absent', false)
-                ->orWhereNull('is_absent');
-            })
             ->distinct('etudiant_id')
-            ->count('etudiant_id');
+            ->pluck('etudiant_id');
 
-        // Compter les manchettes absentes (is_absent = true)
-        $absents = Manchette::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionId)
-            ->whereHas('codeAnonymat', function($q) {
-                $q->where('is_absent', true);
-            })
-            ->distinct('etudiant_id')
-            ->count('etudiant_id');
+        $presents = $etudiantsAvecManchettes->count();
 
         // Total théorique
         $examen = Examen::find($examenId);
@@ -107,6 +113,8 @@ class PresenceExamen extends Model
                 ->where('is_active', true)
                 ->count();
         }
+
+        $absents = max(0, $totalAttendu - $presents);
 
         return [
             'presents' => $presents,
@@ -129,11 +137,9 @@ class PresenceExamen extends Model
 
         if ($presenceEC) {
             return [
-                'presents' => $presenceEC->etudiants_presents,
-                'absents' => is_array($presenceEC->etudiants_absents) 
-                    ? count($presenceEC->etudiants_absents) 
-                    : 0,
-                'total_attendu' => $presenceEC->total_attendu,
+                'presents' => (int)($presenceEC->etudiants_presents ?? 0), // ✅ CORRECTION
+                'absents' => (int)($presenceEC->etudiants_absents ?? 0),   // ✅ CORRECTION
+                'total_attendu' => (int)($presenceEC->total_attendu ?? 0),
                 'source' => 'presence_ec_specifique'
             ];
         }
