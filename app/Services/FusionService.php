@@ -620,7 +620,8 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
     }
 
     /**
-     * Étape 1 : Fusion des manchettes et copies
+     * Étape 1 : Fusion des manchettes et copies - VERSION CORRIGÉE
+     * Remplacer dans FusionService.php à partir de la ligne ~330
      */
     private function executerEtape1($examenId, $sessionId = null)
     {
@@ -732,18 +733,11 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
             ];
         }
 
-        // Vérification des résultats existants
-        $resultatsExistants = ResultatFusion::where('examen_id', $examenId)
-            ->where('session_exam_id', $sessionId)
-            ->get()
-            ->groupBy(function($item) {
-                return $item->etudiant_id . '_' . $item->ec_id;
-            });
-
         $copiesParCode = $copies->groupBy('codeAnonymat.code_complet');
         $resultatsAInserer = [];
         $batchSize = 500;
         $resultatsGeneres = 0;
+        $resultatsUpdates = 0;
         $erreursIgnorees = 0;
 
         foreach ($manchettes->chunk($batchSize) as $manchettesChunk) {
@@ -766,12 +760,6 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                         continue;
                     }
 
-                    $cleUnique = $manchette->etudiant_id . '_' . $copie->ec_id;
-                    
-                    if ($resultatsExistants->has($cleUnique)) {
-                        continue;
-                    }
-
                     $resultatsAInserer[] = [
                         'etudiant_id' => $manchette->etudiant_id,
                         'examen_id' => $examenId,
@@ -789,9 +777,18 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                     $resultatsGeneres++;
                 }
 
+                // ✅ CORRECTION PRINCIPALE : Utiliser upsert au lieu de insert
                 if (count($resultatsAInserer) >= $batchSize) {
                     try {
-                        ResultatFusion::insert($resultatsAInserer);
+                        // Utiliser upsert pour gérer les doublons automatiquement
+                        DB::table('resultats_fusion')->upsert(
+                            $resultatsAInserer,
+                            // Colonnes de la contrainte unique
+                            ['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'],
+                            // Colonnes à mettre à jour en cas de conflit
+                            ['code_anonymat_id', 'note', 'statut', 'etape_fusion', 'genere_par', 'updated_at']
+                        );
+                        
                         $resultatsAInserer = [];
                         usleep(10000);
                     } catch (\Exception $e) {
@@ -805,9 +802,14 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
             }
         }
 
+        // ✅ CORRECTION : Insertion finale avec upsert
         if (!empty($resultatsAInserer)) {
             try {
-                ResultatFusion::insert($resultatsAInserer);
+                DB::table('resultats_fusion')->upsert(
+                    $resultatsAInserer,
+                    ['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'],
+                    ['code_anonymat_id', 'note', 'statut', 'etape_fusion', 'genere_par', 'updated_at']
+                );
             } catch (\Exception $e) {
                 Log::error('Erreur insertion finale ResultatFusion', [
                     'error' => $e->getMessage(),
@@ -979,7 +981,11 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
             if (!empty($resultatsAInserer)) {
                 $chunks = array_chunk($resultatsAInserer, 500);
                 foreach ($chunks as $chunk) {
-                    ResultatFusion::insert($chunk);
+                  DB::table('resultats_fusion')->upsert(
+                        $chunk,
+                        ['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'],
+                        ['code_anonymat_id', 'note', 'statut', 'etape_fusion', 'genere_par', 'updated_at']
+                    );
                 }
             }
 
