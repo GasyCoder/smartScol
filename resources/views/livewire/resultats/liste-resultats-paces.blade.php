@@ -1,5 +1,7 @@
+{{-- resources/views/livewire/resultats/liste-resultats-paces.blade.php --}}
 <div class="space-y-4">
-    {{-- Breadcrumb (inchangé) --}}
+
+    {{-- ===== BREADCRUMB (garde ton code) ===== --}}
     <div class="flex items-center gap-2 text-sm">
         <button wire:click="retourSelection" 
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all
@@ -25,17 +27,20 @@
         @endif
     </div>
 
-    {{-- ✅ LOADING PARFAITEMENT CENTRÉ --}}
+    {{-- ===== SPINNER CENTRÉ (ton composant) ===== --}}
     <x-loading-spinner 
-            target="selectionnerParcours" 
-            message="Chargement des résultats"
-            description="Récupération des données du parcours..." />
-    {{-- Contenu --}}
+        target="selectionnerParcours" 
+        message="Chargement des résultats"
+        description="Récupération des données du parcours..." />
+
+    {{-- ===== ÉTAPE SÉLECTION ===== --}}
     @if($etape === 'selection')
         @include('livewire.resultats.partials.selection-parcours-paces')
     @endif
 
+    {{-- ===== ÉTAPE RÉSULTATS ===== --}}
     @if($etape === 'resultats')
         @include('livewire.resultats.partials.affichage-resultats-paces')
     @endif
+
 </div>

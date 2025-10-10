@@ -56,7 +56,7 @@ class UniteElement extends Component
 
     public function mount()
     {
-        if (!Auth::user()->hasRole('superadmin')) {
+        if (!Auth::user()->hasAnyRole(['superadmin', 'enseignant'])) {
             abort(403, 'Accès non autorisé.');
         }
         // Au chargement initial, restaurer l'état en fonction des paramètres d'URL

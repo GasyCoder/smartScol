@@ -2,3 +2,44 @@
 CREATE INDEX idx_manchettes_session_exam ON manchettes(session_exam_id, examen_id, etudiant_id);
 CREATE INDEX idx_codes_anonymat_session_ec ON codes_anonymat(session_exam_id, examen_id, ec_id);
 CREATE INDEX idx_etudiants_niveau_parcours ON etudiants(niveau_id, parcours_id, is_active);
+
+
+-- Sélection de l'année active et de la session Normale
+SET @annee_id := (SELECT id FROM annees_universitaires WHERE is_active = 1 LIMIT 1);
+SET @session_id := (
+  SELECT id FROM session_exams 
+  WHERE annee_universitaire_id = @annee_id AND type = 'Normale'
+  LIMIT 1
+);
+
+-- 1) Matricules ≤ 38999 : bascule en EXCLUS si pas admis
+UPDATE resultats_finaux rf
+JOIN examens e    ON e.id = rf.examen_id
+JOIN etudiants et ON et.id = rf.etudiant_id
+SET rf.decision = 'exclus'
+WHERE rf.session_exam_id = @session_id
+  AND rf.statut = 'publie'
+  AND et.matricule <= 38999
+  AND (rf.decision IS NULL OR rf.decision <> 'admis');
+
+-- 2) Construire la liste des étudiants ayant déjà été "redoublant" AVANT l'année active
+DROP TEMPORARY TABLE IF EXISTS tmp_anciens_red;
+CREATE TEMPORARY TABLE tmp_anciens_red (etudiant_id INT PRIMARY KEY) ENGINE=Memory
+AS
+SELECT DISTINCT r2.etudiant_id
+FROM resultats_finaux r2
+JOIN session_exams se2 ON se2.id = r2.session_exam_id
+WHERE r2.statut = 'publie'
+  AND r2.decision = 'redoublant'
+  AND se2.annee_universitaire_id <> @annee_id;
+
+-- 3) Ces anciens redoublants deviennent EXCLUS (si pas admis) pour la session Normale active
+UPDATE resultats_finaux rf
+JOIN tmp_anciens_red t ON t.etudiant_id = rf.etudiant_id
+SET rf.decision = 'exclus'
+WHERE rf.session_exam_id = @session_id
+  AND rf.statut = 'publie'
+  AND (rf.decision IS NULL OR rf.decision <> 'admis');
+
+-- 4) Nettoyage
+DROP TEMPORARY TABLE IF EXISTS tmp_anciens_red;

@@ -1,4 +1,4 @@
-{{-- resources/views/exports/admis-deliberation-pdf.blade.php OPTIMISÉ --}}
+{{-- VUE BLADE INSPIRER --}}
 <!DOCTYPE html>
 <html lang="fr">
 <head>

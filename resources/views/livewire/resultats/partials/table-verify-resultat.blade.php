@@ -201,6 +201,9 @@
                                                                         {{ number_format($resultat['note'], 2) }}
                                                                         <em class="ml-2 text-orange-500 icon ni ni-edit-alt" title="Note modifiée"></em>
                                                                     </span>
+                                                                    <span class="px-2 py-1 rounded-md bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                                                                        Ancienne: {{ number_format($resultat['note_old'], 2) }}
+                                                                    </span>
                                                                     <!-- Tooltip info -->
                                                                     <div class="absolute z-20 px-3 py-2 text-xs text-white bg-gray-800 rounded-lg shadow-lg opacity-0 pointer-events-none -top-16 left-1/2 transform -translate-x-1/2 hover:opacity-100 transition-opacity duration-300">
                                                                         <div class="font-semibold">Note modifiée</div>

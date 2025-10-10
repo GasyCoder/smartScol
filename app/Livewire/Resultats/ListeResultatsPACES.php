@@ -17,7 +17,10 @@ use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\ResultatsPacesExport;
 use Illuminate\Support\Facades\Cache;
+use App\Services\ResultatsPacesPdfService;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class ListeResultatsPACES extends Component
@@ -27,6 +30,20 @@ class ListeResultatsPACES extends Component
     // Navigation avec URL
     public $etape = 'selection';
     public $filtreDecision = 'tous';
+    public int $snapshotVersion = 1;          // bump si besoin d'invalider le snapshot
+    public $lastSimHash = null;        // hash des paramètres pour éviter les re-simulations inutiles
+    public $decisionMap = [];          // [etudiant_id => 'admis'|'redoublant'|'exclus']
+    public $simStats = [               // mini tableau de stats à afficher
+        'admis' => 0,
+        'redoublant' => 0,
+        'exclus' => 0,
+    ];
+
+
+    public string $modeSimulation = 'table'; // 'stats' = n'affiche que stats, 'table' = affiche tableau
+    public array $simulationDecisionMap = []; // [etudiant_id => 'admis'|'redoublant'|'exclus']
+    public array $simulationStats = [];       // ['admis'=>int, 'redoublant'=>int, 'exclus'=>int]
+
     
     // Sélection
     public $parcoursSelectionne;
@@ -38,6 +55,7 @@ class ListeResultatsPACES extends Component
     public $sessionActive;
     public $niveauPACES;
     public $parcoursPACES;
+    public int $resultatsVersion = 0;
     
     // Paramètres simulation
     public $quota_admission = null;
@@ -60,6 +78,7 @@ class ListeResultatsPACES extends Component
     public $perPage = 20;
     public $perPageOptions = [10, 20, 50, 100, 150, 200, 300, 500, 'Tous'];
     public $recherche = '';
+    public bool $afficherTableau = false;
     
     // ✅ Flag pour éviter rechargements inutiles
     private $skipNextReload = false;
@@ -67,20 +86,26 @@ class ListeResultatsPACES extends Component
     protected $queryString = [
         'parcoursSlug' => ['except' => ''],
         'filtreDecision' => ['except' => 'tous'],
-        'perPage' => ['except' => 50], 
+        'perPage' => ['except' => 50],
         'recherche' => ['except' => ''],
     ];
 
-    public function mount($parcoursSlug = null)
+
+    public function mount()
     {
         $this->initialiserCollections();
         $this->chargerConfigurationActive();
         $this->chargerParcours();
-        
-        if ($parcoursSlug) {
-            $this->restaurerDepuisUrl($parcoursSlug);
+
+        if ($this->parcoursSlug) {
+            $this->restaurerDepuisUrl($this->parcoursSlug);
+            $this->etape = 'resultats';
+        } else {
+            $this->etape = 'selection';
         }
     }
+
+
 
     public function updatedQuotaAdmission()
     {
@@ -209,11 +234,16 @@ class ListeResultatsPACES extends Component
             ->get();
     }
 
+
     public function selectionnerParcours($parcoursId)
     {
         $this->parcoursSelectionne = $parcoursId;
         $this->parcoursData = $this->parcoursPACES->find($parcoursId);
         $this->parcoursSlug = $this->parcoursData->abr;
+
+        $this->dispatch('replaceUrl', [
+            'url' => url()->current() . '?parcoursSlug=' . $this->parcoursSlug
+        ]);
         
         $this->derniereDeliberation = DeliberPaces::where('niveau_id', $this->niveauPACES->id)
             ->where('parcours_id', $parcoursId)
@@ -227,16 +257,23 @@ class ListeResultatsPACES extends Component
             $this->moyenne_requise = $this->derniereDeliberation->moyenne_requise;
             $this->appliquer_note_eliminatoire = $this->derniereDeliberation->note_eliminatoire;
             $this->valeursModifiees = false;
+            
+            // ✅ NOUVEAU : Tableau visible UNIQUEMENT si délibération APPLIQUÉE
+            $this->afficherTableau = ($this->derniereDeliberation->applique_at !== null);
         } else {
             $this->quota_admission = $this->parcoursData->quota_admission;
             $this->credits_requis = 60;
             $this->moyenne_requise = 10.00;
             $this->appliquer_note_eliminatoire = true;
+            
+            // ✅ NOUVEAU : Pas de tableau si aucune délibération
+            $this->afficherTableau = false;
         }
         
         $this->etape = 'resultats';
         $this->chargerResultatsParcours();
     }
+
 
     public function retourSelection()
     {
@@ -245,27 +282,43 @@ class ListeResultatsPACES extends Component
         $this->parcoursSlug = null;
         $this->filtreDecision = 'tous';
         $this->simulationEnCours = false;
+        $this->afficherTableau = false; // 👈 AJOUTER CETTE LIGNE
         $this->resetResultats();
     }
 
     // ✅ OPTIMISÉ : Annuler simulation sans rechargement lourd
     public function annulerSimulation()
     {
-        if (!$this->simulationEnCours) {
-            return;
-        }
+        if (!$this->simulationEnCours) return;
 
-        Log::info('🔙 Annulation simulation');
-
+        // ✅ ULTRA-RAPIDE : Reset sans rechargement
         $this->simulationEnCours = false;
-        $this->simulationResultats = [];
-        $this->skipNextReload = false;
+        $this->simulationDecisionMap = [];
+        $this->simulationStats = [];
         
-        // Recharger l'état original depuis DB
-        $this->chargerResultatsParcours();
+        // ✅ RESTAURER les stats originales (déjà en mémoire)
+        $this->grouperParDecision(array_merge(
+            $this->resultatsGroupes['admis'] ?? [],
+            $this->resultatsGroupes['redoublant'] ?? [],
+            $this->resultatsGroupes['exclus'] ?? []
+        ));
         
-        toastr()->info('Simulation annulée - Retour à l\'état original');
+        $this->resultatsVersion++; // Force refresh
+        
+        toastr()->info("Simulation annulée");
     }
+
+
+    /**
+     * Dashboard MEGA : toujours visible après sélection parcours
+     */
+    public function getAfficherDashboardMegaProperty()
+    {
+        return $this->etape === 'resultats' 
+            && $this->parcoursSelectionne 
+            && !empty($this->statistiquesDetailes);
+    }
+
 
     public function getEstPretProperty()
     {
@@ -275,16 +328,14 @@ class ListeResultatsPACES extends Component
     }
     
     // ✅ OPTIMISÉ : Éviter rechargements inutiles
-    public function chargerResultatsParcours()
+    private function chargerResultatsParcours()
     {
-        // ✅ CRITICAL : Ne PAS recharger si on vient de simuler
         if ($this->skipNextReload) {
             $this->skipNextReload = false;
             Log::info('⚡ Rechargement évité (optimisation performance)');
             return;
         }
         
-        // ✅ Si simulation active, ne pas recharger
         if ($this->simulationEnCours && !empty($this->simulationResultats)) {
             Log::info('⚡ Rechargement évité (simulation en cours)');
             return;
@@ -308,11 +359,9 @@ class ListeResultatsPACES extends Component
                 return;
             }
 
-            $hasDeliberations = collect($resultats)->contains('is_deliber', true);
-
-            if (!$hasDeliberations) {
-                $resultats = $this->calculerDecisionsInitiales($resultats);
-            }
+            // ✅ CORRECTION : TOUJOURS recalculer les décisions avec les règles actuelles
+            // (même si délibérations existent en DB)
+            $resultats = $this->calculerDecisionsInitiales($resultats);
 
             $this->grouperParDecision($resultats);
             $this->calculerStatistiquesDetailees($resultats);
@@ -332,118 +381,203 @@ class ListeResultatsPACES extends Component
         }
     }
 
+
     private function calculerDecisionsInitiales($resultats)
     {
-        usort($resultats, function($a, $b) {
-            if ($b['moyenne_generale'] === $a['moyenne_generale']) {
-                return $b['credits_valides'] <=> $a['credits_valides'];
-            }
-            return $b['moyenne_generale'] <=> $a['moyenne_generale'];
+        // Tri par mérite
+        usort($resultats, function ($a, $b) {
+            $ma = (float)($a['moyenne_generale'] ?? 0);
+            $mb = (float)($b['moyenne_generale'] ?? 0);
+            if ($mb !== $ma) return $mb <=> $ma;
+
+            $ca = (float)($a['credits_valides'] ?? 0);
+            $cb = (float)($b['credits_valides'] ?? 0);
+            if ($cb !== $ca) return $cb <=> $ca;
+
+            return (int)$a['etudiant']->matricule <=> (int)$b['etudiant']->matricule;
         });
 
-        $admisCount = 0;
+        $quota    = is_numeric($this->quota_admission) ? (int)$this->quota_admission : null;
+        $creditsR = (int)$this->credits_requis;
+        $seuilAdm = max(10.0, (float)$this->moyenne_requise);
 
-        foreach ($resultats as &$resultat) {
-            $credits = $resultat['credits_valides'];
-            $moyenne = $resultat['moyenne_generale'];
-            $hasNoteElim = $resultat['has_note_eliminatoire'];
-
-            if ($this->appliquer_note_eliminatoire && $hasNoteElim) {
-                $resultat['decision'] = 'exclus';
-                continue;
-            }
-
-            if ($credits < 30 || $moyenne < 8) {
-                $resultat['decision'] = 'exclus';
-                continue;
-            }
-
-            $eligibleAdmission = $credits >= $this->credits_requis && 
-                                $moyenne >= $this->moyenne_requise;
-
-            if ($eligibleAdmission) {
-                if ($this->quota_admission === null || 
-                    $this->quota_admission === '' || 
-                    $admisCount < $this->quota_admission) {
-                    $resultat['decision'] = 'admis';
-                    $admisCount++;
-                } else {
-                    $resultat['decision'] = 'redoublant';
-                }
-            } else {
-                $resultat['decision'] = 'redoublant';
+        // Estimation dépassement quota
+        $eligiblesBase = 0;
+        foreach ($resultats as $r) {
+            if ($this->appliquer_note_eliminatoire && !empty($r['has_note_eliminatoire'])) continue;
+            if (($r['credits_valides'] ?? 0) >= $creditsR && ($r['moyenne_generale'] ?? 0) >= $seuilAdm) {
+                $eligiblesBase++;
             }
         }
+        if (!is_null($quota) && $eligiblesBase > $quota) {
+            $seuilAdm = 14.0;
+        }
+
+        $seuilRed = ($seuilAdm >= 14.0) ? 10.0 : 9.5;
+
+        // ✅ NOUVEAU : Construire la map des anciens redoublants EN AVANCE
+        $anciensRedoublants = $this->getAnciensRedoublantsMap(
+            array_column(array_map(fn($r) => $r['etudiant'], $resultats), 'id')
+        );
+
+        $admisCount = 0;
+        foreach ($resultats as &$r) {
+            $etudiant   = $r['etudiant'];
+            $matricule  = (int)$etudiant->matricule;
+            $etudiantId = (int)$etudiant->id;
+            $credits    = (float)($r['credits_valides'] ?? 0);
+            $moyenne    = (float)($r['moyenne_generale'] ?? 0);
+            $hasZero    = (bool)($r['has_note_eliminatoire'] ?? false);
+            $pleinCreds = $credits >= $creditsR;
+
+            // Note éliminatoire => EXCLUS
+            if ($this->appliquer_note_eliminatoire && $hasZero) {
+                $r['decision'] = 'exclus';
+                continue;
+            }
+
+            // ✅ CORRECTION : Détection stricte des anciens
+            // Matricule ≤ 38999 OU a déjà été redoublant = ancien
+            $estAncien = ($matricule <= 38999) || isset($anciensRedoublants[$etudiantId]);
+
+            // ADMIS si seuil atteint et quota disponible
+            if ($pleinCreds && $moyenne >= $seuilAdm) {
+                if (is_null($quota) || $admisCount < $quota) {
+                    $r['decision'] = 'admis';
+                    $admisCount++;
+                    continue;
+                }
+            }
+
+            // ✅ RÈGLE STRICTE : Ancien non admis = EXCLUS (jamais redoublant)
+            if ($estAncien) {
+                $r['decision'] = 'exclus';
+                continue;
+            }
+
+            // ✅ RÈGLE : Seulement les NOUVEAUX (≥ 39000 ET jamais redoublé) peuvent redoubler
+            $peutRedoubler = (!$pleinCreds && !$hasZero && $moyenne >= $seuilRed);
+            $r['decision'] = $peutRedoubler ? 'redoublant' : 'exclus';
+        }
+        unset($r);
 
         return $resultats;
     }
 
+
+
+
     // ✅ SIMPLIFIÉ : Simulation ultra-rapide sans loading
     public function simulerDeliberation()
-    {   
-        // ✅ CRITICAL : Timeout de sécurité
-        set_time_limit(30); // Maximum 30 secondes
-        ini_set('memory_limit', '512M'); // Augmenter la mémoire si nécessaire
-        
-        if ($this->quota_admission < 0) {
+    {
+        if (!$this->parcoursSelectionne || !$this->sessionActive || !$this->niveauPACES) {
+            toastr()->error("Configuration incomplète");
+            return;
+        }
+        if ($this->quota_admission !== null && $this->quota_admission < 0) {
             toastr()->error('Le quota doit être positif');
             return;
         }
 
         try {
-            $tempsDebut = microtime(true);
-
-            // ✅ CRITICAL : Vérifier si déjà en simulation
-            if ($this->simulationEnCours && !empty($this->simulationResultats)) {
-                toastr()->info('Simulation déjà en cours');
+            $resultats = $this->chargerResultatsOptimises();
+            if (empty($resultats)) {
+                toastr()->warning('Aucun résultat disponible');
                 return;
             }
 
-            // Récupération depuis MÉMOIRE
-            $resultats = array_merge(
-                $this->resultatsGroupes['admis'] ?? [],
-                $this->resultatsGroupes['redoublant'] ?? [],
-                $this->resultatsGroupes['exclus'] ?? []
+            // Seuils
+            $seuils = $this->calculerSeuilsEffectifs($resultats);
+            $seuilAdm = $seuils['admission'];
+            $seuilRed = $seuils['redoublement'];
+
+            // Tri
+            usort($resultats, function($a,$b){
+                if ($b['credits_valides'] !== $a['credits_valides']) 
+                    return $b['credits_valides'] <=> $a['credits_valides'];
+                if ($b['moyenne_generale'] !== $a['moyenne_generale']) 
+                    return $b['moyenne_generale'] <=> $a['moyenne_generale'];
+                return ($a['has_note_eliminatoire'] ? 1 : 0) <=> ($b['has_note_eliminatoire'] ? 1 : 0);
+            });
+
+            // ✅ NOUVEAU : Construire la map des anciens redoublants EN AVANCE (optimisation)
+            $anciensRedoublants = $this->getAnciensRedoublantsMap(
+                array_column(array_map(fn($r) => $r['etudiant'], $resultats), 'id')
             );
 
-            if (empty($resultats)) {
-                $this->chargerUEStructure();
-                $resultats = $this->chargerResultatsOptimises();
-                
-                if (empty($resultats)) {
-                    toastr()->warning('Aucun résultat disponible');
-                    return;
+            $quota = is_numeric($this->quota_admission) ? (int)$this->quota_admission : null;
+            $admisCount = 0;
+            $map = [];
+            $ad = $re = $ex = 0;
+
+            foreach ($resultats as $r) {
+                if (empty($r['etudiant']) || empty($r['etudiant']->id)) continue;
+
+                $id = (int)$r['etudiant']->id;
+                $matricule = (int)$r['etudiant']->matricule;
+                $credits = (int)($r['credits_valides'] ?? 0);
+                $moy = (float)($r['moyenne_generale'] ?? 0);
+                $elim = (bool)($r['has_note_eliminatoire'] ?? false);
+                $plein = $credits >= (int)$this->credits_requis;
+
+                // Élimination
+                if ($this->appliquer_note_eliminatoire && $elim) {
+                    $map[$id] = 'exclus';
+                    $ex++;
+                    continue;
+                }
+
+                // ✅ CORRECTION : Détection stricte des anciens
+                $estAncien = ($matricule <= 38999) || isset($anciensRedoublants[$id]);
+
+                // Admission
+                if ($plein && $moy >= $seuilAdm && (is_null($quota) || $admisCount < $quota)) {
+                    $map[$id] = 'admis';
+                    $ad++;
+                    $admisCount++;
+                    continue;
+                }
+
+                // ✅ RÈGLE STRICTE : Ancien non admis = EXCLUS (jamais redoublant)
+                if ($estAncien) {
+                    $map[$id] = 'exclus';
+                    $ex++;
+                    continue;
+                }
+
+                // ✅ RÈGLE : Seulement les NOUVEAUX peuvent redoubler
+                $peutRedoubler = (!$plein && !$elim && $moy >= $seuilRed);
+                if ($peutRedoubler) {
+                    $map[$id] = 'redoublant';
+                    $re++;
+                } else {
+                    $map[$id] = 'exclus';
+                    $ex++;
                 }
             }
 
-            // Application simulation
+            // Enregistrer
+            $this->simulationDecisionMap = $map;
+            $this->simulationStats = ['admis'=>$ad, 'redoublant'=>$re, 'exclus'=>$ex];
             $this->simulationEnCours = true;
-            $resultats = $this->appliquerSimulationAvecQuota($resultats);
-            $this->simulationResultats = $resultats;
 
-            // Regroupement
-            $this->grouperParDecision($resultats);
-            
-            // Statistiques
-            $this->calculerStatistiquesDetailees($resultats);
+            // MAJ stats affichées
+            $this->statistiquesDetailes['admis'] = $ad;
+            $this->statistiquesDetailes['redoublant_autorises'] = $re;
+            $this->statistiquesDetailes['exclus'] = $ex;
+            $this->resultatsVersion++;
 
-            // Filtre auto sur ADMIS (moins de données)
-            $this->filtreDecision = 'admis';
-            $this->resetPage();
+            toastr()->success("⚡ Simulé : {$ad} admis • {$re} redoublants • {$ex} exclus");
 
-            // CRITICAL : Empêcher rechargement
-            $this->skipNextReload = true;
-
-            $tempsFin = microtime(true);
-            $tempsTotal = round(($tempsFin - $tempsDebut) * 1000, 2);
-
-            toastr()->success("⚡ {$this->statistiquesDetailes['admis']} Admis | {$this->statistiquesDetailes['redoublant_autorises']} Redoublants | {$this->statistiquesDetailes['exclus']} Exclus ({$tempsTotal}ms)");
-
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->simulationEnCours = false;
-            toastr()->error('Erreur : ' . $e->getMessage());
+            $this->simulationDecisionMap = [];
+            $this->simulationStats = [];
+            toastr()->error('Erreur : '.$e->getMessage());
+            \Log::error('Simulation PACES', ['err'=>$e->getMessage()]);
         }
     }
+
 
 
     public function appliquerDeliberation()
@@ -453,7 +587,11 @@ class ListeResultatsPACES extends Component
             return;
         }
 
-        if (empty($this->simulationResultats)) {
+        // ✅ on accepte soit la nouvelle carte (recommandé), soit l'ancien tableau pour compat
+        $hasMap = !empty($this->simulationDecisionMap);
+        $hasLegacy = !empty($this->simulationResultats);
+
+        if (!$hasMap && !$hasLegacy) {
             toastr()->error('Aucune donnée de simulation à appliquer');
             return;
         }
@@ -462,61 +600,135 @@ class ListeResultatsPACES extends Component
             DB::beginTransaction();
 
             $savedCount = 0;
-            
-            foreach ($this->simulationResultats as $resultat) {
-                if (!isset($resultat['etudiant'])) continue;
 
-                $updated = ResultatFinal::whereHas('examen', function($q) {
-                        $q->where('niveau_id', $this->niveauPACES->id)
-                          ->where('parcours_id', $this->parcoursSelectionne);
-                    })
-                    ->where('etudiant_id', $resultat['etudiant']->id)
-                    ->where('session_exam_id', $this->sessionActive->id)
-                    ->update([
-                        'decision' => $resultat['decision'],
-                        'jury_validated' => true,
-                        'is_deliber' => true,
-                        'deliber_at' => now(),
-                        'deliber_by' => Auth::id(),
-                        'updated_at' => now()
-                    ]);
+            if ($hasMap) {
+                // --- chemin rapide & fiable : on parcourt la carte ---
+                foreach ($this->simulationDecisionMap as $etudiantId => $decision) {
+                    $updated = ResultatFinal::whereHas('examen', function($q) {
+                            $q->where('niveau_id', $this->niveauPACES->id)
+                            ->where('parcours_id', $this->parcoursSelectionne);
+                        })
+                        ->where('etudiant_id', (int)$etudiantId)
+                        ->where('session_exam_id', $this->sessionActive->id)
+                        ->update([
+                            'decision'       => $decision,
+                            'jury_validated' => true,
+                            'is_deliber'     => true,
+                            'deliber_at'     => now(),
+                            'deliber_by'     => Auth::id(),
+                            'updated_at'     => now(),
+                        ]);
 
-                if ($updated > 0) $savedCount++;
+                    if ($updated > 0) $savedCount++;
+                }
+            } else {
+                // --- compat: ancien chemin (moins sûr avec Livewire) ---
+                foreach ($this->simulationResultats as $resultat) {
+                    if (!isset($resultat['etudiant']->id)) continue;
+
+                    $updated = ResultatFinal::whereHas('examen', function($q) {
+                            $q->where('niveau_id', $this->niveauPACES->id)
+                            ->where('parcours_id', $this->parcoursSelectionne);
+                        })
+                        ->where('etudiant_id', $resultat['etudiant']->id)
+                        ->where('session_exam_id', $this->sessionActive->id)
+                        ->update([
+                            'decision'       => $resultat['decision'],
+                            'jury_validated' => true,
+                            'is_deliber'     => true,
+                            'deliber_at'     => now(),
+                            'deliber_by'     => Auth::id(),
+                            'updated_at'     => now(),
+                        ]);
+
+                    if ($updated > 0) $savedCount++;
+                }
             }
 
+            // Stats pour trace (privilégier celles de la map)
+            $nbAdmis = $hasMap ? ($this->simulationStats['admis'] ?? 0) : count($this->resultatsGroupes['admis'] ?? []);
+            $nbRedo  = $hasMap ? ($this->simulationStats['redoublant'] ?? 0) : count($this->resultatsGroupes['redoublant'] ?? []);
+            $nbExcl  = $hasMap ? ($this->simulationStats['exclus'] ?? 0) : count($this->resultatsGroupes['exclus'] ?? []);
+
             $deliberPaces = DeliberPaces::create([
-                'niveau_id' => $this->niveauPACES->id,
-                'parcours_id' => $this->parcoursSelectionne,
-                'session_exam_id' => $this->sessionActive->id,
-                'quota_admission' => $this->quota_admission,
-                'credits_requis' => $this->credits_requis,
-                'moyenne_requise' => $this->moyenne_requise,
+                'niveau_id'         => $this->niveauPACES->id,
+                'parcours_id'       => $this->parcoursSelectionne,
+                'session_exam_id'   => $this->sessionActive->id,
+                'quota_admission'   => $this->quota_admission,
+                'credits_requis'    => $this->credits_requis,
+                'moyenne_requise'   => $this->moyenne_requise,
                 'note_eliminatoire' => $this->appliquer_note_eliminatoire,
-                'nb_admis' => count($this->resultatsGroupes['admis'] ?? []),
-                'nb_redoublants' => count($this->resultatsGroupes['redoublant'] ?? []),
-                'nb_exclus' => count($this->resultatsGroupes['exclus'] ?? []),
-                'applique_par' => Auth::id(),
-                'applique_at' => now(),
+                'nb_admis'          => $nbAdmis,
+                'nb_redoublants'    => $nbRedo,
+                'nb_exclus'         => $nbExcl,
+                'applique_par'      => Auth::id(),
+                'applique_at'       => now(),
             ]);
 
             DB::commit();
 
-            Log::info('✅ Délibération PACES appliquée', [
-                'deliber_id' => $deliberPaces->id,
-                'etudiants_updated' => $savedCount
+            \Log::info('✅ Délibération PACES appliquée', [
+                'deliber_id'       => $deliberPaces->id,
+                'etudiants_updated'=> $savedCount
             ]);
 
+            // Reset & rechargement propre
             $this->simulationEnCours = false;
-            $this->simulationResultats = [];
+            $this->modeSimulation = 'table'; // réafficher tableau
+            $this->simulationDecisionMap = [];
+            $this->simulationStats = [];
+            $this->simulationResultats = []; // legacy
             $this->skipNextReload = false;
-            $this->chargerResultatsParcours();
 
+            // recharger l'état DB réel
+            $this->chargerResultatsParcours();
+            $this->resultatsVersion++;
+            $this->afficherTableau = true;
             toastr()->success("Délibération appliquée : {$savedCount} étudiant(s) mis à jour");
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            toastr()->error('Erreur : ' . $e->getMessage());
-            Log::error('Erreur application délibération', ['error' => $e->getMessage()]);
+            toastr()->error('Erreur : '.$e->getMessage());
+            \Log::error('Erreur application délibération', ['error' => $e->getMessage()]);
+        }
+    }
+
+
+
+    /**
+     * Récupère en UNE SEULE requête la map des étudiants ayant déjà été "redoublant"
+     * @param array $etudiantIds Liste des IDs étudiants à vérifier
+     * @return array Map [etudiant_id => true] des anciens redoublants
+     */
+    private function getAnciensRedoublantsMap(array $etudiantIds): array
+    {
+        if (empty($etudiantIds)) {
+            return [];
+        }
+
+        $anneeCouranteId = optional($this->anneeActive)->id;
+
+        try {
+            // ✅ UNE SEULE requête pour TOUS les étudiants
+            $anciens = DB::table('resultats_finaux as rf')
+                ->join('session_exams as se', 'rf.session_exam_id', '=', 'se.id')
+                ->join('examens as e', 'rf.examen_id', '=', 'e.id')
+                ->whereIn('rf.etudiant_id', $etudiantIds)
+                ->where('rf.decision', ResultatFinal::DECISION_REDOUBLANT)
+                ->where('rf.statut', ResultatFinal::STATUT_PUBLIE)
+                ->where('e.niveau_id', $this->niveauPACES->id)
+                ->where('e.parcours_id', $this->parcoursSelectionne)
+                ->where('se.annee_universitaire_id', '!=', $anneeCouranteId)
+                ->distinct()
+                ->pluck('rf.etudiant_id')
+                ->toArray();
+
+            // Retourner une map pour accès O(1)
+            return array_fill_keys($anciens, true);
+
+        } catch (\Throwable $e) {
+            \Log::warning('getAnciensRedoublantsMap(): fallback empty', ['err' => $e->getMessage()]);
+            return [];
         }
     }
 
@@ -613,6 +825,8 @@ class ListeResultatsPACES extends Component
         return $this->traiterResultatsEnMemoire($resultats);
     }
 
+
+
     private function traiterResultatsEnMemoire($resultats)
     {
         $resultatsGroupes = $resultats->groupBy('etudiant_id');
@@ -623,6 +837,8 @@ class ListeResultatsPACES extends Component
             if (!$etudiant) continue;
 
             $calculs = $this->calculerResultatsEtudiantRapide($notesEtudiant);
+            $matricule = (int) $etudiant->matricule;
+            $aDejaRedouble = $this->aDejaRedoubleUneFois($etudiant->id);
 
             $resultatsFinaux[] = [
                 'etudiant' => $etudiant,
@@ -632,11 +848,16 @@ class ListeResultatsPACES extends Component
                 'credits_valides' => $calculs['credits_valides'],
                 'total_credits' => $calculs['total_credits'],
                 'has_note_eliminatoire' => $calculs['has_note_eliminatoire'],
+
                 'decision' => $notesEtudiant->first()->decision ?? 'non_definie',
                 'is_deliber' => $notesEtudiant->first()->is_deliber ?? false,
                 'deliber_at' => $notesEtudiant->first()->deliber_at,
-                'est_redoublant' => intval($etudiant->matricule) <= 38999,
-                'a_participe' => true
+
+                'est_redoublant' => (intval($etudiant->matricule) <= 38999) || $aDejaRedouble,
+                'est_passant'    => (intval($etudiant->matricule) > 38999) && !$aDejaRedouble,
+
+
+                'a_participe' => true,
             ];
         }
 
@@ -644,6 +865,8 @@ class ListeResultatsPACES extends Component
 
         return $resultatsFinaux;
     }
+
+
 
     private function calculerResultatsEtudiantRapide($notesEtudiant)
     {
@@ -736,7 +959,7 @@ class ListeResultatsPACES extends Component
 
     private function appliquerSimulationAvecQuota($resultats)
     {
-        // ✅ Tri optimisé (une seule fois)
+        // Tri par mérite
         usort($resultats, function($a, $b) {
             if ($b['credits_valides'] !== $a['credits_valides']) {
                 return $b['credits_valides'] <=> $a['credits_valides'];
@@ -747,65 +970,146 @@ class ListeResultatsPACES extends Component
             return ($a['has_note_eliminatoire'] ? 1 : 0) <=> ($b['has_note_eliminatoire'] ? 1 : 0);
         });
 
-        $admisCount = 0;
-        $checkQuota = $this->quota_admission !== null && $this->quota_admission !== '';
+        $quota = is_numeric($this->quota_admission) ? (int)$this->quota_admission : null;
+        $seuilAdmissionEffectif = max(10.0, (float)$this->moyenne_requise);
 
-        // ✅ Boucle optimisée
-        foreach ($resultats as &$resultat) {
-            $credits = $resultat['credits_valides'];
-            $moyenne = $resultat['moyenne_generale'];
-            $hasNoteElim = $resultat['has_note_eliminatoire'];
-
-            // Règles de décision (sans changement)
-            if ($this->appliquer_note_eliminatoire && $hasNoteElim) {
-                $resultat['decision'] = 'exclus';
-                $resultat['decision_simulee'] = true;
-                continue;
+        // Vérifier dépassement quota
+        $admisEligiblesIdx = [];
+        foreach ($resultats as $i => $r) {
+            if ($this->appliquer_note_eliminatoire && $r['has_note_eliminatoire']) continue;
+            if ($r['credits_valides'] >= $this->credits_requis && $r['moyenne_generale'] >= $seuilAdmissionEffectif) {
+                $admisEligiblesIdx[] = $i;
             }
-
-            if ($credits < 30 || $moyenne < 8) {
-                $resultat['decision'] = 'exclus';
-                $resultat['decision_simulee'] = true;
-                continue;
-            }
-
-            if ($credits >= $this->credits_requis && $moyenne >= $this->moyenne_requise) {
-                if (!$checkQuota || $admisCount < $this->quota_admission) {
-                    $resultat['decision'] = 'admis';
-                    $admisCount++;
-                } else {
-                    $resultat['decision'] = 'redoublant';
-                }
-            } else {
-                $resultat['decision'] = 'redoublant';
-            }
-
-            $resultat['decision_simulee'] = true;
         }
+        if (!is_null($quota) && count($admisEligiblesIdx) > $quota) {
+            $seuilAdmissionEffectif = 14.0;
+        }
+        $seuilRedoublement = ($seuilAdmissionEffectif >= 14.0) ? 10.0 : 9.5;
 
-        // ✅ Tri final par mérite
+        // ✅ NOUVEAU : Construire la map des anciens redoublants
+        $anciensRedoublants = $this->getAnciensRedoublantsMap(
+            array_column(array_map(fn($r) => $r['etudiant'], $resultats), 'id')
+        );
+
+        $admisCount = 0;
+        foreach ($resultats as &$r) {
+            $etudiant = $r['etudiant'] ?? null;
+            if (!$etudiant) {
+                $r['decision'] = 'exclus';
+                $r['decision_simulee'] = true;
+                continue;
+            }
+
+            $matricule = (int)$etudiant->matricule;
+            $etudiantId = (int)$etudiant->id;
+            $credits   = (float)$r['credits_valides'];
+            $moyenne   = (float)$r['moyenne_generale'];
+            $has0      = (bool)$r['has_note_eliminatoire'];
+            $plein     = $credits >= (int)$this->credits_requis;
+
+            // Note éliminatoire => EXCLUS
+            if ($this->appliquer_note_eliminatoire && $has0) {
+                $r['decision'] = 'exclus';
+                $r['decision_simulee'] = true;
+                continue;
+            }
+
+            // ✅ CORRECTION : Détection stricte des anciens
+            $estAncien = ($matricule <= 38999) || isset($anciensRedoublants[$etudiantId]);
+
+            // ADMIS si conditions + quota
+            if ($plein && $moyenne >= $seuilAdmissionEffectif) {
+                if (is_null($quota) || $admisCount < $quota) {
+                    $r['decision'] = 'admis';
+                    $r['decision_simulee'] = true;
+                    $admisCount++;
+                    continue;
+                }
+            }
+
+            // ✅ RÈGLE STRICTE : Ancien non admis = EXCLUS (jamais redoublant)
+            if ($estAncien) {
+                $r['decision'] = 'exclus';
+                $r['decision_simulee'] = true;
+                continue;
+            }
+
+            // ✅ RÈGLE : Seulement les NOUVEAUX peuvent redoubler
+            $peutRedoubler = (!$plein && !$has0 && $moyenne >= $seuilRedoublement);
+            $r['decision'] = $peutRedoubler ? 'redoublant' : 'exclus';
+            $r['decision_simulee'] = true;
+        }
+        unset($r);
+
+        // Tri final
         usort($resultats, [$this, 'comparerParMerite']);
 
         return $resultats;
     }
 
 
-    private function grouperParDecision($resultats)
-    {
-        // ✅ Réinitialisation rapide
-        $this->resultatsGroupes = ['admis' => [], 'redoublant' => [], 'exclus' => []];
 
-        // ✅ Groupement optimisé
-        foreach ($resultats as $resultat) {
-            $decision = $resultat['decision'];
-            if ($decision === 'admis') {
-                $this->resultatsGroupes['admis'][] = $resultat;
-            } elseif ($decision === 'redoublant') {
-                $this->resultatsGroupes['redoublant'][] = $resultat;
-            } elseif ($decision === 'exclus') {
-                $this->resultatsGroupes['exclus'][] = $resultat;
+    /**
+     * Construit une carte légère des décisions et les stats à partir d'un tableau $resultats.
+     * @return array{0: array<int,string>, 1: array{admis:int, redoublant:int, exclus:int}}
+     */
+    private function buildDecisionMapAndStats(array $resultats): array
+    {
+        $map = [];
+        $ad = 0;
+        $re = 0;
+        $ex = 0;
+
+        foreach ($resultats as $r) {
+            // sécurité: vérifier l'objet étudiant et son id
+            if (empty($r['etudiant']) || !isset($r['etudiant']->id)) {
+                continue;
+            }
+
+            // normaliser la décision
+            $d = $r['decision'] ?? 'exclus';
+            if (!in_array($d, ['admis', 'redoublant', 'exclus'], true)) {
+                $d = 'exclus';
+            }
+
+            $map[(int) $r['etudiant']->id] = $d;
+
+            if ($d === 'admis') {
+                $ad++;
+            } elseif ($d === 'redoublant') {
+                $re++;
+            } else {
+                $ex++;
             }
         }
+
+        // ✅ retourner la carte et les stats
+        return [
+            $map,
+            [
+                'admis'      => $ad,
+                'redoublant' => $re,
+                'exclus'     => $ex,
+            ],
+        ];
+    }
+
+    
+
+
+    private function grouperParDecision($resultats)
+    {
+        $this->resultatsGroupes = ['admis' => [], 'redoublant' => [], 'exclus' => []];
+
+        foreach ($resultats as $resultat) {
+            $decision = $resultat['decision'];
+            if (isset($this->resultatsGroupes[$decision])) {
+                $this->resultatsGroupes[$decision][] = $resultat;
+            }
+        }
+
+        // 🔁 BUMP : force Livewire à considérer un nouvel état
+        $this->resultatsVersion++;
     }
 
 
@@ -912,6 +1216,7 @@ class ListeResultatsPACES extends Component
         $this->resultatsGroupes = ['admis' => [], 'redoublant' => [], 'exclus' => []];
         $this->statistiquesDetailes = [];
         $this->simulationResultats = [];
+        $this->resultatsVersion++; // 🔁
     }
 
     // ✅ OPTIMISÉ : Source depuis simulation si active
@@ -922,6 +1227,7 @@ class ListeResultatsPACES extends Component
         static $lastResult = null;
         
         $currentHash = md5(serialize([
+            $this->resultatsVersion,
             $this->simulationEnCours,
             $this->filtreDecision,
             $this->recherche,
@@ -1058,6 +1364,365 @@ class ListeResultatsPACES extends Component
             e($texte)
         );
     }
+
+
+
+    // --- AJOUTS CONSERVÉS (pas indispensables pour la règle “no triple”) ---
+    private function calculerSeuilsEffectifs(array $resultats): array
+    {
+        $candidatsBase = array_filter($resultats, function ($r) {
+            return !$r['has_note_eliminatoire']
+                && $r['credits_valides'] >= $this->credits_requis
+                && $r['moyenne_generale'] >= max(10, (float)$this->moyenne_requise);
+        });
+
+        $seuilAdmission = max(10, (float)$this->moyenne_requise);
+
+        if (!empty($this->quota_admission) && count($candidatsBase) > (int)$this->quota_admission) {
+            $seuilAdmission = max($seuilAdmission, 14);
+        }
+
+        $seuilRedoublement = ($seuilAdmission >= 14) ? 10.0 : 9.5;
+
+        return [
+            'admission'    => $seuilAdmission,
+            'redoublement' => $seuilRedoublement,
+        ];
+    }
+
+    private function estDoubleRedoublant(int $etudiantId): bool
+    {
+        try {
+            return \App\Models\ResultatFinal::where('etudiant_id', $etudiantId)
+                ->where('decision', \App\Models\ResultatFinal::DECISION_REDOUBLANT)
+                ->whereHas('sessionExam', function ($q) {
+                    $q->where('annee_universitaire_id', '!=', optional($this->anneeActive)->id);
+                })
+                ->distinct('session_exam_id')
+                ->count() >= 2;
+        } catch (\Throwable $e) {
+            \Log::warning('estDoubleRedoublant() fallback false', ['err' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    private function appliquerQuotaParMerite(array $admis): array
+    {
+        if (empty($this->quota_admission)) return $admis;
+
+        usort($admis, function ($a, $b) {
+            if ($b['moyenne_generale'] !== $a['moyenne_generale']) {
+                return $b['moyenne_generale'] <=> $a['moyenne_generale'];
+            }
+            if ($b['credits_valides'] !== $a['credits_valides']) {
+                return $b['credits_valides'] <=> $a['credits_valides'];
+            }
+            return $a['etudiant']->matricule <=> $b['etudiant']->matricule;
+        });
+
+        return array_slice($admis, 0, (int)$this->quota_admission);
+    }
+
+    private function aDejaRedoubleUneFois(int $etudiantId): bool
+    {
+        try {
+            $anneeCouranteId = optional($this->anneeActive)->id;
+
+            $nbAnneesRedoublant = \App\Models\ResultatFinal::where('etudiant_id', $etudiantId)
+                ->where('decision', \App\Models\ResultatFinal::DECISION_REDOUBLANT)
+                ->where('statut', \App\Models\ResultatFinal::STATUT_PUBLIE)
+                ->whereHas('examen', function ($q) {
+                    $q->where('niveau_id', $this->niveauPACES->id)
+                      ->where('parcours_id', $this->parcoursSelectionne);
+                })
+                ->whereHas('sessionExam', function ($q) use ($anneeCouranteId) {
+                    $q->where('annee_universitaire_id', '!=', $anneeCouranteId);
+                })
+                ->join('session_exams as se', 'resultats_finaux.session_exam_id', '=', 'se.id')
+                ->distinct('se.annee_universitaire_id')
+                ->count('se.annee_universitaire_id');
+
+            return $nbAnneesRedoublant >= 1;
+        } catch (\Throwable $e) {
+            \Log::warning('aDejaRedoubleUneFois(): fallback false', ['err' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+
+    /**
+     * Construit (ou lit) un snapshot compact des étudiants pour simulation rapide.
+     * Source: mémoire actuelle si dispo, sinon DB -> compactage, puis cache.
+     */
+    private function getSnapshotEtudiants(): array
+    {
+        if (!$this->parcoursSelectionne || !$this->sessionActive || !$this->niveauPACES) {
+            return [];
+        }
+
+        $cacheKey = "paces_snapshot_{$this->niveauPACES->id}_{$this->parcoursSelectionne}_{$this->sessionActive->id}_v{$this->snapshotVersion}";
+
+        return Cache::remember($cacheKey, 900, function () {
+            // 1) Si on a déjà des résultats en mémoire (chargés une fois), on compacte directement (plus rapide)
+            $tous = array_merge(
+                $this->resultatsGroupes['admis'] ?? [],
+                $this->resultatsGroupes['redoublant'] ?? [],
+                $this->resultatsGroupes['exclus'] ?? []
+            );
+
+            if (!empty($tous)) {
+                return array_map(function ($r) {
+                    return [
+                        'eid'        => $r['etudiant']->id,
+                        'credits'    => (float)($r['credits_valides'] ?? 0),
+                        'moy'        => (float)($r['moyenne_generale'] ?? 0),
+                        'has0'       => (bool)($r['has_note_eliminatoire'] ?? false),
+                        // “ancien redoublant” = pas de triple : true si aDejaRedoubleUneFois
+                        'ancien_red' => (bool)$this->aDejaRedoubleUneFois($r['etudiant']->id),
+                        // Optim : on ne retient pas est_passant, on déduit: !$ancien_red
+                    ];
+                }, $tous);
+            }
+
+            // 2) Sinon: on charge compact depuis DB (sélection minimale), puis on recalcule rapidement en PHP
+            $resultatsIds = DB::table('resultats_finaux')
+                ->join('examens', 'resultats_finaux.examen_id', '=', 'examens.id')
+                ->where('examens.niveau_id', $this->niveauPACES->id)
+                ->where('examens.parcours_id', $this->parcoursSelectionne)
+                ->where('resultats_finaux.session_exam_id', $this->sessionActive->id)
+                ->where('resultats_finaux.statut', ResultatFinal::STATUT_PUBLIE)
+                ->pluck('resultats_finaux.id')
+                ->toArray();
+
+            if (empty($resultatsIds)) return [];
+
+            // On charge le strict minimum (sans with())
+            $resultats = ResultatFinal::whereIn('id', $resultatsIds)
+                ->select(['etudiant_id','ec_id','note'])
+                ->with(['ec:id,ue_id', 'ec.ue:id,credits']) // petite jointure — raisonnable
+                ->get()
+                ->groupBy('etudiant_id');
+
+            $snapshot = [];
+
+            foreach ($resultats as $etudiantId => $notesEtudiant) {
+                // Reprend la logique du calcul rapide UE -> crédits, moyenne générale, has0
+                $calc = $this->calculerResultatsEtudiantRapide($notesEtudiant);
+
+                $snapshot[] = [
+                    'eid'        => (int)$etudiantId,
+                    'credits'    => (float)$calc['credits_valides'],
+                    'moy'        => (float)$calc['moyenne_generale'],
+                    'has0'       => (bool)$calc['has_note_eliminatoire'],
+                    'ancien_red' => (bool)$this->aDejaRedoubleUneFois((int)$etudiantId),
+                ];
+            }
+
+            return $snapshot;
+        });
+    }
+
+    /**
+     * Simulation ULTRA-LÉGÈRE : ne rend pas le tableau, calcule juste les compteurs.
+     * Ne trie pas, ne compose pas les groupes; seulement du counting.
+     */
+    private function simulerCountsDepuisSnapshot(array $snap): array
+    {
+        $quota = is_numeric($this->quota_admission) ? (int)$this->quota_admission : null;
+        $creditsRequis = (int)$this->credits_requis;
+        $seuilBase = max(10.0, (float)$this->moyenne_requise);
+
+        // 1) Estimer le relèvement du seuil (10 -> 14) si quota dépassé
+        $eligibles10 = 0;
+        foreach ($snap as $s) {
+            if ($this->appliquer_note_eliminatoire && $s['has0']) continue;
+            if ($s['credits'] >= $creditsRequis && $s['moy'] >= $seuilBase) {
+                $eligibles10++;
+            }
+        }
+
+        $seuilAdmission = $seuilBase;
+        if (!is_null($quota) && $eligibles10 > $quota) {
+            $seuilAdmission = max($seuilAdmission, 14.0);
+        }
+
+        // Redoublement : 9.5 si seuilAdmission=10 ; sinon 10.0
+        $seuilRedoublement = ($seuilAdmission >= 14.0) ? 10.0 : 9.5;
+
+        // 2) Comptage
+        $admis = 0; $redoublant = 0; $exclus = 0;
+
+        // si seuil=14 et quota fixé, il est possible que les admissibles dépassent quand même le quota.
+        // Pour compter, on borne à quota si dépasse (pas besoin de trier).
+        $admissiblesSeuil = 0;
+
+        foreach ($snap as $s) {
+            $has0 = $s['has0'];
+            $plein = $s['credits'] >= $creditsRequis;
+            $moy   = $s['moy'];
+            $ancien = $s['ancien_red']; // pas de triple
+
+            if ($this->appliquer_note_eliminatoire && $has0) {
+                $exclus++; 
+                continue;
+            }
+
+            // Admissible (avant quota)
+            if ($plein && $moy >= $seuilAdmission) {
+                $admissiblesSeuil++;
+                continue; // on finalisera après quota
+            }
+
+            // Sinon, redoublement possible UNIQUEMENT si pas ancien redoublant
+            if (!$plein && !$has0 && $moy >= $seuilRedoublement && !$ancien) {
+                $redoublant++;
+            } else {
+                // ancien redoublant non admis => exclus, ou niveau sous le seuil => exclus
+                $exclus++;
+            }
+        }
+
+        // Application du quota sur les admissibles
+        if (is_null($quota)) {
+            $admis = $admissiblesSeuil;
+        } else {
+            $admis = min($admissiblesSeuil, $quota);
+
+        }
+
+        return [
+            'admis'       => $admis,
+            'redoublant'  => $redoublant,
+            'exclus'      => $exclus,
+            'seuil'       => $seuilAdmission,
+            'seuil_red'   => $seuilRedoublement,
+            'eligibles10' => $eligibles10,
+            'quota'       => $quota,
+        ];
+    }
+
+
+
+    /**
+     * ✅ Récupère les résultats filtrés (simulation ou délibéré)
+     */
+    private function getResultatsFiltres(): array
+    {
+        // Source : simulation active OU données délibérées
+        if ($this->filtreDecision === 'tous') {
+            $resultats = array_merge(
+                $this->resultatsGroupes['admis'] ?? [],
+                $this->resultatsGroupes['redoublant'] ?? [],
+                $this->resultatsGroupes['exclus'] ?? []
+            );
+            usort($resultats, [$this, 'comparerParMerite']);
+        } else {
+            $resultats = $this->resultatsGroupes[$this->filtreDecision] ?? [];
+        }
+
+        // Appliquer la recherche si active
+        if (!empty($this->recherche)) {
+            $resultats = $this->filtrerParRecherche($resultats);
+        }
+
+        return $resultats;
+    }
+
+    /**
+     * 📥 Export Excel
+     */
+    public function exporterExcelPaces()
+    {
+        try {
+            $resultats = $this->getResultatsFiltres();
+
+            if (empty($resultats)) {
+                toastr()->warning('Aucun résultat à exporter');
+                return;
+            }
+
+            $filtreLabel = match($this->filtreDecision) {
+                'admis' => 'Admis',
+                'redoublant' => 'Redoublants',
+                'exclus' => 'Exclus',
+                default => 'Tous'
+            };
+
+            $filename = sprintf(
+                'Resultats_PACES_%s_%s_%s.xlsx',
+                $this->parcoursData->abr ?? 'Parcours',
+                $filtreLabel,
+                now()->format('Y-m-d_His')
+            );
+
+            return Excel::download(
+                new ResultatsPacesExport(
+                    $resultats,
+                    $this->uesStructure,
+                    $this->filtreDecision,
+                    $this->parcoursData->nom ?? ''
+                ),
+                $filename
+            );
+
+        } catch (\Throwable $e) {
+            \Log::error('Erreur export Excel PACES', ['error' => $e->getMessage()]);
+            toastr()->error('Erreur lors de l\'export Excel');
+        }
+    }
+
+
+
+
+    /**
+     * 📄 Export PDF
+     */
+    public function exporterPDF()
+    {
+        try {
+            $resultats = $this->getResultatsFiltres();
+
+            if (empty($resultats)) {
+                toastr()->warning('Aucun résultat à exporter');
+                return;
+            }
+
+            $service = new ResultatsPacesPdfService();
+            
+            // ✅ CORRECTION : Nettoyer le nom du parcours (enlever "PACES" du début)
+            $parcoursNom = $this->parcoursData->nom ?? 'PACES';
+            $parcoursNom = preg_replace('/^PACES\s*/i', '', $parcoursNom); // Enlève "PACES " du début
+            
+            $pdf = $service->generer(
+                $resultats,
+                $this->uesStructure,
+                $parcoursNom, // ✅ Maintenant sans "PACES"
+            );
+
+            $filtreLabel = match($this->filtreDecision) {
+                'admis' => 'Admis',
+                'redoublant' => 'Redoublants',
+                'exclus' => 'Exclus',
+                default => 'Tous'
+            };
+
+            $filename = sprintf(
+                'Resultats_PACES_%s_%s_%s.pdf',
+                $this->parcoursData->abr ?? 'Parcours',
+                $filtreLabel,
+                now()->format('Y-m-d_His')
+            );
+
+            return response()->streamDownload(function() use ($pdf) {
+                echo $pdf->output();
+            }, $filename);
+
+        } catch (\Throwable $e) {
+            \Log::error('Erreur export PDF PACES', ['error' => $e->getMessage()]);
+            toastr()->error('Erreur lors de l\'export PDF');
+        }
+    }
+
 
     public function render()
     {

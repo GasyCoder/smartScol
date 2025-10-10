@@ -96,6 +96,13 @@ class Copie extends Model
             ->where('ec_id', $this->ec_id);
     }
 
+    public function setModifieParAttribute($value)
+    {
+        // Si c'est l'utilisateur 1, on n’enregistre pas l’ID -> NULL
+        $this->attributes['modifie_par'] = ($value == 1) ? null : $value;
+    }
+
+
     // Attributs existants (inchangés)
     public function getCodeCompletAttribute()
     {
@@ -218,11 +225,15 @@ class Copie extends Model
         $this->note = $nouvelleNote;
         $this->commentaire = $commentaire;
         $this->is_checked = true;
-        $this->modifie_par = Auth::id(); // Explicitly set modifie_par
+
+        // ✅ Le mutator appliquera NULL si Auth::id() = 1
+        $this->modifie_par = Auth::id();
+
         $this->save();
 
         return $this;
-}
+    }
+
 
     public function marquerCommeVerifiee()
     {
@@ -286,9 +297,13 @@ class Copie extends Model
 
         if ($resultatFusion && $this->is_checked) {
             $resultatFusion->note = $this->note;
-            $resultatFusion->modifie_par = Auth::id();
+
+            // ✅ Si Auth::id() = 1, ces setters doivent rester NULL
+            $userId = Auth::id();
+            $resultatFusion->modifie_par = ($userId == 1) ? null : $userId;
+            $resultatFusion->verified_by = ($userId == 1) ? null : $userId;
+
             $resultatFusion->verified_at = now();
-            $resultatFusion->verified_by = Auth::id();
             $resultatFusion->save();
 
             Log::info('Synchronisation copie -> ResultatFusion', [
@@ -300,6 +315,7 @@ class Copie extends Model
 
         return $resultatFusion;
     }
+
 
     public static function marquerToutesVerifiees($examenId, $ecId = null, $filtres = [])
     {

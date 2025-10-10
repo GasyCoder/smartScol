@@ -91,7 +91,7 @@
 
         {{-- Étape 2: Sélection du parcours --}}
         @if($step === 'parcours')
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
+        <div class="p-8">
             <div class="flex items-center justify-between mb-8">
                 <div class="text-center flex-1">
                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Choisir le Parcours</h2>
