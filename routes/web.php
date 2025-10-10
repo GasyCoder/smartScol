@@ -39,9 +39,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // SCOLARITÉS - Réservé SUPERADMIN UNIQUEMENT
     // ========================================
     Route::middleware(['role:superadmin'])->group(function () {
-        Route::get('/unite-enseignement', UniteElement::class)->name('unite_e');
-        Route::get('/unite-enseignement/ajouter/{niveau}-{parcour}', AddUnite::class)->name('add_ue');
-        Route::get('/unite-enseignement/edit/{ue}', EditUnite::class)->name('edit_ue');
         Route::get('/etudiants/ajouter/{niveau}/{parcour}', AddEtudiant::class)->name('add_etudiant');
         Route::get('/etudiants/modifier/{etudiant}', EditEtudiant::class)->name('edit_etudiant');
         Route::get('/salle', SalleIndex::class)->name('salles.index');
@@ -117,6 +114,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 session()->forget(['examen_niveau_id', 'examen_parcours_id']);
                 return redirect()->route('examens.index');
             })->name('examens.reset');
+
+
+            Route::get('/unite-enseignement', UniteElement::class)->name('unite_e');
+            Route::get('/unite-enseignement/ajouter/{niveau}-{parcour}', AddUnite::class)->name('add_ue');
+            Route::get('/unite-enseignement/edit/{ue}', EditUnite::class)->name('edit_ue');
     });
 
     // ========================================

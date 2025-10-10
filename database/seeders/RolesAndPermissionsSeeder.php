@@ -34,6 +34,30 @@ class RolesAndPermissionsSeeder extends Seeder
         $permissions = [
             // Permissions pour les examens
             [
+                'name' => 'ue-ec.view',
+                'label' => 'Voir les UE/EC',
+
+                'description' => 'Permet des Unité d\enseignements et EC'
+            ],
+            [
+                'name' => 'ue-ec.create',
+                'label' => 'Créer les UE/EC',
+
+                'description' => 'Permet créer des Unité d\enseignements et EC'
+            ],
+            [
+                'name' => 'ue-ec.edit',
+                'label' => 'Modifier les UE/EC',
+
+                'description' => 'Permet modifier des Unité d\enseignements et EC'
+            ],
+            [
+                'name' => 'ue-ec.delete',
+                'label' => 'Supprimer les UE/EC',
+
+                'description' => 'Permet supprimer des Unité d\enseignements et EC'
+            ],
+            [
                 'name' => 'etudiants.view',
                 'label' => 'Voir les étudiants',
 
@@ -286,6 +310,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'releve-note.view',
             'releve-note.view-detail',
             'releve-note.exportPDF',
+            'ue-ec.view',
+            'ue-ec.edit',
         ]);
 
         // Créer le rôle secrétaire

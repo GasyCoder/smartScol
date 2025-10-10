@@ -5,7 +5,7 @@ return [
     'name' => env('APP_NAME', 'Smart Scol'),
     'desc' => env('APP_DESC', 'Smart Scol - Faculté de Médecine Université de Mahajanga'),
     'version' => env('APP_VERSION', '1.0.0'),
-    'doyen_nom' => env('DOYEN_NOM', 'RAKOTOMALALA Rivo'),
+    'doyen_nom' => env('DOYEN_NOM', 'Dr. RAKOTOMALALA Rivo'),
 
     /*
     |--------------------------------------------------------------------------
