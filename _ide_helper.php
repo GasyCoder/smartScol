@@ -5,7 +5,7 @@
 
 /**
  * A helper file for Laravel, to provide autocomplete information to your IDE
- * Generated for Laravel 12.23.1.
+ * Generated for Laravel 12.32.5.
  *
  * This file should not be included in your code, only analyzed by your IDE!
  *
@@ -1481,7 +1481,7 @@ namespace Illuminate\Support\Facades {
          * Assign a set of tags to a given binding.
          *
          * @param array|string $abstracts
-         * @param array|mixed $tags
+         * @param mixed $tags
          * @return void
          * @static
          */
@@ -3653,7 +3653,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Begin broadcasting an event.
          *
-         * @param mixed|null $event
+         * @param mixed $event
          * @return \Illuminate\Broadcasting\PendingBroadcast
          * @static
          */
@@ -4937,7 +4937,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Begin executing a new tags operation if the store supports it.
          *
-         * @param array|mixed $names
+         * @param mixed $names
          * @return \Illuminate\Cache\TaggedCache
          * @throws \BadMethodCallException
          * @static
@@ -6176,6 +6176,7 @@ namespace Illuminate\Support\Facades {
          * @param array<string, mixed> $data
          * @param array<string, mixed> $hidden
          * @return mixed
+         * @throws \Throwable
          * @static
          */
         public static function scope($callback, $data = [], $hidden = [])
@@ -6936,7 +6937,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Get a database connection instance from the given configuration.
          *
-         * @param string $name
+         * @param \UnitEnum|string $name
          * @param array $config
          * @param bool $force
          * @return \Illuminate\Database\MySqlConnection
@@ -6951,7 +6952,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Disconnect from the given database and remove from local cache.
          *
-         * @param string|null $name
+         * @param \UnitEnum|string|null $name
          * @return void
          * @static
          */
@@ -6964,7 +6965,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Disconnect from the given database.
          *
-         * @param string|null $name
+         * @param \UnitEnum|string|null $name
          * @return void
          * @static
          */
@@ -6977,7 +6978,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Reconnect to the given database.
          *
-         * @param string|null $name
+         * @param \UnitEnum|string|null $name
          * @return \Illuminate\Database\Connection
          * @static
          */
@@ -6990,7 +6991,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Set the default database connection for the callback execution.
          *
-         * @param string $name
+         * @param \UnitEnum|string $name
          * @param callable $callback
          * @return mixed
          * @static
@@ -7597,7 +7598,7 @@ namespace Illuminate\Support\Facades {
          * Register a callback to be invoked when the connection queries for longer than a given amount of time.
          *
          * @param \DateTimeInterface|\Carbon\CarbonInterval|float|int $threshold
-         * @param (callable(\Illuminate\Database\Connection, class-string<\Illuminate\Database\Events\QueryExecuted>): mixed) $handler
+         * @param (callable(\Illuminate\Database\Connection, \Illuminate\Database\Events\QueryExecuted): mixed) $handler
          * @return void
          * @static
          */
@@ -8366,6 +8367,21 @@ namespace Illuminate\Support\Facades {
             //Method inherited from \Illuminate\Database\Connection 
             /** @var \Illuminate\Database\MySqlConnection $instance */
             $instance->afterCommit($callback);
+        }
+
+        /**
+         * Execute the callback after a transaction rolls back.
+         *
+         * @param callable $callback
+         * @return void
+         * @throws \RuntimeException
+         * @static
+         */
+        public static function afterRollBack($callback)
+        {
+            //Method inherited from \Illuminate\Database\Connection 
+            /** @var \Illuminate\Database\MySqlConnection $instance */
+            $instance->afterRollBack($callback);
         }
 
             }
@@ -9727,7 +9743,7 @@ namespace Illuminate\Support\Facades {
          * Inspect the user for the given ability.
          *
          * @param \UnitEnum|string $ability
-         * @param array|mixed $arguments
+         * @param mixed $arguments
          * @return \Illuminate\Auth\Access\Response
          * @static
          */
@@ -9741,7 +9757,7 @@ namespace Illuminate\Support\Facades {
          * Get the raw result from the authorization callback.
          *
          * @param string $ability
-         * @param array|mixed $arguments
+         * @param mixed $arguments
          * @return mixed
          * @throws \Illuminate\Auth\Access\AuthorizationException
          * @static
@@ -10151,6 +10167,7 @@ namespace Illuminate\Support\Facades {
      * @method static \Illuminate\Http\Client\Response put(string $url, array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable $data = [])
      * @method static \Illuminate\Http\Client\Response delete(string $url, array|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable $data = [])
      * @method static array pool(callable $callback)
+     * @method static \Illuminate\Http\Client\Batch batch(callable $callback)
      * @method static \Illuminate\Http\Client\Response send(string $method, string $url, array $options = [])
      * @method static \GuzzleHttp\Client buildClient()
      * @method static \GuzzleHttp\Client createClient(\GuzzleHttp\HandlerStack $handlerStack)
@@ -10162,6 +10179,7 @@ namespace Illuminate\Support\Facades {
      * @method static \GuzzleHttp\Psr7\RequestInterface runBeforeSendingCallbacks(\GuzzleHttp\Psr7\RequestInterface $request, array $options)
      * @method static array mergeOptions(array ...$options)
      * @method static \Illuminate\Http\Client\PendingRequest stub(callable $callback)
+     * @method static bool isAllowedRequestUrl(string $url)
      * @method static \Illuminate\Http\Client\PendingRequest async(bool $async = true)
      * @method static \GuzzleHttp\Promise\PromiseInterface|null getPromise()
      * @method static \Illuminate\Http\Client\PendingRequest truncateExceptionsAt(int $length)
@@ -10359,15 +10377,16 @@ namespace Illuminate\Support\Facades {
         }
 
         /**
-         * Indicate that an exception should not be thrown if any request is not faked.
+         * Allow stray, unfaked requests entirely, or optionally allow only specific URLs.
          *
+         * @param array<int, string>|null $only
          * @return \Illuminate\Http\Client\Factory
          * @static
          */
-        public static function allowStrayRequests()
+        public static function allowStrayRequests($only = null)
         {
             /** @var \Illuminate\Http\Client\Factory $instance */
-            return $instance->allowStrayRequests();
+            return $instance->allowStrayRequests($only);
         }
 
         /**
@@ -11786,7 +11805,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Send the given notification to the given notifiable entities.
          *
-         * @param \Illuminate\Support\Collection|array|mixed $notifiables
+         * @param \Illuminate\Support\Collection|mixed $notifiables
          * @param mixed $notification
          * @return void
          * @static
@@ -11800,7 +11819,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Send the given notification immediately.
          *
-         * @param \Illuminate\Support\Collection|array|mixed $notifiables
+         * @param \Illuminate\Support\Collection|mixed $notifiables
          * @param mixed $notification
          * @param array|null $channels
          * @return void
@@ -15717,7 +15736,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Flash only some of the input to the session.
          *
-         * @param array|mixed $keys
+         * @param mixed $keys
          * @return void
          * @static
          */
@@ -15730,7 +15749,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Flash only some of the input to the session.
          *
-         * @param array|mixed $keys
+         * @param mixed $keys
          * @return void
          * @static
          */
@@ -15820,7 +15839,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Get all of the input and files for the request.
          *
-         * @param array|mixed|null $keys
+         * @param mixed $keys
          * @return array
          * @static
          */
@@ -16261,7 +16280,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Get a subset containing the provided keys with values from the instance data.
          *
-         * @param array|mixed $keys
+         * @param mixed $keys
          * @return array
          * @static
          */
@@ -16274,7 +16293,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Get all of the data except for a specified array of items.
          *
-         * @param array|mixed $keys
+         * @param mixed $keys
          * @return array
          * @static
          */
@@ -17843,10 +17862,8 @@ namespace Illuminate\Support\Facades {
         }
 
         /**
+         * @param array<array-key, mixed> $props
          * @see \Inertia\ServiceProvider::registerRouterMacro()
-         * @param mixed $uri
-         * @param mixed $component
-         * @param mixed $props
          * @static
          */
         public static function inertia($uri, $component, $props = [])
@@ -17869,7 +17886,7 @@ namespace Illuminate\Support\Facades {
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes withoutOverlapping(int $expiresAt = 1440)
      * @method static void mergeAttributes(\Illuminate\Console\Scheduling\Event $event)
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes user(string $user)
-     * @method static \Illuminate\Console\Scheduling\PendingEventAttributes environments(array|mixed $environments)
+     * @method static \Illuminate\Console\Scheduling\PendingEventAttributes environments(mixed $environments)
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes evenInMaintenanceMode()
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes onOneServer()
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes runInBackground()
@@ -17917,7 +17934,7 @@ namespace Illuminate\Support\Facades {
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes saturdays()
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes sundays()
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes weekly()
-     * @method static \Illuminate\Console\Scheduling\PendingEventAttributes weeklyOn(array|mixed $dayOfWeek, string $time = '0:0')
+     * @method static \Illuminate\Console\Scheduling\PendingEventAttributes weeklyOn(mixed $dayOfWeek, string $time = '0:0')
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes monthly()
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes monthlyOn(int $dayOfMonth = 1, string $time = '0:0')
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes twiceMonthly(int $first = 1, int $second = 16, string $time = '0:0')
@@ -17926,7 +17943,7 @@ namespace Illuminate\Support\Facades {
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes quarterlyOn(int $dayOfQuarter = 1, string $time = '0:0')
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes yearly()
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes yearlyOn(int $month = 1, int|string $dayOfMonth = 1, string $time = '0:0')
-     * @method static \Illuminate\Console\Scheduling\PendingEventAttributes days(array|mixed $days)
+     * @method static \Illuminate\Console\Scheduling\PendingEventAttributes days(mixed $days)
      * @method static \Illuminate\Console\Scheduling\PendingEventAttributes timezone(\UnitEnum|\DateTimeZone|string $timezone)
      * @see \Illuminate\Console\Scheduling\Schedule
      */
@@ -18847,7 +18864,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Get the default session driver name.
          *
-         * @return string
+         * @return string|null
          * @static
          */
         public static function getDefaultDriver()
@@ -19259,7 +19276,7 @@ namespace Illuminate\Support\Facades {
         /**
          * Reflash a subset of the current flash data.
          *
-         * @param array|mixed $keys
+         * @param mixed $keys
          * @return void
          * @static
          */
@@ -19280,6 +19297,18 @@ namespace Illuminate\Support\Facades {
         {
             /** @var \Illuminate\Session\Store $instance */
             $instance->flashInput($value);
+        }
+
+        /**
+         * Get the session cache instance.
+         *
+         * @return \Illuminate\Contracts\Cache\Repository
+         * @static
+         */
+        public static function cache()
+        {
+            /** @var \Illuminate\Session\Store $instance */
+            return $instance->cache();
         }
 
         /**
@@ -21656,7 +21685,7 @@ namespace Illuminate\Support\Facades {
          * Add a piece of shared data to the environment.
          *
          * @param array|string $key
-         * @param mixed|null $value
+         * @param mixed $value
          * @return mixed
          * @static
          */
@@ -22068,7 +22097,7 @@ namespace Illuminate\Support\Facades {
          *
          * @param string $key
          * @param mixed $default
-         * @return mixed|null
+         * @return mixed
          * @static
          */
         public static function getConsumableComponentData($key, $default = null)
@@ -24111,6 +24140,327 @@ namespace Flasher\Toastr\Laravel\Facade {
             }
     }
 
+namespace SimpleSoftwareIO\QrCode\Facades {
+    /**
+     */
+    class QrCode {
+        /**
+         * Generates the QrCode.
+         *
+         * @param string $text
+         * @param string|null $filename
+         * @return void|\Illuminate\Support\HtmlString|string
+         * @throws WriterException
+         * @throws InvalidArgumentException
+         * @static
+         */
+        public static function generate($text, $filename = null)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->generate($text, $filename);
+        }
+
+        /**
+         * Merges an image over the QrCode.
+         *
+         * @param string $filepath
+         * @param float $percentage
+         * @param \SimpleSoftwareIO\QrCode\SimpleSoftwareIO\QrCode\boolean|bool $absolute
+         * @return \Generator
+         * @static
+         */
+        public static function merge($filepath, $percentage = 0.2, $absolute = false)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->merge($filepath, $percentage, $absolute);
+        }
+
+        /**
+         * Merges an image string with the center of the QrCode.
+         *
+         * @param string $content
+         * @param float $percentage
+         * @return \Generator
+         * @static
+         */
+        public static function mergeString($content, $percentage = 0.2)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->mergeString($content, $percentage);
+        }
+
+        /**
+         * Sets the size of the QrCode.
+         *
+         * @param int $pixels
+         * @return \Generator
+         * @static
+         */
+        public static function size($pixels)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->size($pixels);
+        }
+
+        /**
+         * Sets the format of the QrCode.
+         *
+         * @param string $format
+         * @return \Generator
+         * @throws InvalidArgumentException
+         * @static
+         */
+        public static function format($format)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->format($format);
+        }
+
+        /**
+         * Sets the foreground color of the QrCode.
+         *
+         * @param int $red
+         * @param int $green
+         * @param int $blue
+         * @param null|int $alpha
+         * @return \Generator
+         * @static
+         */
+        public static function color($red, $green, $blue, $alpha = null)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->color($red, $green, $blue, $alpha);
+        }
+
+        /**
+         * Sets the background color of the QrCode.
+         *
+         * @param int $red
+         * @param int $green
+         * @param int $blue
+         * @param null|int $alpha
+         * @return \Generator
+         * @static
+         */
+        public static function backgroundColor($red, $green, $blue, $alpha = null)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->backgroundColor($red, $green, $blue, $alpha);
+        }
+
+        /**
+         * Sets the eye color for the provided eye index.
+         *
+         * @param int $eyeNumber
+         * @param int $innerRed
+         * @param int $innerGreen
+         * @param int $innerBlue
+         * @param int $outterRed
+         * @param int $outterGreen
+         * @param int $outterBlue
+         * @return \Generator
+         * @throws InvalidArgumentException
+         * @static
+         */
+        public static function eyeColor($eyeNumber, $innerRed, $innerGreen, $innerBlue, $outterRed = 0, $outterGreen = 0, $outterBlue = 0)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->eyeColor($eyeNumber, $innerRed, $innerGreen, $innerBlue, $outterRed, $outterGreen, $outterBlue);
+        }
+
+        /**
+         * @static
+         */
+        public static function gradient($startRed, $startGreen, $startBlue, $endRed, $endGreen, $endBlue, $type)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->gradient($startRed, $startGreen, $startBlue, $endRed, $endGreen, $endBlue, $type);
+        }
+
+        /**
+         * Sets the eye style.
+         *
+         * @param string $style
+         * @return \Generator
+         * @throws InvalidArgumentException
+         * @static
+         */
+        public static function eye($style)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->eye($style);
+        }
+
+        /**
+         * Sets the style of the blocks for the QrCode.
+         *
+         * @param string $style
+         * @param float $size
+         * @return \Generator
+         * @throws InvalidArgumentException
+         * @static
+         */
+        public static function style($style, $size = 0.5)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->style($style, $size);
+        }
+
+        /**
+         * Sets the encoding for the QrCode.
+         * 
+         * Possible values are
+         * ISO-8859-2, ISO-8859-3, ISO-8859-4, ISO-8859-5, ISO-8859-6,
+         * ISO-8859-7, ISO-8859-8, ISO-8859-9, ISO-8859-10, ISO-8859-11,
+         * ISO-8859-12, ISO-8859-13, ISO-8859-14, ISO-8859-15, ISO-8859-16,
+         * SHIFT-JIS, WINDOWS-1250, WINDOWS-1251, WINDOWS-1252, WINDOWS-1256,
+         * UTF-16BE, UTF-8, ASCII, GBK, EUC-KR.
+         *
+         * @param string $encoding
+         * @return \Generator
+         * @static
+         */
+        public static function encoding($encoding)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->encoding($encoding);
+        }
+
+        /**
+         * Sets the error correction for the QrCode.
+         * 
+         * L: 7% loss.
+         * M: 15% loss.
+         * Q: 25% loss.
+         * H: 30% loss.
+         *
+         * @param string $errorCorrection
+         * @return \Generator
+         * @static
+         */
+        public static function errorCorrection($errorCorrection)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->errorCorrection($errorCorrection);
+        }
+
+        /**
+         * Sets the margin of the QrCode.
+         *
+         * @param int $margin
+         * @return \Generator
+         * @static
+         */
+        public static function margin($margin)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->margin($margin);
+        }
+
+        /**
+         * Fetches the Writer.
+         *
+         * @param \BaconQrCode\Renderer\ImageRenderer $renderer
+         * @return \BaconQrCode\Writer
+         * @static
+         */
+        public static function getWriter($renderer)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getWriter($renderer);
+        }
+
+        /**
+         * Fetches the Image Renderer.
+         *
+         * @return \BaconQrCode\Renderer\ImageRenderer
+         * @static
+         */
+        public static function getRenderer()
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getRenderer();
+        }
+
+        /**
+         * Returns the Renderer Style.
+         *
+         * @return \BaconQrCode\Renderer\RendererStyle\RendererStyle
+         * @static
+         */
+        public static function getRendererStyle()
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getRendererStyle();
+        }
+
+        /**
+         * Fetches the formatter.
+         *
+         * @return \BaconQrCode\Renderer\Image\ImageBackEndInterface
+         * @static
+         */
+        public static function getFormatter()
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getFormatter();
+        }
+
+        /**
+         * Fetches the module.
+         *
+         * @return \BaconQrCode\Renderer\Module\ModuleInterface
+         * @static
+         */
+        public static function getModule()
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getModule();
+        }
+
+        /**
+         * Fetches the eye style.
+         *
+         * @return \BaconQrCode\Renderer\Eye\EyeInterface
+         * @static
+         */
+        public static function getEye()
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getEye();
+        }
+
+        /**
+         * Fetches the color fill.
+         *
+         * @return \BaconQrCode\Renderer\RendererStyle\Fill
+         * @static
+         */
+        public static function getFill()
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->getFill();
+        }
+
+        /**
+         * Creates a RGB or Alpha channel color.
+         *
+         * @param int $red
+         * @param int $green
+         * @param int $blue
+         * @param null|int $alpha
+         * @return \BaconQrCode\Renderer\Color\ColorInterface
+         * @static
+         */
+        public static function createColor($red, $green, $blue, $alpha = null)
+        {
+            /** @var \SimpleSoftwareIO\QrCode\Generator $instance */
+            return $instance->createColor($red, $green, $blue, $alpha);
+        }
+
+            }
+    }
+
 namespace Illuminate\Support {
     /**
      * @template TKey of array-key
@@ -24233,10 +24583,8 @@ namespace Illuminate\Routing {
      */
     class Router {
         /**
+         * @param array<array-key, mixed> $props
          * @see \Inertia\ServiceProvider::registerRouterMacro()
-         * @param mixed $uri
-         * @param mixed $component
-         * @param mixed $props
          * @static
          */
         public static function inertia($uri, $component, $props = [])
@@ -24498,6 +24846,19 @@ namespace  {
         {
             /** @var \Illuminate\Database\Eloquent\Builder $instance */
             return $instance->withoutGlobalScopes($scopes);
+        }
+
+        /**
+         * Remove all global scopes except the given scopes.
+         *
+         * @param array $scopes
+         * @return \Illuminate\Database\Eloquent\Builder<static>
+         * @static
+         */
+        public static function withoutGlobalScopesExcept($scopes = [])
+        {
+            /** @var \Illuminate\Database\Eloquent\Builder $instance */
+            return $instance->withoutGlobalScopesExcept($scopes);
         }
 
         /**
@@ -26316,7 +26677,7 @@ namespace  {
          *
          * @param mixed $relations
          * @param \Illuminate\Contracts\Database\Query\Expression|string $column
-         * @param string $function
+         * @param string|null $function
          * @return \Illuminate\Database\Eloquent\Builder<static>
          * @static
          */
@@ -29328,8 +29689,8 @@ namespace  {
     class Session extends \Illuminate\Support\Facades\Session {}
     class Storage extends \Illuminate\Support\Facades\Storage {}
     class Str extends \Illuminate\Support\Str {}
-    class URL extends \Illuminate\Support\Facades\URL {}
     class Uri extends \Illuminate\Support\Uri {}
+    class URL extends \Illuminate\Support\Facades\URL {}
     class Validator extends \Illuminate\Support\Facades\Validator {}
     class View extends \Illuminate\Support\Facades\View {}
     class Vite extends \Illuminate\Support\Facades\Vite {}
@@ -29339,6 +29700,7 @@ namespace  {
     class Excel extends \Maatwebsite\Excel\Facades\Excel {}
     class Flasher extends \Flasher\Laravel\Facade\Flasher {}
     class Toastr extends \Flasher\Toastr\Laravel\Facade\Toastr {}
+    class QrCode extends \SimpleSoftwareIO\QrCode\Facades\QrCode {}
 }
 
 

@@ -82,7 +82,7 @@
             text-align: center;
             font-weight: bold;
             border: 1px solid #000;
-            font-size: 12px; /* ✅ AUGMENTÉ de 10px à 12px */
+            font-size: 14px; /* ✅ AUGMENTÉ de 10px à 12px */
             text-transform: uppercase;
             vertical-align: middle;
         }
@@ -91,7 +91,7 @@
             padding: 6px 10px; /* ✅ AUGMENTÉ de 4px 8px à 6px 10px */
             border: 1px solid #000;
             text-align: left;
-            font-size: 12px; /* ✅ AUGMENTÉ de 10px à 12px */
+            font-size: 14px; /* ✅ AUGMENTÉ de 10px à 12px */
             vertical-align: middle;
             color: #000;
         }
@@ -105,7 +105,7 @@
 
         .col-matricule {
             width: 15%;
-            text-align: center !important;
+            text-align: left !important;
             font-size: 14px; /* ✅ AUGMENTÉ */
         }
 
@@ -198,21 +198,26 @@
     <div class="header-officiel">
         @if(!empty($header_image_base64))
             <img src="{{ $header_image_base64 }}" alt="En-tête Faculté de Médecine">
-        @else
-            <div style="text-align: center; padding: 10px; border: 2px solid #000;">
-                <div style="font-size: 14px; font-weight: bold;">UNIVERSITÉ DE MAHAJANGA</div>
-                <div style="font-size: 16px; font-weight: bold;">FACULTÉ DE MÉDECINE</div>
-            </div>
         @endif
         <hr>
     </div>
 
+
     {{-- TITRE PRINCIPAL --}}
-    <div class="titre-principal">
-        <h1>{{ $titre_document ?? 'RÉSULTATS CONCOURS - PACES MÉDECINE GÉNÉRALE' }}</h1>
+    <div class="titre-principal" style="text-align:center; margin:20px 0 15px 0; page-break-inside:avoid;">
+        <!-- Ligne 1 : RÉSULTATS CONCOURS - PACES -->
+        <div style="font-size:16px; font-weight:700; text-transform:uppercase;">
+            {{ $titre_document ?? 'RÉSULTATS CONCOURS - PACES' }}
+        </div>
         
-        <div class="annee-universitaire">
-            ANNÉE UNIVERSITAIRE {{ $annee_universitaire->libelle ?? date('Y') . '-' . (date('Y') + 1) }}
+        <!-- Ligne 2 : LISTE DES ÉTUDIANTS [ADMIS/REDOUBLANTS/EXCLUS] - PARCOURS [NOM] -->
+        <div style="font-size:15px; font-weight:700; margin-top:6px; text-transform:uppercase;">
+              {!! $titre_special ?? 'LISTE DES ÉTUDIANTS ADMIS - PARCOURS' !!}
+        </div>
+        
+        <!-- Ligne 3 : ANNÉE UNIVERSITAIRE 2024-2025 -->
+        <div class="annee-universitaire" style="font-size:13px; font-weight:700; margin-top:6px; text-transform:uppercase;">
+            ANNÉE UNIVERSITAIRE {{ $annee_universitaire->libelle ?? '2024-2025' }}
         </div>
     </div>
 
@@ -319,6 +324,22 @@
             </div>
         </div>
     @endif
+
+    {{-- QR CODE FORMAT CORRECT --}}
+    @if(!empty($qrcodeImage))
+    <div style="text-align: left; margin-top: 20px; page-break-inside: avoid;">
+        {{-- ✅ FORMAT EXACTEMENT COMME L'EXEMPLE QUI FONCTIONNE --}}
+        <img 
+            src="data:image/png;base64,{{ base64_encode($qrcodeImage) }}" 
+            alt="QR Code Statistiques PACES" 
+            width="100"
+            height="100"/>
+        <div style="margin-top: 10px; font-size: 10px; color: #666;">
+            Code de vérification - Scannez pour voir les détails
+        </div>
+    </div>
+    @endif
+
 
     {{-- SIGNATURE --}}
     <div class="signature-section">

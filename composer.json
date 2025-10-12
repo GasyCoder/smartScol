@@ -19,6 +19,7 @@
         "livewire/livewire": "^3.6",
         "maatwebsite/excel": "^3.1",
         "php-flasher/flasher-toastr-laravel": "*",
+        "simplesoftwareio/simple-qrcode": "^4.2",
         "spatie/laravel-permission": "^6.17",
         "tightenco/ziggy": "^2.0"
     },

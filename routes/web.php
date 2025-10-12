@@ -28,6 +28,7 @@ use App\Livewire\Settings\RolesPermissions;
 use App\Livewire\Manchette\ManchettesCorbeille;
 use App\Livewire\Resultats\ListeResultatsPACES;
 use App\Livewire\Resultats\ResultatVerification;
+use App\Livewire\Resultats\SimulationDeliberation;
 
 Route::redirect('/', '/login');
 Route::redirect('/register', '/login');
@@ -85,7 +86,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/fusion', FusionIndex::class)->name('fusion');
             Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
             Route::get('/finale', ResultatsFinale::class)->name('finale');
+            
+            // ✅ Route liste PACES (existante)
             Route::get('/resultats-paces', ListeResultatsPACES::class)->name('paces-concours');
+            // ✅ NOUVELLE ROUTE : Simulation avec paramètre parcours
+            Route::get('/resultats-paces/deliberation/{parcoursSlug}', SimulationDeliberation::class)
+                ->name('paces-deliberation');
 
             Route::get('/releve-notes', ReleveNotes::class)->name('releve-notes.index');
 

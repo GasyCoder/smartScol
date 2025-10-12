@@ -6,6 +6,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ResultatsPacesPdfService
 {
@@ -36,33 +37,39 @@ class ResultatsPacesPdfService
             'matricule' => true,
             'moyenne' => false,
             'credits' => false,
-            'decision' => true,
+            'decision' => false,
             'ues_details' => false,
         ], $colonnesConfig);
+
+        // Si le filtre courant veut absolument afficher/masquer, on peut verrouiller
+        if (in_array($this->filtreDecision, ['admis', 'redoublant', 'exclus'], true)) {
+            $this->colonnesConfig['decision'] = false; 
+        }
 
         try {
             $data = $this->prepareDataForExport();
 
+            // ✅ CORRECTION 1 : Passer isPhpEnabled directement dans setOptions()
             $pdf = Pdf::loadView('exports.resultats-paces-pdf', $data)
                 ->setPaper('a4', 'portrait')
                 ->setOptions([
                     'defaultFont' => 'DejaVu Sans',
                     'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled' => true,
+                    'isPhpEnabled' => true,        // ✅ Ajouté ici directement
                     'margin_top' => 15,
                     'margin_bottom' => 25,
                     'margin_left' => 20,
                     'margin_right' => 20,
                 ]);
 
-            // ✅ SOLUTION DÉFINITIVE : Callback qui s'exécute APRÈS le rendu
+            // ✅ CORRECTION 2 : Utiliser getDomPDF() et render() sans set_option()
             $dompdf = $pdf->getDomPDF();
-            $dompdf->set_option('isPhpEnabled', true);
             
             // Rendu du PDF
             $dompdf->render();
             
-            // ✅ AJOUT pagination APRÈS le rendu (c'est la clé!)
+            // ✅ Ajout pagination APRÈS le rendu
             $canvas = $dompdf->getCanvas();
             $canvas->page_script(function ($pageNumber, $pageCount, $canvas, $fontMetrics) {
                 $text = "Page $pageNumber sur $pageCount";
@@ -90,6 +97,7 @@ class ResultatsPacesPdfService
             throw $e;
         }
     }
+
 
     private function getHeaderImageBase64()
     {
@@ -132,6 +140,9 @@ class ResultatsPacesPdfService
 
         // Type de document selon le filtre
         $typeDocument = $this->determinerTypeDocument();
+        if (!empty($typeDocument['hide_decision'])) {
+            $this->colonnesConfig['decision'] = false;
+        }
 
         return [
             'resultats' => $donneesAvecRang,
@@ -140,7 +151,7 @@ class ResultatsPacesPdfService
             'statistiques' => $this->statistiques,
             'date_export' => now()->format('d/m/Y H:i'),
             'export_par' => Auth::user()->name ?? 'Système',
-            'total_pages_estimate' => ceil($donneesAvecRang->count() / 25), // ✅ Estimation (25 lignes par page)
+            'total_pages_estimate' => ceil($donneesAvecRang->count() / 25),
             'show_pagination' => true,
             
             // Infos document
@@ -157,53 +168,124 @@ class ResultatsPacesPdfService
             'header_image_base64' => $this->getHeaderImageBase64(),
             'doyen_nom' => config('app.doyen_nom', 'RAKOTOMALALA Rivo'),
             'conditions' => $this->getConditions(),
+            
+            // ✅ CORRECTION : Retourner l'image brute (comme l'exemple)
+            'qrcodeImage' => $this->genererQrCodeStatistiques(),
+            'stats_detaillees' => [
+                'total' => $donneesAvecRang->count(),
+                'admis' => $donneesAvecRang->where('decision', 'admis')->count(),
+                'redoublant' => $donneesAvecRang->where('decision', 'redoublant')->count(),
+                'exclus' => $donneesAvecRang->where('decision', 'exclus')->count(),
+                'rattrapage' => $donneesAvecRang->where('decision', 'rattrapage')->count(),
+            ],
         ];
     }
 
+
+
     private function determinerTypeDocument()
     {
+        // ===== ÉTAPE 1 : Récupérer l'année universitaire =====
+        $anneeActive = \App\Models\AnneeUniversitaire::where('is_active', true)->first();
+        $anneeLib = $anneeActive?->libelle ?? '2024-2025';
+
+        // ===== ÉTAPE 2 : LOG pour diagnostic =====
+        Log::info('📊 determinerTypeDocument - VALEURS REÇUES', [
+            'filtreDecision' => $this->filtreDecision,
+            'parcoursNom' => $this->parcoursNom,
+        ]);
+
+        // ===== ÉTAPE 3 : Traiter le nom du parcours intelligemment =====
+        $parcoursOriginal = trim((string) $this->parcoursNom);
+        
+        // Enlever le préfixe "PACES " s'il existe (ex: "PACES Médecine Générale" → "Médecine Générale")
+        $parcoursClean = preg_replace('/^PACES\s+/i', '', $parcoursOriginal);
+        $parcoursClean = trim($parcoursClean);
+        
+        // ✅ CORRECTION : Si après nettoyage il reste vide OU si c'est juste "PACES"
+        // → Garder "PACES" comme nom d'affichage
+        if (empty($parcoursClean) || strcasecmp($parcoursOriginal, 'PACES') === 0) {
+            $parcoursClean = 'PACES';
+        }
+        
+        $parcoursUpper = strtoupper($parcoursClean);
+
+        Log::info('📊 determinerTypeDocument - PARCOURS TRAITÉ', [
+            'parcoursOriginal' => $parcoursOriginal,
+            'parcoursUpper' => $parcoursUpper,
+        ]);
+
+        // ===== ÉTAPE 4 : Cas spécial - Aucun résultat =====
         if ($this->resultats->isEmpty()) {
             return [
-                'type' => 'vide',
-                'titre_special' => null,
-                'titre_document' => 'RÉSULTATS CONCOURS - PACES MÉDECINE GÉNÉRALE'
+                'type'           => 'vide',
+                'titre_document' => 'RÉSULTATS CONCOURS - PACES',
+                'titre_special'  => 'AUCUNE DONNÉE',
+                'annee_affiche'  => $anneeLib,
+                'hide_decision'  => false,
             ];
         }
 
-        // ✅ CORRECTION : Nettoyer "PACES" du début du nom
-        $parcoursClean = preg_replace('/^PACES\s*/i', '', $this->parcoursNom);
-        $parcoursUpper = strtoupper($parcoursClean);
+        // ===== ÉTAPE 5 : Normaliser le filtre de décision =====
+        // Convertir en minuscules et retirer les espaces
+        $filtreNormalise = strtolower(trim((string) $this->filtreDecision));
+        
+        Log::info('📊 determinerTypeDocument - FILTRE NORMALISÉ', [
+            'filtreNormalise' => $filtreNormalise,
+            'est_admis' => ($filtreNormalise === 'admis') ? 'OUI' : 'NON',
+        ]);
 
-        switch ($this->filtreDecision) {
+        // ===== ÉTAPE 6 : Configuration de base =====
+        $titre_document = 'RÉSULTATS CONCOURS - PACES';
+        
+        // ===== ÉTAPE 7 : Déterminer le type selon le filtre =====
+        switch ($filtreNormalise) {
             case 'admis':
+                Log::info('✅ CAS DÉTECTÉ : ADMIS');
                 return [
-                    'type' => 'admis_seulement',
-                    'titre_special' => 'LISTE DES CANDIDATS ADMIS',
-                    'titre_document' => "LISTE DES CANDIDATS ADMIS EN PACES {$parcoursUpper}"
+                    'type'           => 'admis_seulement',
+                    'titre_document' => $titre_document,
+                    'titre_special'  => 'LISTE DES ÉTUDIANTS  <u>ADMIS</u> - PARCOURS ' . $parcoursUpper,
+                    'annee_affiche'  => $anneeLib,
+                    'hide_decision'  => true,  // ✅ Masquer colonne décision pour admis
                 ];
-            
+
             case 'redoublant':
+            case 'redoublants':
+                Log::info('✅ CAS DÉTECTÉ : REDOUBLANT');
                 return [
-                    'type' => 'redoublant_seulement',
-                    'titre_special' => 'LISTE DES CANDIDATS AUTORISÉS AU REDOUBLEMENT',
-                    'titre_document' => "LISTE DES CANDIDATS AUTORISÉS AU REDOUBLEMENT - PACES {$parcoursUpper}"
+                    'type'           => 'redoublant_seulement',
+                    'titre_document' => $titre_document,
+                    'titre_special'  => 'LISTE DES ÉTUDIANTS <u>REDOUBLANTS</u> - PARCOURS ' . $parcoursUpper,
+                    'annee_affiche'  => $anneeLib,
+                    'hide_decision'  => false, // ✅ Afficher colonne décision
                 ];
-            
+
             case 'exclus':
+                Log::info('✅ CAS DÉTECTÉ : EXCLUS');
                 return [
-                    'type' => 'exclus_seulement',
-                    'titre_special' => 'LISTE DES CANDIDATS EXCLUS',
-                    'titre_document' => "LISTE DES CANDIDATS EXCLUS - PACES {$parcoursUpper}"
+                    'type'           => 'exclus_seulement',
+                    'titre_document' => $titre_document,
+                    'titre_special'  => 'LISTE DES ÉTUDIANTS <u>EXCLUS</u> - PARCOURS ' . $parcoursUpper,
+                    'annee_affiche'  => $anneeLib,
+                    'hide_decision'  => false, // ✅ Afficher colonne décision
                 ];
-            
-            default: // 'tous'
+
+            default:
+                Log::warning('⚠️ CAS DEFAULT - Filtre non reconnu', [
+                    'filtre_recu' => $filtreNormalise,
+                ]);
+                
                 return [
-                    'type' => 'mixte',
-                    'titre_special' => null,
-                    'titre_document' => "RÉSULTATS CONCOURS - PACES {$parcoursUpper}"
+                    'type'           => 'mixte',
+                    'titre_document' => $titre_document,
+                    'titre_special'  => 'LISTE DES ÉTUDIANTS - PARCOURS ' . $parcoursUpper,
+                    'annee_affiche'  => $anneeLib,
+                    'hide_decision'  => false,
                 ];
         }
     }
+
 
     private function getConditions()
     {
@@ -243,5 +325,78 @@ class ResultatsPacesPdfService
     ) {
         $instance = new self();
         return $instance->generer($resultats, $uesStructure, $filtreDecision, $parcoursNom, $statistiques);
+    }
+
+
+
+
+    // ✅ VERSION CORRIGÉE : Utilise les VRAIES statistiques
+    private function genererQrCodeStatistiques()
+    {
+        try {
+            // ✅ UTILISER les statistiques passées en paramètre (si disponibles)
+            if (!empty($this->statistiques)) {
+                $totalResultats = $this->statistiques['total'] ?? 0;
+                $admis = $this->statistiques['admis'] ?? 0;
+                $redoublant = $this->statistiques['redoublant'] ?? 0;
+                $exclus = $this->statistiques['exclus'] ?? 0;
+                $presents = $this->statistiques['presents'] ?? $totalResultats;
+                $inscrits = $this->statistiques['inscrits'] ?? $totalResultats;
+            } else {
+                // ❌ Fallback : compter depuis les résultats (peut être filtré)
+                $totalResultats = $this->resultats->count();
+                $admis = $this->resultats->where('decision', 'admis')->count();
+                $redoublant = $this->resultats->where('decision', 'redoublant')->count();
+                $exclus = $this->resultats->where('decision', 'exclus')->count();
+                $presents = $totalResultats;
+                $inscrits = $totalResultats;
+            }
+
+            // ✅ Construire le texte avec TOUTES les stats
+            $qrCodeData = mb_convert_encoding(sprintf(
+                "RÉSULTATS PACES\n\n" .
+                "PARCOURS: %s\n" .
+                "ANNÉE: %s\n\n" .
+                "STATISTIQUES OFFICIELLES:\n" .
+                "Inscrits: %d\n" .
+                "Présents: %d\n" .
+                "Absents: %d\n\n" .
+                "DÉCISIONS:\n" .
+                "✓ Admis: %d\n" .
+                "⚠ Redoublants: %d\n" .
+                "✗ Exclus: %d\n\n" .
+                "Date: %s",
+                $this->parcoursNom,
+                AnneeUniversitaire::where('is_active', true)->first()?->libelle ?? '2024-2025',
+                $inscrits,
+                $presents,
+                max(0, $inscrits - $presents),
+                $admis,
+                $redoublant,
+                $exclus,
+                now()->format('d/m/Y H:i')
+            ), 'UTF-8', 'UTF-8');
+
+            // ✅ Générer le QR Code
+            $qrCode = new QrCode;
+            $qrcodeImage = $qrCode::size(200)
+                ->encoding('UTF-8')
+                ->errorCorrection('M')
+                ->generate($qrCodeData);
+
+            Log::info('✅ QR Code généré', [
+                'longueur' => strlen($qrcodeImage),
+                'stats_utilisees' => !empty($this->statistiques) ? 'vraies' : 'calculees'
+            ]);
+
+            return $qrcodeImage;
+
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur génération QR Code', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return null;
+        }
     }
 }

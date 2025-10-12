@@ -288,7 +288,7 @@ class FusionIndex extends Component
                 $this->switchTab('rapport-stats');
             }
         } catch (\Exception $e) {
-            Log::error('Erreur verifierCoherence', [
+            \Log::error('Erreur verifierCoherence', [
                 'examen_id' => $this->examen_id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
@@ -359,68 +359,48 @@ class FusionIndex extends Component
         $this->processVerifyStep(ResultatFusion::STATUT_VERIFY_2, ResultatFusion::STATUT_VERIFY_3, 3, 60, 'confirmingVerify3');
     }
 
+
     private function processVerifyStep($fromStatus, $toStatus, $etape, $progress, $confirmProperty)
     {
-        if (!$this->examen_id || !$this->sessionActive) {
-            toastr()->error('Aucun examen ou session sélectionné');
-            return;
-        }
-
         $this->$confirmProperty = false;
 
         try {
-            DB::beginTransaction(); // ← Ajout transaction
+            DB::beginTransaction();
             
-            $resultats = ResultatFusion::where('examen_id', $this->examen_id)
+            $updated = ResultatFusion::where('examen_id', $this->examen_id)
                 ->where('session_exam_id', $this->sessionActive->id)
                 ->where('statut', $fromStatus)
-                ->get();
+                ->update([
+                    'statut' => $toStatus,
+                    'etape_fusion' => $etape,
+                    'modifie_par' => Auth::id(),
+                    'updated_at' => now()
+                ]);
 
-            if ($resultats->isEmpty()) {
-                toastr()->error("Aucun résultat trouvé pour cette étape de vérification.");
-                DB::rollback();
+            if ($updated === 0) {
+                DB::rollBack();
+                toastr()->error("Aucun résultat trouvé");
                 return;
             }
 
-            $userId = Auth::id();
-            foreach ($resultats as $fusion) {
-                $fusion->changerStatut($toStatus, $userId);
-            }
-
-            DB::commit(); // ← Commit avant mise à jour état
-            
-            // ✅ Attendre que les changements soient persistés
-            sleep(1);
-            
-            // ✅ Forcer rafraîchissement complet
+            DB::commit();
+            $this->setEtat('fusion', $progress, $etape, true);
             $this->verifierEtatActuel();
-            
-            // ✅ Forcer le rendu du composant
             $this->dispatch('$refresh');
 
-            toastr()->success(count($resultats) . " résultats passés à l'étape suivante pour la session {$this->sessionActive->type}.");
+            toastr()->success("$updated résultats mis à jour");
 
         } catch (\Exception $e) {
-            DB::rollback();
-            toastr()->error('Erreur lors du passage à l\'étape suivante: ' . $e->getMessage());
-            \Log::error('Erreur processVerifyStep', [
-                'error' => $e->getMessage(),
-                'fromStatus' => $fromStatus,
-                'toStatus' => $toStatus,
-                'etape' => $etape
-            ]);
+            DB::rollBack();
+            toastr()->error('Erreur: ' . $e->getMessage());
         }
     }
+
 
     public function validerResultats()
     {
         if (!Auth::user()->hasPermissionTo('resultats.validation')) {
-            toastr()->error('Vous n\'avez pas l\'autorisation de valider les résultats');
-            return;
-        }
-
-        if (!$this->examen_id || !$this->sessionActive) {
-            toastr()->error('Aucun examen ou session sélectionné');
+            toastr()->error('Vous n\'avez pas l\'autorisation');
             return;
         }
 
@@ -428,41 +408,41 @@ class FusionIndex extends Component
         $this->confirmingValidation = false;
 
         try {
-            $resultats = ResultatFusion::where('examen_id', $this->examen_id)
+            DB::beginTransaction();
+            
+            $updated = ResultatFusion::where('examen_id', $this->examen_id)
                 ->where('session_exam_id', $this->sessionActive->id)
                 ->where('statut', ResultatFusion::STATUT_VERIFY_3)
-                ->get();
+                ->update([
+                    'statut' => ResultatFusion::STATUT_VALIDE,
+                    'modifie_par' => Auth::id(),
+                    'updated_at' => now()
+                ]);
 
-            if ($resultats->isEmpty()) {
-                toastr()->error("Aucun résultat de la 3ème fusion trouvé pour la session {$this->sessionActive->type}.");
+            if ($updated === 0) {
+                DB::rollBack();
+                toastr()->error("Aucun résultat trouvé");
                 return;
             }
 
-            $userId = Auth::id();
-            foreach ($resultats as $fusion) {
-                $fusion->changerStatut(ResultatFusion::STATUT_VALIDE, $userId);
-            }
-
-            $this->setEtat('valide', 75, 4);
-            toastr()->success(count($resultats) . " résultats validés pour la session {$this->sessionActive->type}.");
+            DB::commit();
+            $this->setEtat('valide', 85, 4);
+            toastr()->success("$updated résultats validés");
             $this->verifierEtatActuel();
 
         } catch (\Exception $e) {
-            toastr()->error('Erreur lors de la validation: ' . $e->getMessage());
+            DB::rollBack();
+            toastr()->error('Erreur: ' . $e->getMessage());
         }
 
         $this->isProcessing = false;
     }
 
+
     public function publierResultats()
     {
         if (!Auth::user()->hasPermissionTo('resultats.validation')) {
-            toastr()->error('Vous n\'avez pas l\'autorisation de publier les résultats');
-            return;
-        }
-
-        if (!$this->examen_id || !$this->sessionActive) {
-            toastr()->error('Aucun examen ou session sélectionné');
+            toastr()->error('Vous n\'avez pas l\'autorisation');
             return;
         }
 
@@ -470,76 +450,96 @@ class FusionIndex extends Component
         $this->confirmingPublication = false;
 
         try {
-            // Vérifier d'abord s'il y a des ResultatFinal en attente
+            DB::beginTransaction();
+
             $resultatsEnAttente = ResultatFinal::where('examen_id', $this->examen_id)
                 ->where('session_exam_id', $this->sessionActive->id)
                 ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
-                ->get();
+                ->exists();
 
-            if ($resultatsEnAttente->isNotEmpty()) {
-                // Cas de réactivation : publier directement
-                foreach ($resultatsEnAttente->groupBy('etudiant_id') as $etudiantId => $resultatsEtudiant) {
-                    $decision = $this->sessionActive->type === 'Rattrapage'
-                        ? ResultatFinal::determinerDecisionRattrapage($etudiantId, $this->sessionActive->id)
-                        : ResultatFinal::determinerDecisionPremiereSession($etudiantId, $this->sessionActive->id);
-
-                    foreach ($resultatsEtudiant as $resultat) {
-                        $resultat->changerStatut(ResultatFinal::STATUT_PUBLIE, Auth::id(), false, $decision);
-                    }
-                }
-
-                $this->setEtat('publie', 100, 4);
-                toastr()->success("Publication après réactivation réussie pour la session {$this->sessionActive->type}.");
+            if ($resultatsEnAttente) {
+                $this->publierResultatsEnAttente();
             } else {
-                // Cas normal : Publication depuis ResultatFusion
-                $statusToFind = $this->etapeFusion == 4 ? ResultatFusion::STATUT_VALIDE : ResultatFusion::STATUT_VERIFY_3;
-                $resultatsIds = ResultatFusion::where('examen_id', $this->examen_id)
-                    ->where('session_exam_id', $this->sessionActive->id)
-                    ->where('statut', $statusToFind)
-                    ->pluck('id')
-                    ->toArray();
-
-                if (empty($resultatsIds)) {
-                    toastr()->error("Aucun résultat à publier trouvé pour la session {$this->sessionActive->type}.");
-                    return;
-                }
-
-                // 1. Transférer les résultats (crée avec STATUT_EN_ATTENTE)
-                $result = (new FusionService())->transfererResultats($resultatsIds, Auth::id());
-
-                if ($result['success']) {
-                    // 2. NOUVEAU : Publier immédiatement les résultats créés
-                    $resultatsNouveaux = ResultatFinal::where('examen_id', $this->examen_id)
-                        ->where('session_exam_id', $this->sessionActive->id)
-                        ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
-                        ->get();
-
-                    foreach ($resultatsNouveaux->groupBy('etudiant_id') as $etudiantId => $resultatsEtudiant) {
-                        $decision = $this->sessionActive->type === 'Rattrapage'
-                            ? ResultatFinal::determinerDecisionRattrapage($etudiantId, $this->sessionActive->id)
-                            : ResultatFinal::determinerDecisionPremiereSession($etudiantId, $this->sessionActive->id);
-
-                        foreach ($resultatsEtudiant as $resultat) {
-                            $resultat->changerStatut(ResultatFinal::STATUT_PUBLIE, Auth::id(), false, $decision);
-                        }
-                    }
-
-                    $this->setEtat('publie', 100, 4);
-                    toastr()->success($result['message']);
-                } else {
-                    toastr()->error($result['message']);
-                    return; // Sortir si erreur
-                }
+                $this->publierDepuisFusion();
             }
 
+            DB::commit();
+            
+            // ✅ Forcer mise à jour statut
+            $this->statut = 'publie';
+            $this->etapeProgress = 100;
+            $this->etapeFusion = 4;
+            
             $this->verifierEtatActuel();
+            $this->dispatch('$refresh'); // ✅ Forcer rafraîchissement UI
 
         } catch (\Exception $e) {
-            toastr()->error('Erreur lors de la publication: ' . $e->getMessage());
+            DB::rollBack();
+            toastr()->error('Erreur: ' . $e->getMessage());
         }
 
         $this->isProcessing = false;
     }
+
+
+    private function publierResultatsEnAttente()
+    {
+        $decisions = DB::table('resultats_finaux')
+            ->selectRaw("
+                etudiant_id,
+                CASE 
+                    WHEN AVG(note) >= 10 THEN '" . ResultatFinal::DECISION_ADMIS . "'
+                    WHEN AVG(note) >= 8 THEN '" . ResultatFinal::DECISION_RATTRAPAGE . "'
+                    ELSE '" . ResultatFinal::DECISION_REDOUBLANT . "'
+                END as decision
+            ")
+            ->where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->where('statut', ResultatFinal::STATUT_EN_ATTENTE)
+            ->groupBy('etudiant_id')
+            ->get();
+
+        foreach ($decisions as $d) {
+            ResultatFinal::where('examen_id', $this->examen_id)
+                ->where('session_exam_id', $this->sessionActive->id)
+                ->where('etudiant_id', $d->etudiant_id)
+                ->update([
+                    'statut' => ResultatFinal::STATUT_PUBLIE,
+                    'decision' => $d->decision,
+                    'date_publication' => now(),
+                    'modifie_par' => Auth::id()
+                ]);
+        }
+
+        toastr()->success("Publication réussie");
+    }
+
+
+    private function publierDepuisFusion()
+    {
+        $statusToFind = $this->etapeFusion == 4 ? ResultatFusion::STATUT_VALIDE : ResultatFusion::STATUT_VERIFY_3;
+        
+        $resultatsIds = ResultatFusion::where('examen_id', $this->examen_id)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->where('statut', $statusToFind)
+            ->pluck('id')
+            ->toArray();
+
+        if (empty($resultatsIds)) {
+            throw new \Exception("Aucun résultat à publier");
+        }
+
+        // 1. Transférer vers resultats_finaux
+        $result = (new FusionService())->transfererResultatsOptimise($resultatsIds, Auth::id(), $this->sessionActive);
+
+        if (!$result['success']) {
+            throw new \Exception($result['message']);
+        }
+
+        // 2. ✅ PUBLIER immédiatement après transfert
+        $this->publierResultatsEnAttente();
+    }
+
 
     public function resetFusion()
     {

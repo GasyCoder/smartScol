@@ -1,4 +1,4 @@
-{{-- resources/views/livewire/resultats/liste-resultats-paces.blade.php --}}
+{{-- resources/views/livewire/resultats/liste-resultats-paces.blade.php vue principale--}}
 <div class="space-y-4">
 
     {{-- ===== BREADCRUMB (garde ton code) ===== --}}
@@ -35,12 +35,12 @@
 
     {{-- ===== ÉTAPE SÉLECTION ===== --}}
     @if($etape === 'selection')
-        @include('livewire.resultats.partials.selection-parcours-paces')
+        @include('livewire.resultats.partials.paces.selection-parcours-paces')
     @endif
 
     {{-- ===== ÉTAPE RÉSULTATS ===== --}}
     @if($etape === 'resultats')
-        @include('livewire.resultats.partials.affichage-resultats-paces')
+        @include('livewire.resultats.partials.paces.affichage-resultats-paces')
     @endif
 
 </div>

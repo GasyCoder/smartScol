@@ -1129,63 +1129,24 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
             $sessionId = $sessionActive ? $sessionActive->id : null;
         }
 
-        // OPTIMISATION: Traitement par batch pour éviter le timeout
-        $batchSize = 1000;
-        $resultatsValides = 0;
-        $offset = 0;
+        $updated = ResultatFusion::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->where('statut', ResultatFusion::STATUT_VERIFY_1)
+            ->where('etape_fusion', 1)
+            ->update([
+                'statut' => ResultatFusion::STATUT_VERIFY_2,
+                'etape_fusion' => 2,
+                'modifie_par' => Auth::id(),
+                'updated_at' => now()
+            ]);
 
-        do {
-            $resultats = ResultatFusion::where('examen_id', $examenId)
-                ->where('session_exam_id', $sessionId)
-                ->where('statut', ResultatFusion::STATUT_VERIFY_1)
-                ->where('etape_fusion', 1)
-                ->offset($offset)
-                ->limit($batchSize)
-                ->get();
-
-            if ($resultats->isEmpty()) {
-                break;
-            }
-
-            // Traitement par batch
-            $idsToUpdate = [];
-            foreach ($resultats as $resultat) {
-                if ($this->validerResultat($resultat)) {
-                    $idsToUpdate[] = $resultat->id;
-                    $resultatsValides++;
-                }
-            }
-
-            // Mise à jour en masse
-            if (!empty($idsToUpdate)) {
-                ResultatFusion::whereIn('id', $idsToUpdate)
-                    ->update([
-                        'statut' => ResultatFusion::STATUT_VERIFY_2,
-                        'etape_fusion' => 2,
-                        'modifie_par' => Auth::id(),
-                        'updated_at' => now()
-                    ]);
-            }
-
-            $offset += $batchSize;
-            
-            // Petit délai pour éviter la surcharge
-            usleep(5000); // 5ms
-
-        } while ($resultats->count() === $batchSize);
-
-        if ($resultatsValides === 0) {
-            return [
-                'success' => false,
-                'message' => 'Aucun résultat à valider à l\'étape 1 pour cette session.',
-            ];
+        if ($updated === 0) {
+            return ['success' => false, 'message' => 'Aucun résultat à valider'];
         }
 
-        return [
-            'success' => true,
-            'resultats_valides' => $resultatsValides,
-        ];
+        return ['success' => true, 'resultats_valides' => $updated];
     }
+
 
     /**
      * Étape 3 : Troisième vérification avant finalisation
@@ -1197,65 +1158,22 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
             $sessionId = $sessionActive ? $sessionActive->id : null;
         }
 
-        // OPTIMISATION: Traitement par batch
-        $batchSize = 1000;
-        $resultatsFinalises = 0;
-        $offset = 0;
+        $updated = ResultatFusion::where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionId)
+            ->where('statut', ResultatFusion::STATUT_VERIFY_2)
+            ->where('etape_fusion', 2)
+            ->update([
+                'statut' => ResultatFusion::STATUT_VERIFY_3,
+                'etape_fusion' => 3,
+                'modifie_par' => Auth::id(),
+                'updated_at' => now()
+            ]);
 
-        // Pré-charger les étudiants actifs pour optimiser la validation
-        $etudiantsActifs = Etudiant::where('is_active', true)
-            ->pluck('id')
-            ->flip(); // Pour une recherche O(1)
-
-        do {
-            $resultats = ResultatFusion::where('examen_id', $examenId)
-                ->where('session_exam_id', $sessionId)
-                ->where('statut', ResultatFusion::STATUT_VERIFY_2)
-                ->where('etape_fusion', 2)
-                ->offset($offset)
-                ->limit($batchSize)
-                ->get();
-
-            if ($resultats->isEmpty()) {
-                break;
-            }
-
-            // Traitement par batch
-            $idsToUpdate = [];
-            foreach ($resultats as $resultat) {
-                if ($this->verifierResultatEtape3Optimise($resultat, $etudiantsActifs)) {
-                    $idsToUpdate[] = $resultat->id;
-                    $resultatsFinalises++;
-                }
-            }
-
-            // Mise à jour en masse
-            if (!empty($idsToUpdate)) {
-                ResultatFusion::whereIn('id', $idsToUpdate)
-                    ->update([
-                        'statut' => ResultatFusion::STATUT_VERIFY_3,
-                        'etape_fusion' => 3,
-                        'modifie_par' => Auth::id(),
-                        'updated_at' => now()
-                    ]);
-            }
-
-            $offset += $batchSize;
-            usleep(5000); // 5ms
-
-        } while ($resultats->count() === $batchSize);
-
-        if ($resultatsFinalises === 0) {
-            return [
-                'success' => false,
-                'message' => 'Aucun résultat à traiter à l\'étape 2 pour cette session.',
-            ];
+        if ($updated === 0) {
+            return ['success' => false, 'message' => 'Aucun résultat à traiter'];
         }
 
-        return [
-            'success' => true,
-            'resultats_traites' => $resultatsFinalises,
-        ];
+        return ['success' => true, 'resultats_traites' => $updated];
     }
 
 
@@ -1751,4 +1669,169 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
 
         return ['valid' => true];
     }
+
+
+
+    public function transfererResultatsOptimise(array $resultatFusionIds, int $generePar, $sessionActive)
+    {
+        try {
+            set_time_limit(300);
+            DB::beginTransaction();
+
+            $resultatsFusion = ResultatFusion::whereIn('id', $resultatFusionIds)
+                ->where('session_exam_id', $sessionActive->id)
+                ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_3, ResultatFusion::STATUT_VALIDE])
+                ->select('id', 'etudiant_id', 'examen_id', 'ec_id', 'code_anonymat_id', 'note')
+                ->get();
+
+            if ($resultatsFusion->isEmpty()) {
+                DB::rollBack();
+                return ['success' => false, 'message' => "Aucun résultat valide", 'resultats_transférés' => 0];
+            }
+
+            $examenId = $resultatsFusion->first()->examen_id;
+            $now = now();
+
+            // Vérifier existants EN MASSE
+            $existingPairs = DB::table('resultats_finaux')
+                ->where('examen_id', $examenId)
+                ->where('session_exam_id', $sessionActive->id)
+                ->select(DB::raw("CONCAT(etudiant_id, '-', ec_id) as pair_key"))
+                ->pluck('pair_key')
+                ->flip()
+                ->toArray();
+
+            $dataToInsert = [];
+            $fusionIdsToValidate = [];
+            $etudiantsTraites = [];
+
+            foreach ($resultatsFusion as $rf) {
+                $pairKey = "{$rf->etudiant_id}-{$rf->ec_id}";
+                if (isset($existingPairs[$pairKey])) continue;
+
+                $dataToInsert[] = [
+                    'etudiant_id' => $rf->etudiant_id,
+                    'examen_id' => $rf->examen_id,
+                    'session_exam_id' => $sessionActive->id,
+                    'code_anonymat_id' => $rf->code_anonymat_id,
+                    'ec_id' => $rf->ec_id,
+                    'note' => $rf->note,
+                    'genere_par' => $generePar,
+                    'statut' => ResultatFinal::STATUT_EN_ATTENTE,
+                    'hash_verification' => hash('sha256', $rf->id . $rf->note . time()),
+                    'fusion_id' => $rf->id,
+                    'date_fusion' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                $fusionIdsToValidate[] = $rf->id;
+                $etudiantsTraites[$rf->etudiant_id] = true;
+            }
+
+            if (empty($dataToInsert)) {
+                DB::rollBack();
+                return ['success' => false, 'message' => 'Tous les résultats existent déjà', 'resultats_transférés' => 0];
+            }
+
+            // Insertion EN MASSE
+            $resultatsTransférés = 0;
+            foreach (array_chunk($dataToInsert, 500) as $chunk) {
+                DB::table('resultats_finaux')->insert($chunk);
+                $resultatsTransférés += count($chunk);
+            }
+
+            // Marquer fusion comme VALIDE EN MASSE
+            if (!empty($fusionIdsToValidate)) {
+                ResultatFusion::whereIn('id', $fusionIdsToValidate)
+                    ->update(['statut' => ResultatFusion::STATUT_VALIDE, 'modifie_par' => $generePar, 'updated_at' => $now]);
+            }
+
+            // Calculer décisions EN MASSE
+            $etudiantIds = array_keys($etudiantsTraites);
+            $decisions = $this->calculerDecisionsSQL($examenId, $sessionActive->id, $sessionActive->type, $etudiantIds);
+
+            if (!empty($decisions)) {
+                $this->appliquerDecisionsEnMasse($examenId, $sessionActive->id, $decisions);
+            }
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'message' => "Transfert effectué. $resultatsTransférés résultat(s) transféré(s)",
+                'resultats_transférés' => $resultatsTransférés,
+                'session_type' => $sessionActive->type,
+                'etudiants_traites' => count($etudiantsTraites)
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur transfert', ['error' => $e->getMessage()]);
+            return ['success' => false, 'message' => 'Erreur: ' . $e->getMessage(), 'resultats_transférés' => 0];
+        }
+    }
+
+    // ✅ AJOUTER ces méthodes helper
+    private function calculerDecisionsSQL($examenId, $sessionId, $sessionType, $etudiantIds)
+    {
+        if (empty($etudiantIds)) return [];
+
+        $etudiantIdsStr = implode(',', $etudiantIds);
+
+        if ($sessionType === 'Rattrapage') {
+            $query = "
+                SELECT etudiant_id,
+                    CASE 
+                        WHEN AVG(note) >= 10 THEN '" . ResultatFinal::DECISION_ADMIS . "'
+                        ELSE '" . ResultatFinal::DECISION_REDOUBLANT . "'
+                    END as decision
+                FROM resultats_finaux
+                WHERE examen_id = ? AND session_exam_id = ? AND etudiant_id IN ($etudiantIdsStr) AND statut = ?
+                GROUP BY etudiant_id
+            ";
+        } else {
+            $query = "
+                SELECT etudiant_id,
+                    CASE 
+                        WHEN AVG(note) >= 10 THEN '" . ResultatFinal::DECISION_ADMIS . "'
+                        WHEN AVG(note) >= 8 THEN '" . ResultatFinal::DECISION_RATTRAPAGE . "'
+                        ELSE '" . ResultatFinal::DECISION_REDOUBLANT . "'
+                    END as decision
+                FROM resultats_finaux
+                WHERE examen_id = ? AND session_exam_id = ? AND etudiant_id IN ($etudiantIdsStr) AND statut = ?
+                GROUP BY etudiant_id
+            ";
+        }
+
+        return DB::select($query, [$examenId, $sessionId, ResultatFinal::STATUT_EN_ATTENTE]);
+    }
+
+
+
+    private function appliquerDecisionsEnMasse($examenId, $sessionId, $decisions)
+    {
+        if (empty($decisions)) return;
+
+        $cases = [];
+        $etudiantIds = [];
+
+        foreach ($decisions as $d) {
+            $etudiantIds[] = $d->etudiant_id;
+            $cases[] = "WHEN etudiant_id = {$d->etudiant_id} THEN '{$d->decision}'";
+        }
+
+        if (empty($etudiantIds)) return;
+
+        $etudiantIdsStr = implode(',', $etudiantIds);
+        $caseStr = implode(' ', $cases);
+
+        DB::statement("
+            UPDATE resultats_finaux 
+            SET decision = CASE $caseStr END, updated_at = NOW()
+            WHERE examen_id = $examenId AND session_exam_id = $sessionId AND etudiant_id IN ($etudiantIdsStr)
+        ");
+    }
+
+
 }
