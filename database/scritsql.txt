@@ -1,4 +1,19 @@
--- Ajouter ces index si inexistants
-CREATE INDEX idx_manchettes_session_exam ON manchettes(session_exam_id, examen_id, etudiant_id);
-CREATE INDEX idx_codes_anonymat_session_ec ON codes_anonymat(session_exam_id, examen_id, ec_id);
-CREATE INDEX idx_etudiants_niveau_parcours ON etudiants(niveau_id, parcours_id, is_active);
+-- 🎯 Mise à jour réaliste des notes pour l’étudiant 1101 (examen 19, session 1)
+-- ✅ Notes entre 12 et 16 inclus, arrondies à .00 / .25 / .50 / .75
+
+UPDATE copies
+SET note = (
+    -- Étape 1 : Génération d'une base aléatoire entre 12 et 16
+    ROUND(
+        (FLOOR(12 * 4) + FLOOR(RAND() * ((16 - 12) * 4 + 1))) / 4, 2
+    )
+)
+WHERE examen_id = 19
+  AND session_exam_id = 1
+  AND code_anonymat_id IN (
+      SELECT code_anonymat_id
+      FROM manchettes
+      WHERE etudiant_id = 1101
+        AND examen_id = 19
+        AND session_exam_id = 1
+  );
