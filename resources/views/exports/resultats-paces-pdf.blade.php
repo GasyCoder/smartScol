@@ -296,10 +296,12 @@
                 </tbody>
             </table>
         @else
-            <div class="small-text" style="text-align: center; padding: 20px;">
-                <h3>Aucun résultat à afficher</h3>
-                <p>Aucun étudiant ne correspond aux critères sélectionnés.</p>
+        {{-- ✅ AFFICHER NÉANT au lieu de "Aucun résultat" --}}
+        <div style="text-align: center; padding: 60px 20px; border: 3px solid #000; margin: 40px 0; background-color: #f9f9f9;">
+            <div style="font-size: 48px; font-weight: 900; color: #000; margin-bottom: 15px; letter-spacing: 8px;">
+                NÉANT
             </div>
+        </div>
         @endif
     </div>
 

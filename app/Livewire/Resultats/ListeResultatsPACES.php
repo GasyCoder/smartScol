@@ -950,16 +950,13 @@ class ListeResultatsPACES extends Component
         try {
             $resultats = $this->getResultatsFiltres();
 
-            if (empty($resultats)) {
-                toastr()->warning('Aucun résultat à exporter');
-                return;
-            }
-
+            // ✅ NE PLUS BLOQUER si vide, permettre l'export
+            
             $service = new ResultatsPacesPdfService();
             
             $parcoursNom = $this->parcoursData->nom ?? 'PACES';
             
-            // ✅ CORRECTION : Préparer les VRAIES statistiques
+            // ✅ Préparer les VRAIES statistiques (même si 0)
             $statistiques = [
                 'inscrits' => $this->statistiquesDetailes['total_inscrits'] ?? 0,
                 'presents' => $this->statistiquesDetailes['total_presents'] ?? 0,
@@ -970,13 +967,12 @@ class ListeResultatsPACES extends Component
                 'exclus' => $this->statistiquesDetailes['exclus'] ?? 0,
             ];
             
-            // ✅ CORRECTION : Passer les stats
             $pdf = $service->generer(
-                $resultats,
+                $resultats,  // ✅ Peut être vide []
                 $this->uesStructure,
                 $this->filtreDecision,
                 $parcoursNom,
-                $statistiques,  // ✅ Vraies stats au lieu de []
+                $statistiques,
                 []
             );
 

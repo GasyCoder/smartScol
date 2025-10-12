@@ -593,16 +593,12 @@ class SimulationDeliberation extends Component
         try {
             $resultats = $this->getResultatsFiltres();
 
-            if (empty($resultats)) {
-                toastr()->warning('Aucun résultat à exporter');
-                return;
-            }
-
+            // ✅ NE PLUS BLOQUER si vide
+            
             $service = new ResultatsPacesPdfService();
             
             $parcoursNom = $this->parcours->nom ?? 'PACES';
             
-            // ✅ CORRECTION : Préparer les VRAIES statistiques
             $statistiques = [
                 'inscrits' => $this->statistiquesDetailes['total_inscrits'] ?? 0,
                 'presents' => $this->statistiquesDetailes['total_presents'] ?? 0,
@@ -613,14 +609,13 @@ class SimulationDeliberation extends Component
                 'exclus' => $this->compteurs['exclus'] ?? 0,
             ];
             
-            // ✅ CORRECTION : BON ORDRE + Passer les stats
             $pdf = $service->generer(
-                $resultats,           // 1. resultats
-                $this->uesStructure,  // 2. uesStructure
-                $this->filtreDecision, // 3. filtreDecision ✅
-                $parcoursNom,         // 4. parcoursNom ✅
-                $statistiques,        // 5. statistiques ✅
-                []                    // 6. colonnesConfig
+                $resultats,  // ✅ Peut être vide []
+                $this->uesStructure,
+                $this->filtreDecision,
+                $parcoursNom,
+                $statistiques,
+                []
             );
 
             $filtreLabel = match($this->filtreDecision) {
@@ -642,10 +637,7 @@ class SimulationDeliberation extends Component
             }, $filename);
 
         } catch (\Throwable $e) {
-            Log::error('Erreur export PDF SIMULATION', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('Erreur export PDF SIMULATION', ['error' => $e->getMessage()]);
             toastr()->error('Erreur lors de l\'export PDF');
         }
     }
