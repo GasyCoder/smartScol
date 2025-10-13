@@ -43,8 +43,12 @@ class SimulationDeliberation extends Component
     public $quota_redoublant = null;
     public $quota_exclus = null;
     public $credits_requis = 60;
-    public $moyenne_requise = 10.00;
+    public $moyenne_requise = 10;
     public $appliquer_note_eliminatoire = true;
+    
+    // NOUVEAUX PARAMÈTRES POUR REDOUBLANTS
+    public $moyenne_min_redoublement = null;
+    public $credits_min_redoublement = null;
 
     // ÉTAT
     public $simulationCalculee = false;
@@ -97,8 +101,11 @@ class SimulationDeliberation extends Component
 
         if ($derniere) {
             $this->quota_admission = $derniere->quota_admission;
+            $this->quota_redoublant = $derniere->quota_redoublant;
             $this->credits_requis = $derniere->credits_requis;
             $this->moyenne_requise = $derniere->moyenne_requise;
+            $this->moyenne_min_redoublement = $derniere->moyenne_min_redoublement;
+            $this->credits_min_redoublement = $derniere->credits_min_redoublement;
             $this->appliquer_note_eliminatoire = $derniere->note_eliminatoire;
         } else {
             $this->quota_admission = $this->parcours->quota_admission;
@@ -184,11 +191,14 @@ class SimulationDeliberation extends Component
                 return;
             }
 
-            // 2️⃣ Appeler le service de délibération
+            // 2️⃣ Appeler le service de délibération AVEC NOUVEAUX PARAMÈTRES
             $params = [
                 'quota_admission' => $this->quota_admission,
+                'quota_redoublant' => $this->quota_redoublant,
                 'credits_requis' => $this->credits_requis,
                 'moyenne_requise' => $this->moyenne_requise,
+                'moyenne_min_redoublement' => $this->moyenne_min_redoublement,
+                'credits_min_redoublement' => $this->credits_min_redoublement,
                 'appliquer_note_eliminatoire' => $this->appliquer_note_eliminatoire,
             ];
 
@@ -643,7 +653,7 @@ class SimulationDeliberation extends Component
     }
 
     /**
-     * ✅ APPLIQUER LA DÉLIBÉRATION
+     * ✅ APPLIQUER LA DÉLIBÉRATION avec nouveaux paramètres
      */
     public function appliquer()
     {
@@ -687,14 +697,17 @@ class SimulationDeliberation extends Component
                 if ($updated > 0) $savedCount++;
             }
 
-            // Enregistrer métadonnées délibération
+            // Enregistrer métadonnées délibération AVEC NOUVEAUX PARAMÈTRES
             DeliberPaces::create([
                 'niveau_id' => $this->niveauPACES->id,
                 'parcours_id' => $this->parcoursId,
                 'session_exam_id' => $this->sessionActive->id,
                 'quota_admission' => $this->quota_admission,
+                'quota_redoublant' => $this->quota_redoublant,
                 'credits_requis' => $this->credits_requis,
                 'moyenne_requise' => $this->moyenne_requise,
+                'moyenne_min_redoublement' => $this->moyenne_min_redoublement,
+                'credits_min_redoublement' => $this->credits_min_redoublement,
                 'note_eliminatoire' => $this->appliquer_note_eliminatoire,
                 'nb_admis' => $this->compteurs['admis'],
                 'nb_redoublants' => $this->compteurs['redoublant'],

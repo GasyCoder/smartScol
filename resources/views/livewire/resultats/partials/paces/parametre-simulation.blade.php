@@ -204,7 +204,7 @@
             </div>
 
             {{-- Boutons d'action --}}
-            @include('livewire.resultats.partials.action-buttons')
+            @include('livewire.resultats.partials.paces.action-buttons')
 
             <div class="mt-3 pt-3 border-t border-gray-100/50 dark:border-gray-700/50">
                 <div class="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-cyan-50/50 dark:bg-cyan-900/10 border border-cyan-200/30 dark:border-cyan-800/30 rounded-lg">

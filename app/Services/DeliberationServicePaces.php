@@ -8,22 +8,31 @@ use Illuminate\Support\Facades\DB;
 
 class DeliberationServicePaces
 {
-    // Constantes
+    // Seuils matricule
     private const MATRICULE_ANCIEN_MAX  = 38999;
     private const MATRICULE_NOUVEAU_MIN = 39001;
-    
+
     /**
-     * Calcule les décisions de délibération selon les règles PACES
-     * 
-     * @param array $resultats Résultats consolidés
-     * @param array $params Paramètres [quota_admission, credits_requis, moyenne_requise, appliquer_note_eliminatoire]
-     * @param int $niveauId
-     * @param int $parcoursId
-     * @param int $sessionId
-     * @return array [resultats avec décisions, compteurs]
+     * Normalise un quota :
+     * - null, '', 0, <0  => illimité (retourne null)
+     * - >0                => valeur conservée
+     */
+    private function normalizeQuota(mixed $q): ?int
+    {
+        if ($q === null || $q === '') return null;
+        if (!is_numeric($q)) return null;
+        $qi = (int)$q;
+        return $qi > 0 ? $qi : null;
+    }
+
+    /**
+     * Calcule les décisions (admis/redoublant/exclus) sans relèvement arbitraire du seuil.
+     * - Admission : top-N par mérite parmi les éligibles (crédits OK, moyenne ≥ seuil, pas de note 0 si activé)
+     * - Redoublement : nouveaux uniquement, si moyenne & crédits min OK, respect quota redoublement
+     * - Anciens non admis : exclus
      */
     public function calculerDeliberation(
-        array $resultats, 
+        array $resultats,
         array $params,
         int $niveauId,
         int $parcoursId,
@@ -32,92 +41,119 @@ class DeliberationServicePaces
         if (empty($resultats)) {
             return [
                 'resultats' => [],
-                'compteurs' => ['admis' => 0, 'redoublant' => 0, 'exclus' => 0]
+                'compteurs' => ['admis' => 0, 'redoublant' => 0, 'exclus' => 0],
             ];
         }
 
-        // 1️⃣ Tri par mérite (crédits DESC, moyenne DESC, matricule ASC)
+        // 1) Tri global par mérite pour une base cohérente
         usort($resultats, [$this, 'comparerMerite']);
 
-        // 2️⃣ Extraction des paramètres
-        $creditsReq = (int)($params['credits_requis'] ?? 60);
-        $seuilAdmission = max(10.0, (float)($params['moyenne_requise'] ?? 10.0));
-        $quota = isset($params['quota_admission']) && is_numeric($params['quota_admission']) 
-            ? (int)$params['quota_admission'] 
-            : null;
-        $appliquerElim = (bool)($params['appliquer_note_eliminatoire'] ?? true);
+        // 2) Paramètres
+        $creditsReq              = (int)($params['credits_requis'] ?? 60);
+        $seuilAdmission          = max(0.0, (float)($params['moyenne_requise'] ?? 10.0)); // ex: 10.0
+        $quota                   = $this->normalizeQuota($params['quota_admission'] ?? null);
+        $appliquerElim           = (bool)($params['appliquer_note_eliminatoire'] ?? true);
 
-        // 3️⃣ Map des anciens redoublants (une seule requête)
+        $quotaRedoublant         = $this->normalizeQuota($params['quota_redoublant'] ?? null);
+        $moyenneMinRedoublement  = (float)($params['moyenne_min_redoublement'] ?? 9.5);
+        $creditsMinRedoublement  = (int)($params['credits_min_redoublement'] ?? 50);
+
+        // 3) Map des anciens redoublants pour O(1)
         $etudiantIds = array_map(fn($r) => (int)$r['etudiant']->id, $resultats);
-        $anciensMap = $this->getAnciensRedoublantsMap($etudiantIds, $niveauId, $parcoursId, $sessionId);
+        $anciensMap  = $this->getAnciensRedoublantsMap($etudiantIds, $niveauId, $parcoursId, $sessionId);
 
-        // 4️⃣ Relèvement automatique du seuil si quota dépassé
+        // ============================
+        // 4) Construire la short-list des éligibles à l’ADMISSION (SEUIL BASE)
+        //    - PAS de relèvement arbitraire à 14
+        // ============================
+        $eligibles = [];
+        foreach ($resultats as $idx => $r) {
+            $hasElim = (bool)($r['has_note_eliminatoire'] ?? false);
+            $moy     = (float)($r['moyenne_generale'] ?? 0.0);
+            $cred    = (int)  ($r['credits_valides'] ?? 0);
+
+            if ($appliquerElim && $hasElim) continue; // note éliminatoire => non admissible
+            if ($cred < $creditsReq) continue;        // crédits insuffisants
+            if ($moy  < $seuilAdmission) continue;    // sous le seuil min (ex: 10)
+
+            $eligibles[] = $r;
+        }
+
+        // Trier la short-list par mérite et couper à N si quota
+        usort($eligibles, [$this, 'comparerMerite']);
+
+        $admisIds = [];
         if (!is_null($quota)) {
-            $eligibles = $this->compterEligibles($resultats, $creditsReq, $seuilAdmission, $appliquerElim);
-            if ($eligibles > $quota) {
-                $seuilAdmission = 14.0; // Relève à 14/20
+            $eligibles = array_slice($eligibles, 0, max(0, (int)$quota));
+        }
+        foreach ($eligibles as $r) {
+            if (!empty($r['etudiant']?->id)) {
+                $admisIds[(int)$r['etudiant']->id] = true;
             }
         }
 
-        // Seuil redoublement : 9.5 si admission à 10, sinon 10 si admission à 14
-        $seuilRedoublement = ($seuilAdmission >= 14.0) ? 10.0 : 9.5;
-
-        // 5️⃣ Attribution des décisions + comptage
-        $admisCount = 0;
-        $redoublantCount = 0;
-        $exclusCount = 0;
+        // ============================
+        // 5) Parcours de décision
+        // ============================
+        $admisCount       = 0;
+        $redoublantCount  = 0;
+        $exclusCount      = 0;
 
         foreach ($resultats as &$r) {
-            $etudiant = $r['etudiant'];
-            if (empty($etudiant) || !isset($etudiant->id)) {
+            $etudiant = $r['etudiant'] ?? null;
+            if (!$etudiant?->id) {
                 $r['decision'] = 'exclus';
+                $r['debug']    = 'etudiant_invalide';
                 $exclusCount++;
                 continue;
             }
 
-            $etudiantId = (int)$etudiant->id;
+            $id        = (int)$etudiant->id;
             $matricule = (int)$etudiant->matricule;
-            $moyenne = (float)($r['moyenne_generale'] ?? 0.0);
-            $credits = (int)($r['credits_valides'] ?? 0);
-            $hasElim = (bool)($r['has_note_eliminatoire'] ?? false);
-            $creditsPleins = ($credits >= $creditsReq);
+            $moy       = (float)($r['moyenne_generale'] ?? 0.0);
+            $cred      = (int)  ($r['credits_valides'] ?? 0);
+            $hasElim   = (bool)($r['has_note_eliminatoire'] ?? false);
+            $estAncien = $this->isAncien($matricule, $id, $anciensMap);
 
-            // ❌ Note éliminatoire = EXCLUS immédiat
+            // Éliminatoire => exclus
             if ($appliquerElim && $hasElim) {
                 $r['decision'] = 'exclus';
+                $r['debug']    = 'note_eliminatoire';
                 $exclusCount++;
                 continue;
             }
 
-            // ✅ ADMISSION : crédits pleins + moyenne OK + quota respecté
-            if ($creditsPleins && $moyenne >= $seuilAdmission) {
-                if (is_null($quota) || $admisCount < $quota) {
-                    $r['decision'] = 'admis';
-                    $admisCount++;
+            // ✅ Admis si dans la short-list OU si quota illimité et critères admission OK
+            if (isset($admisIds[$id]) || (is_null($quota) && $cred >= $creditsReq && $moy >= $seuilAdmission)) {
+                $r['decision'] = 'admis';
+                $r['debug']    = 'admis_selection_topN';
+                $admisCount++;
+                continue;
+            }
+
+            // Anciens non admis => exclus
+            if ($estAncien) {
+                $r['decision'] = 'exclus';
+                $r['debug']    = 'ancien_non_admis';
+                $exclusCount++;
+                continue;
+            }
+
+            // 🟡 Redoublement (NOUVEAUX) si moyenne & crédits min OK + quota redoublement
+            if ($this->estEligibleRedoublement($r, $moyenneMinRedoublement, $creditsMinRedoublement)) {
+                if (is_null($quotaRedoublant) || $redoublantCount < $quotaRedoublant) {
+                    $r['decision'] = 'redoublant';
+                    $r['debug']    = 'redoublement_ok';
+                    $redoublantCount++;
                     continue;
+                } else {
+                    $r['debug']    = 'redoublement_bloque_par_quota';
                 }
             }
 
-            // 🔍 Vérifier si ANCIEN (matricule ≤ 38999 OU déjà redoublé avant)
-            $estAncien = $this->isAncien($matricule, $etudiantId, $anciensMap);
-
-            // 🚫 ANCIEN non admis = EXCLUS (pas de 2e chance)
-            if ($estAncien) {
-                $r['decision'] = 'exclus';
-                $exclusCount++;
-                continue;
-            }
-
-            // 🟡 REDOUBLEMENT (uniquement pour NOUVEAUX)
-            // Conditions : crédits non pleins + moyenne ≥ seuil redoublement + pas de note 0
-            if (!$creditsPleins && !$hasElim && $moyenne >= $seuilRedoublement) {
-                $r['decision'] = 'redoublant';
-                $redoublantCount++;
-                continue;
-            }
-
-            // ❌ EXCLUSION par défaut
+            // ❌ Par défaut
             $r['decision'] = 'exclus';
+            $r['debug']    = $r['debug'] ?? 'exclus_defaut';
             $exclusCount++;
         }
         unset($r);
@@ -125,11 +161,21 @@ class DeliberationServicePaces
         return [
             'resultats' => $resultats,
             'compteurs' => [
-                'admis' => $admisCount,
+                'admis'      => $admisCount,
                 'redoublant' => $redoublantCount,
-                'exclus' => $exclusCount
-            ]
+                'exclus'     => $exclusCount,
+            ],
         ];
+    }
+
+    /**
+     * Éligibilité redoublement : moyenne ET crédits (logique ET)
+     */
+    private function estEligibleRedoublement(array $resultat, float $moyenneMin, int $creditsMin): bool
+    {
+        $moy = (float)($resultat['moyenne_generale'] ?? 0.0);
+        $cr  = (int)  ($resultat['credits_valides'] ?? 0);
+        return ($moy >= $moyenneMin) && ($cr >= $creditsMin);
     }
 
     /**
@@ -137,34 +183,19 @@ class DeliberationServicePaces
      */
     private function comparerMerite($a, $b): int
     {
-        $creditsA = (int)($a['credits_valides'] ?? 0);
-        $creditsB = (int)($b['credits_valides'] ?? 0);
-        if ($creditsB !== $creditsA) return $creditsB <=> $creditsA;
+        $ca = (int)($a['credits_valides'] ?? 0);
+        $cb = (int)($b['credits_valides'] ?? 0);
+        if ($cb !== $ca) return $cb <=> $ca;
 
-        $moyA = (float)($a['moyenne_generale'] ?? 0.0);
-        $moyB = (float)($b['moyenne_generale'] ?? 0.0);
-        if ($moyB !== $moyA) return $moyB <=> $moyA;
+        $ma = (float)($a['moyenne_generale'] ?? 0.0);
+        $mb = (float)($b['moyenne_generale'] ?? 0.0);
+        if ($mb !== $ma) return $mb <=> $ma;
 
         return (int)$a['etudiant']->matricule <=> (int)$b['etudiant']->matricule;
     }
 
     /**
-     * Compte les éligibles à l'admission avec seuil donné
-     */
-    private function compterEligibles(array $resultats, int $credits, float $seuil, bool $elimActive): int
-    {
-        $count = 0;
-        foreach ($resultats as $r) {
-            if ($elimActive && !empty($r['has_note_eliminatoire'])) continue;
-            if (($r['credits_valides'] ?? 0) >= $credits && ($r['moyenne_generale'] ?? 0.0) >= $seuil) {
-                $count++;
-            }
-        }
-        return $count;
-    }
-
-    /**
-     * Ancien = matricule ≤ 38999 OU déjà redoublé une année antérieure
+     * Ancien = matricule ≤ 38999 OU déjà redoublant sur une session antérieure
      */
     private function isAncien(int $matricule, int $etudiantId, array $anciensMap): bool
     {
@@ -172,13 +203,12 @@ class DeliberationServicePaces
     }
 
     /**
-     * Map des étudiants ayant été redoublants sur une année précédente
-     * Retourne [etudiant_id => true] pour accès O(1)
+     * Map rapide des étudiants ayant déjà la décision REDOUBLANT dans une session antérieure
      */
     private function getAnciensRedoublantsMap(
-        array $etudiantIds, 
-        int $niveauId, 
-        int $parcoursId, 
+        array $etudiantIds,
+        int $niveauId,
+        int $parcoursId,
         int $sessionActiveId
     ): array {
         if (empty($etudiantIds)) return [];
@@ -192,7 +222,7 @@ class DeliberationServicePaces
                 ->where('rf.statut', ResultatFinal::STATUT_PUBLIE)
                 ->where('e.niveau_id', $niveauId)
                 ->where('e.parcours_id', $parcoursId)
-                ->where('se.id', '!=', $sessionActiveId) // Années antérieures uniquement
+                ->where('se.id', '!=', $sessionActiveId) // sessions antérieures uniquement
                 ->distinct()
                 ->pluck('rf.etudiant_id')
                 ->toArray();

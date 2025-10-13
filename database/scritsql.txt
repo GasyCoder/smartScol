@@ -17,3 +17,12 @@ WHERE examen_id = 19
         AND examen_id = 19
         AND session_exam_id = 1
   );
+
+
+
+
+-- Ajouter les nouvelles colonnes à la table deliber_paces
+ALTER TABLE deliber_paces 
+ADD COLUMN quota_redoublant INT NULL AFTER quota_admission,
+ADD COLUMN moyenne_min_redoublement DECIMAL(4,2) DEFAULT 9.50 AFTER moyenne_requise,
+ADD COLUMN credits_min_redoublement INT DEFAULT 50 AFTER moyenne_min_redoublement;

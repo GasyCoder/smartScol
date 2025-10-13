@@ -17,7 +17,7 @@
         </svg>
         
         <div class="flex items-center gap-2">
-            <span class="font-semibold text-gray-900 dark:text-gray-100">{{ $parcours->nom }}</span>
+            <span class="font-semibold text-gray-900 dark:text-gray-100">{{ $parcours->nom ?? 'Parcours' }}</span>
             <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
                 🎭 Simulation
             </span>
@@ -72,8 +72,9 @@
             <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Paramètres de Délibération</h3>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {{-- Quota --}}
+        {{-- Première ligne de paramètres --}}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {{-- Quota Admission --}}
             <div>
                 <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
                     <svg class="w-3.5 h-3.5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -86,7 +87,7 @@
                        class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400/30 transition-all">
             </div>
 
-            {{-- Crédits --}}
+            {{-- Crédits Requis --}}
             <div>
                 <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
                     <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +102,7 @@
                 </div>
             </div>
 
-            {{-- Moyenne --}}
+            {{-- Moyenne Requise --}}
             <div>
                 <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
                     <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,6 +137,60 @@
             </div>
         </div>
 
+        {{-- Deuxième ligne : Paramètres Redoublement --}}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-200 dark:border-orange-800">
+            <div class="text-center mb-2 col-span-full">
+                <span class="inline-flex items-center gap-2 px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-sm font-bold rounded-full border border-orange-300 dark:border-orange-700">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"/>
+                    </svg>
+                    Paramètres Spéciaux Redoublement
+                </span>
+            </div>
+
+            {{-- Quota Redoublants --}}
+            <div>
+                <label class="flex items-center gap-1 text-xs font-bold text-orange-600 dark:text-orange-400 mb-2 uppercase tracking-wide">
+                    <svg class="w-3.5 h-3.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    Quota Redoublants
+                </label>
+                <input type="number" wire:model.live="quota_redoublant" min="0" placeholder="∞"
+                       class="w-full px-3 py-2 rounded-lg border border-orange-300 dark:bg-gray-700 dark:border-orange-600 dark:text-white focus:border-orange-400 focus:ring-1 focus:ring-orange-400/30 transition-all">
+            </div>
+ {{-- Crédits Min Redoublement --}}
+            <div>
+                <label class="flex items-center gap-1 text-xs font-bold text-orange-600 dark:text-orange-400 mb-2 uppercase tracking-wide">
+                    <svg class="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Crédits Min Redoublement
+                </label>
+                <div class="relative">
+                    <input type="number" wire:model.live="credits_min_redoublement" min="0" max="60"
+                           class="w-full px-3 pr-10 py-2 rounded-lg border border-orange-300 dark:bg-gray-700 dark:border-orange-600 dark:text-white focus:border-green-400 focus:ring-1 focus:ring-green-400/30 transition-all">
+                    <span class="absolute right-3 top-2 text-xs font-bold text-gray-400">/60</span>
+                </div>
+            </div>
+            {{-- Moyenne Min Redoublement --}}
+            <div>
+                <label class="flex items-center gap-1 text-xs font-bold text-orange-600 dark:text-orange-400 mb-2 uppercase tracking-wide">
+                    <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                    </svg>
+                    Moyenne Min Redoublement
+                </label>
+                <div class="relative">
+                    <input type="number" wire:model.live="moyenne_min_redoublement" min="0" max="20" step="0.01"
+                           class="w-full px-3 pr-10 py-2 rounded-lg border border-orange-300 dark:bg-gray-700 dark:border-orange-600 dark:text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all">
+                    <span class="absolute right-3 top-2 text-xs font-bold text-gray-400">/20</span>
+                </div>
+            </div>
+
+           
+        </div>
+
         {{-- Boutons Action --}}
         <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button wire:click="simuler"
@@ -168,10 +223,72 @@
                 <div class="flex flex-col lg:flex-row lg:items-center gap-3">
                     
                     {{-- Filtres décision --}}
-                    @include('livewire.resultats.partials.paces.filtres-decisions', [
-                        'statistiquesDetailes' => $statistiquesDetailes,
-                        'filtreDecision' => $filtreDecision
-                    ])
+                    <div class="flex flex-wrap items-center gap-2" wire:key="filtres-{{ $resultatsVersion ?? 'default' }}">
+                        @php
+                            $btnBase = 'px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 flex items-center gap-2';
+                            
+                            // ✅ Stats : simulation si active, sinon DB
+                            $stats = $statistiquesDetailes ?? [];
+                            $totalResultats = ($stats['admis'] ?? 0) + 
+                                             ($stats['redoublant_autorises'] ?? 0) + 
+                                             ($stats['exclus'] ?? 0);
+                            
+                            // ✅ Filtre actif avec fallback
+                            $filtreActif = $filtreDecision ?? 'tous';
+                        @endphp
+                        
+                        {{-- Bouton TOUS --}}
+                        <button 
+                            wire:click="changerFiltre('tous')" 
+                            class="{{ $btnBase }} {{ $filtreActif === 'tous' 
+                                ? 'bg-primary-600 text-white shadow-md dark:bg-gray-100 dark:text-gray-900 border-gray-900 dark:border-gray-100 ring-2 ring-primary-400 dark:ring-gray-400' 
+                                : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800' }}"
+                        >
+                            <span>Tous</span>
+                            <span class="font-bold px-1.5 py-0.5 rounded {{ $filtreActif === 'tous' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700' }}">
+                                {{ $totalResultats }}
+                            </span>
+                        </button>
+                        
+                        {{-- Bouton ADMIS --}}
+                        <button 
+                            wire:click="changerFiltre('admis')" 
+                            class="{{ $btnBase }} {{ $filtreActif === 'admis' 
+                                ? 'bg-green-600 text-white border-green-600 shadow-md ring-2 ring-green-400' 
+                                : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800' }}"
+                        >
+                            <span>Admis</span>
+                            <span class="font-bold px-1.5 py-0.5 rounded {{ $filtreActif === 'admis' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700' }}">
+                                {{ $stats['admis'] ?? 0 }}
+                            </span>
+                        </button>
+                        
+                        {{-- Bouton REDOUBLANTS --}}
+                        <button 
+                            wire:click="changerFiltre('redoublant')" 
+                            class="{{ $btnBase }} {{ $filtreActif === 'redoublant' 
+                                ? 'bg-orange-500 text-white border-orange-500 shadow-md ring-2 ring-orange-400' 
+                                : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800' }}"
+                        >
+                            <span>Redoublants</span>
+                            <span class="font-bold px-1.5 py-0.5 rounded {{ $filtreActif === 'redoublant' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700' }}">
+                                {{ $stats['redoublant_autorises'] ?? 0 }}
+                            </span>
+                        </button>
+                        
+                        {{-- Bouton EXCLUS --}}
+                        <button 
+                            wire:click="changerFiltre('exclus')" 
+                            class="{{ $btnBase }} {{ $filtreActif === 'exclus' 
+                                ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-400' 
+                                : 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800' }}"
+                        >
+                            <span>Exclus</span>
+                            <span class="font-bold px-1.5 py-0.5 rounded {{ $filtreActif === 'exclus' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700' }}">
+                                {{ $stats['exclus'] ?? 0 }}
+                            </span>
+                        </button>
+                    </div>
 
                     <div class="flex-1"></div>
 
@@ -336,6 +453,11 @@
                 </div>
             </div>
         </div>
+    @endif
+
+    {{-- 📋 TABLEAU DES RÉSULTATS --}}
+    @if($simulationCalculee && !empty($resultatsSimulation))
+     
     @endif
 
 </div>

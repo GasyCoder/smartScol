@@ -6,48 +6,48 @@
     <title>{{ $titre_document ?? 'Résultats PACES' }}</title>
     <style>
         @page {
-            margin: 10mm 15mm 25mm 15mm;
+            margin: 10mm 15mm 15mm 15mm;
             size: A4 portrait;
         }
 
         body {
             font-family: 'DejaVu Sans', Arial, sans-serif;
-            font-size: 14px; /* ✅ AUGMENTÉ de 11px à 12px */
+            font-size: 14px;
             margin: 0;
-            padding: 0;
+            padding-bottom: 40mm;
             color: #000;
-            line-height: 1.3; /* ✅ AUGMENTÉ de 1.2 à 1.3 */
+            line-height: 1.3;
             background: #fff;
         }
 
         /* ===== HEADER ===== */
         .header-officiel {
-            margin-bottom: 15px;
+            margin-bottom: 8px;
             page-break-inside: avoid;
             text-align: center;
         }
 
         .header-officiel img {
-            max-width: 90%;
+            max-width: 100%;
             height: auto;
             display: block;
             margin: 0 auto;
         }
 
         hr {
-            margin: 10px 0 15px 0;
+            margin: 8px 0 11px 0;
             border: 1px solid #000;
         }
 
         /* ===== TITRE ===== */
         .titre-principal {
             text-align: center;
-            margin: 20px 0 15px 0;
+            margin: 10px 0 15px 0;
             page-break-inside: avoid;
         }
 
         .titre-principal h1 {
-            font-size: 16px; /* ✅ AUGMENTÉ de 15px à 16px */
+            font-size: 16px;
             font-weight: bold;
             text-decoration: underline;
             margin: 0 0 8px 0;
@@ -56,7 +56,7 @@
         }
 
         .annee-universitaire {
-            font-size: 14px; /* ✅ AUGMENTÉ de 13px à 14px */
+            font-size: 14px;
             font-weight: bold;
             margin: 8px 0;
             text-transform: uppercase;
@@ -72,122 +72,125 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 15px;
-            font-size: 14px; /* ✅ AUGMENTÉ de 11px à 12px */
+            font-size: 14px;
         }
 
         .results-table th {
             background-color: #f0f0f0;
             color: #000;
-            padding: 8px 10px; /* ✅ AUGMENTÉ de 6px 8px à 8px 10px */
+            padding: 8px 10px;
             text-align: center;
             font-weight: bold;
             border: 1px solid #000;
-            font-size: 14px; /* ✅ AUGMENTÉ de 10px à 12px */
+            font-size: 14px;
             text-transform: uppercase;
             vertical-align: middle;
         }
 
         .results-table td {
-            padding: 6px 10px; /* ✅ AUGMENTÉ de 4px 8px à 6px 10px */
+            padding: 6px 10px;
             border: 1px solid #000;
             text-align: left;
-            font-size: 14px; /* ✅ AUGMENTÉ de 10px à 12px */
+            font-size: 14px;
             vertical-align: middle;
             color: #000;
         }
 
-        /* ===== COLONNES - TAILLES AUGMENTÉES ===== */
+        /* ===== COLONNES ===== */
         .col-numero {
             width: 8%;
             text-align: center !important;
-            font-size: 14px; /* ✅ Taille cohérente */
+            font-size: 14px;
         }
 
         .col-matricule {
             width: 15%;
             text-align: left !important;
-            font-size: 14px; /* ✅ AUGMENTÉ */
+            font-size: 14px;
         }
 
         .col-nom {
             width: 30%;
             text-align: left !important;
             text-transform: uppercase;
-            font-size: 14px; /* ✅ AUGMENTÉ */
+            font-size: 14px;
         }
 
         .col-prenoms {
             width: 30%;
             text-align: left !important;
-            font-size: 14px; /* ✅ AUGMENTÉ */
+            font-size: 14px;
         }
 
         .col-decision {
             width: 17%;
             text-align: center !important;
             font-weight: normal;
-            font-size: 14px; /* ✅ AUGMENTÉ */
+            font-size: 14px;
             color: #000 !important;
         }
 
         /* ===== INFORMATIONS ===== */
         .info-supplementaire {
-            margin: 15px 0;
-            font-size: 12px; /* ✅ AUGMENTÉ de 11px à 12px */
-            line-height: 1.4; /* ✅ AUGMENTÉ */
+            margin: 6px 0;
+            font-size: 12px;
+            line-height: 1.4;
         }
 
         .total-etudiants {
             font-weight: bold;
-            margin: 10px 0;
+            margin: 6px 0;
             text-align: justify;
-            font-size: 12px; /* ✅ AUGMENTÉ */
+            font-size: 12px;
         }
 
         .conditions {
             font-weight: bold;
             margin: 10px 0;
             text-align: justify;
-            font-size: 12px; /* ✅ AUGMENTÉ */
+            font-size: 12px;
         }
 
         /* ===== SIGNATURE ===== */
         .signature-section {
-            margin-top: 30px;
+            margin-top: 10px;
             text-align: right;
             page-break-inside: avoid;
         }
 
         .lieu-date {
             margin-bottom: 40px;
-            font-size: 12px; /* ✅ AUGMENTÉ */
+            font-size: 12px;
             font-weight: bold;
         }
 
         .signature-nom {
-            font-size: 12px; /* ✅ AUGMENTÉ */
+            font-size: 12px;
             font-weight: bold;
-            margin-top: 30px;
+            margin-top: 10px;
             text-decoration: underline;
         }
 
-        /* ===== PAGINATION FOOTER (VISIBLE) ===== */
-        .footer-pagination {
+        /* ===== FOOTER QR CODE ===== */
+        .footer-qrcode {
             position: fixed;
-            bottom: 5mm; /* ✅ Position fixe en bas */
-            left: 0;
-            right: 0;
-            font-size: 11px; /* ✅ AUGMENTÉ de 10px à 11px */
-            font-weight: 600; /* ✅ AJOUTÉ pour visibilité */
+            bottom: 5mm;
+            left: 15mm;
+            width: 28mm;
             text-align: center;
-            color: #333; /* ✅ CHANGÉ de #666 à #333 (plus foncé) */
-            padding: 5px 0;
-            border-top: 1px solid #ddd; /* ✅ AJOUTÉ bordure */
-            background-color: #fff; /* ✅ Fond blanc */
         }
 
-        .small-text {
-            font-size: 10px; /* ✅ AUGMENTÉ de 9px à 10px */
+        .qr-img {
+            display: block;
+            width: 28mm;
+            height: 28mm;
+            margin: 0 auto;
+        }
+
+        .qr-legend {
+            margin-top: 1mm;
+            font-size: 10px;
+            color: #666;
             line-height: 1.2;
         }
     </style>
@@ -202,16 +205,15 @@
         <hr>
     </div>
 
-
     {{-- TITRE PRINCIPAL --}}
-    <div class="titre-principal" style="text-align:center; margin:20px 0 15px 0; page-break-inside:avoid;">
+    <div class="titre-principal" style="text-align:center; margin:10px 0 15px 0; page-break-inside:avoid;">
         <!-- Ligne 1 : RÉSULTATS CONCOURS - PACES -->
         <div style="font-size:16px; font-weight:700; text-transform:uppercase;">
             {{ $titre_document ?? 'RÉSULTATS CONCOURS - PACES' }}
         </div>
         
         <!-- Ligne 2 : LISTE DES ÉTUDIANTS [ADMIS/REDOUBLANTS/EXCLUS] - PARCOURS [NOM] -->
-        <div style="font-size:15px; font-weight:700; margin-top:6px; text-transform:uppercase;">
+        <div style="font-size:15px; font-weight:700; margin-top:3px; text-transform:uppercase;">
               {!! $titre_special ?? 'LISTE DES ÉTUDIANTS ADMIS - PARCOURS' !!}
         </div>
         
@@ -296,12 +298,12 @@
                 </tbody>
             </table>
         @else
-        {{-- ✅ AFFICHER NÉANT au lieu de "Aucun résultat" --}}
-        <div style="text-align: center; padding: 60px 20px; border: 3px solid #000; margin: 40px 0; background-color: #f9f9f9;">
-            <div style="font-size: 48px; font-weight: 900; color: #000; margin-bottom: 15px; letter-spacing: 8px;">
-                NÉANT
+            {{-- AFFICHER NÉANT au lieu de "Aucun résultat" --}}
+            <div style="text-align: center; padding: 60px 20px; border: 3px solid #000; margin: 40px 0; background-color: #f9f9f9;">
+                <div style="font-size: 48px; font-weight: 900; color: #000; margin-bottom: 15px; letter-spacing: 8px;">
+                    NÉANT
+                </div>
             </div>
-        </div>
         @endif
     </div>
 
@@ -320,28 +322,8 @@
                     candidat{{ count($resultats) > 1 ? 's' : '' }}
                 @endif
             </div>
-            
-            <div class="conditions">
-                {{ $conditions ?? 'Sous réserve de validation de Stage Hospitalier et des modules pratiques' }}
-            </div>
         </div>
     @endif
-
-    {{-- QR CODE FORMAT CORRECT --}}
-    @if(!empty($qrcodeImage))
-    <div style="text-align: left; margin-top: 20px; page-break-inside: avoid;">
-        {{-- ✅ FORMAT EXACTEMENT COMME L'EXEMPLE QUI FONCTIONNE --}}
-        <img 
-            src="data:image/png;base64,{{ base64_encode($qrcodeImage) }}" 
-            alt="QR Code Statistiques PACES" 
-            width="100"
-            height="100"/>
-        <div style="margin-top: 10px; font-size: 10px; color: #666;">
-            Code de vérification - Scannez pour voir les détails
-        </div>
-    </div>
-    @endif
-
 
     {{-- SIGNATURE --}}
     <div class="signature-section">
@@ -353,5 +335,16 @@
             {{ $doyen_nom ?? 'Le Doyen' }}
         </div>
     </div>
+
+    {{-- FOOTER QR CODE --}}
+    <div class="footer-qrcode">
+        @if(!empty($qrcodeImage))
+        <img class="qr-img"
+            src="data:image/png;base64,{{ base64_encode($qrcodeImage) }}"
+            alt="QR Code Statistiques PACES">
+        <div class="qr-legend">Scannez pour voir les détails</div>
+        @endif
+    </div>
+
 </body>
 </html>
