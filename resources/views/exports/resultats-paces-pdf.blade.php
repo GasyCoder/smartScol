@@ -167,7 +167,7 @@
         .signature-nom {
             font-size: 12px;
             font-weight: bold;
-            margin-top: 10px;
+            margin-top: 30px;
             text-decoration: underline;
         }
 
