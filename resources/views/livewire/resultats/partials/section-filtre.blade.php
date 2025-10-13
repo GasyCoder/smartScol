@@ -106,6 +106,13 @@
                     </div>
                 </div>
 
+                <!-- Ajoutez ce style dans votre layout ou composant -->
+                <style>
+                    option[data-has-teacher]::after {
+                        font-weight: 600;
+                    }
+                </style>
+
                 <!-- EC -->
                 <div>
                     <label for="ec_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -114,15 +121,18 @@
                             <span class="ml-1 text-xs text-green-600 font-medium">✓ Filtré</span>
                         @endif
                     </label>
-                    <select id="ec_id" 
-                            wire:model.blur="ec_id"
+
+                    <select id="ec_id"
+                            wire:key="select-ec"
+                            wire:model.live.debounce.120ms="ec_id"
+                            x-on:change="onEcChange($event)"
                             wire:loading.attr="disabled"
                             wire:target="updatedEcId"
-                            class="block w-full py-2 pl-3 pr-10 mt-1 text-base border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 transition-colors duration-200" 
+                            class="block w-full py-2 pl-3 pr-10 mt-1 text-base border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 transition-colors duration-200"
                             {{ count($ecs) ? '' : 'disabled' }}>
                         <option value="">Tous les ECs</option>
                         @foreach($ecs as $ec)
-                            <option value="{{ $ec->id }}">
+                            <option value="{{ $ec->id }}" {{ $ec->enseignant ? 'data-has-teacher' : '' }}>
                                 {{ isset($ec->abr) ? $ec->abr . ' - ' : '' }}{{ $ec->nom }}
                                 @if($ec->enseignant)
                                     ({{ $ec->enseignant }})
@@ -130,11 +140,8 @@
                             </option>
                         @endforeach
                     </select>
-                    <div wire:loading wire:target="updatedEcId" class="mt-1 text-xs text-blue-600">
-                        <em class="animate-spin icon ni ni-loader"></em>
-                        Filtrage...
-                    </div>
                 </div>
+
 
                 <!-- Enseignant -->
                 <div>
@@ -145,7 +152,7 @@
                         @endif
                     </label>
                     <select id="enseignant_id" 
-                            wire:model.blur="enseignant_id"
+                            wire:model.live="enseignant_id"
                             wire:loading.attr="disabled"
                             wire:target="updatedEnseignantId"
                             class="block w-full py-2 pl-3 pr-10 mt-1 text-base border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 transition-colors duration-200" 
@@ -180,7 +187,7 @@
                                 <em class="text-gray-400 icon ni ni-search"></em>
                             </div>
                             <input type="text" 
-                                   wire:model.live.debounce.500ms="search" 
+                                   wire:model.live="search" 
                                    id="search" 
                                    wire:loading.attr="disabled"
                                    wire:target="updatedSearch"

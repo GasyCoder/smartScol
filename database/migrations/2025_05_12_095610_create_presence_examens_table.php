@@ -18,7 +18,7 @@ return new class extends Migration
             $table->unsignedBigInteger('salle_id')->comment('Salle concernée');
             $table->unsignedBigInteger('ec_id')->nullable()->comment('Matière spécifique (optionnel)');
             $table->integer('etudiants_presents')->default(0)->comment('Nombre d\'étudiants présents');
-            $table->json('etudiants_absents')->nullable()->comment('Liste des IDs des étudiants absents (JSON)');
+            $table->integer('etudiants_absents')->nullable()->comment('Liste des IDs des étudiants absents (JSON)');
             $table->integer('total_attendu')->nullable()->comment('Total d\'étudiants attendus');
             $table->text('observations')->nullable()->comment('Observations sur la présence');
             $table->unsignedBigInteger('saisie_par')->comment('Utilisateur ayant saisi');

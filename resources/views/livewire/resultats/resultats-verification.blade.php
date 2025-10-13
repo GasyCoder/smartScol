@@ -1,6 +1,54 @@
 {{-- resources/views/livewire/resultats/resultats-verification.blade.php --}}
 <div>
     <div class="container px-4 py-6 mx-auto">
+        {{-- Bandeau étape de vérification --}}
+        @if($showVerification)
+            @php
+                $etape = (int) $etapeFusion;
+
+                // Couleurs & icônes selon l'étape
+                $styles = match($etape) {
+                    1 => [
+                        'wrap'   => 'from-amber-50 to-yellow-50 border-amber-200 text-amber-800 dark:from-amber-900/20 dark:to-yellow-900/20 dark:border-amber-700 dark:text-amber-200',
+                        'pill'   => 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+                        'bar'    => 'bg-amber-500',
+                        'icon'   => 'ni ni-flag',
+                        'title'  => 'Vérification 1 — post-fusion initiale',
+                    ],
+                    2 => [
+                        'wrap'   => 'from-indigo-50 to-blue-50 border-indigo-200 text-indigo-800 dark:from-indigo-900/20 dark:to-blue-900/20 dark:border-indigo-700 dark:text-indigo-200',
+                        'pill'   => 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+                        'bar'    => 'bg-indigo-500',
+                        'icon'   => 'ni ni-shield-check',
+                        'title'  => 'Vérification 2 — post-synchronisation',
+                    ],
+                    default => [
+                        'wrap'   => 'from-emerald-50 to-green-50 border-emerald-200 text-emerald-800 dark:from-emerald-900/20 dark:to-green-900/20 dark:border-emerald-700 dark:text-emerald-200',
+                        'pill'   => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+                        'bar'    => 'bg-emerald-500',
+                        'icon'   => 'ni ni-check-circle',
+                        'title'  => 'Fusion finale appliquée',
+                    ],
+                };
+            @endphp
+
+            <div class="mb-2 p-4 rounded-xl border shadow-sm bg-gradient-to-r {{ $styles['wrap'] }}">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div class="flex items-center gap-3">
+                        <em class="text-xl {{ $styles['icon'] }}"></em>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="text-base font-semibold">{{ $styles['title'] }}</h4>
+                            </div>
+                            <p class="mt-0.5 text-xs opacity-80">
+                                {{ $this->getEtapeLabel() }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         @include('livewire.resultats.partials.section-filtre')
 
         <!-- Messages pour les résultats -->

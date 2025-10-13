@@ -253,7 +253,7 @@ class ResultatVerification extends Component
             ->where('session_exam_id', $this->sessionActive->id)
             ->whereIn('etudiant_id', $etudiantIds)
             ->where('etape_fusion', $this->etapeFusion)
-            ->with(['ec:id,ue_id', 'ec.ue:id,nom,abr,credits,coefficient'])
+            ->with(['ec:id,ue_id', 'ec.ue:id,nom,abr,credits'])
             ->get()
             ->groupBy(['etudiant_id', 'ec.ue_id']);
 
@@ -280,7 +280,7 @@ class ResultatVerification extends Component
                     $moyennesUE[$etudiantId][$ueId] = [
                         'nom' => $ue->nom,
                         'moyenne' => $moyenneUE,
-                        'coefficient' => $ue->coefficient ?? 1,
+                        // 'coefficient' => $ue->coefficient ?? 1,
                         'credits' => $ue->credits ?? 0,
                         'credits_obtenus' => $creditsObtenus,
                         'validee' => $ueValidee,
