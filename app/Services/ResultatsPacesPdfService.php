@@ -37,7 +37,7 @@ class ResultatsPacesPdfService
             'matricule' => true,
             'moyenne' => false,
             'credits' => false,
-            'decision' => false,
+            'decision' => true,
             'ues_details' => false,
         ], $colonnesConfig);
 
@@ -245,7 +245,7 @@ class ResultatsPacesPdfService
                 return [
                     'type'           => 'admis_seulement',
                     'titre_document' => $titre_document,
-                    'titre_special'  => 'LISTE DES ÉTUDIANTS  <u>ADMIS</u> - PARCOURS ' . $parcoursUpper,
+                    'titre_special'  => 'LISTE DES ÉTUDIANTS  <span style="font-size:18px"><u>ADMIS</u></span> - PARCOURS ' . $parcoursUpper,
                     'annee_affiche'  => $anneeLib,
                     'hide_decision'  => true,  // ✅ Masquer colonne décision pour admis
                 ];
