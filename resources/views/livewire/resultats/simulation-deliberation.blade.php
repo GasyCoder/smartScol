@@ -72,70 +72,71 @@
             <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Paramètres de Délibération</h3>
         </div>
 
-        {{-- Première ligne de paramètres --}}
+       {{-- Première ligne de paramètres --}}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+
             {{-- Quota Admission --}}
-            <div>
+            <div class="flex flex-col justify-end">
                 <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
-                    <svg class="w-3.5 h-3.5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                     </svg>
                     Quota Admission
                 </label>
                 <input type="number" wire:model.live="quota_admission" min="0" placeholder="∞"
-                       class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400/30 transition-all">
+                    class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400/30 transition-all">
             </div>
 
             {{-- Crédits Requis --}}
-            <div>
+            <div class="flex flex-col justify-end">
                 <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
-                    <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                     Crédits Requis
                 </label>
                 <div class="relative">
                     <input type="number" wire:model.live="credits_requis" min="0" max="60"
-                           class="w-full px-3 pr-10 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30 transition-all">
+                        class="w-full px-3 pr-10 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30 transition-all">
                     <span class="absolute right-3 top-2 text-xs font-bold text-gray-400">/60</span>
                 </div>
             </div>
 
             {{-- Moyenne Requise --}}
-            <div>
-                <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
-                    <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674z"/>
-                    </svg>
+            <div class="flex flex-col justify-end">
+                <label class="flex items-center gap-1.5 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
+                    <em class="text-lg ni ni-calc text-amber-500 dark:text-amber-400"></em>
                     Moyenne Requise
+                    <span class="text-amber-600 dark:text-amber-400 text-xl font-extrabold leading-none">&ge;</span>
                 </label>
                 <div class="relative">
                     <input type="number" wire:model.live="moyenne_requise" min="0" max="20" step="0.01"
-                           class="w-full px-3 pr-10 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-all">
+                        class="w-full px-3 pr-10 py-2 rounded-lg border border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-all">
                     <span class="absolute right-3 top-2 text-xs font-bold text-gray-400">/20</span>
                 </div>
             </div>
 
-            {{-- Note éliminatoire --}}
-            <div class="flex flex-col justify-center">
+            {{-- Note Éliminatoire --}}
+            <div class="flex flex-col justify-end">
                 <label class="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
-                    <svg class="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                     </svg>
                     Note Éliminatoire
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700/50 hover:border-gray-400 dark:hover:border-gray-500 transition-all">
                     <input type="checkbox" wire:model.live="appliquer_note_eliminatoire"
-                           class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-rose-600 focus:ring-1 focus:ring-rose-500/30">
+                        class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-rose-600 focus:ring-1 focus:ring-rose-500/30">
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
                         Note 0 = Exclusion
                     </span>
                 </label>
             </div>
         </div>
+
 
         {{-- Deuxième ligne : Paramètres Redoublement --}}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-200 dark:border-orange-800">
