@@ -35,17 +35,17 @@ START TRANSACTION;
 
 -- 🔹 Mise à jour pour code_anonymat_id = 33876 (7.75 → 17.75)
 UPDATE copies
-SET note = 17.75
+SET note = 15.75
 WHERE code_anonymat_id = 33876
   AND note = 7.75;
 
 UPDATE resultats_fusion
-SET note = 17.75
+SET note = 15.75
 WHERE code_anonymat_id = 33876
   AND note = 7.75;
 
 UPDATE resultats_finaux
-SET note = 17.75
+SET note = 15.75
 WHERE code_anonymat_id = 33876
   AND note = 7.75;
 
