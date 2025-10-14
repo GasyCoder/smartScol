@@ -7,21 +7,22 @@ use App\Models\UE;
 use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
-use App\Models\Etudiant;
 use Livewire\Component;
-use Livewire\WithPagination;
+use App\Models\Etudiant;
 use App\Models\SessionExam;
 use App\Models\DeliberPaces;
+use Livewire\WithPagination;
 use App\Models\ResultatFinal;
 use App\Models\PresenceExamen;
 use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use App\Services\DeliberationServicePaces;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ResultatsPacesExport;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Artisan;
+use App\Services\DeliberationServicePaces;
 use App\Services\ResultatsPacesPdfService;
 
 class SimulationDeliberation extends Component
@@ -769,6 +770,9 @@ class SimulationDeliberation extends Component
     {
         return redirect()->route('resultats.paces-concours', ['parcoursSlug' => $this->parcoursSlug]);
     }
+
+
+
 
     public function render()
     {

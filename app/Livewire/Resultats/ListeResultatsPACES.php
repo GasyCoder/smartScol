@@ -21,6 +21,7 @@ use Illuminate\Pagination\Paginator;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ResultatsPacesExport;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Artisan;
 use App\Services\ResultatsPacesPdfService;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -1043,6 +1044,26 @@ class ListeResultatsPACES extends Component
         };
     }
 
+    public function viderCachePACES()
+    {
+        try {
+            Log::info('🗑️ CACHE LISTE - Nettoyage global');
+            
+            Artisan::call('optimize:clear');
+            
+            Log::info('✅ CACHE LISTE - Vidé');
+            
+            $this->chargerParcours();
+            
+            toastr()->success('🗑️ Cache vidé');
+            
+        } catch (\Throwable $e) {
+            Log::error('❌ CACHE LISTE - Erreur', ['error' => $e->getMessage()]);
+            toastr()->error('Erreur cache');
+        }
+    }
+
+    
     public function render()
     {
         return view('livewire.resultats.liste-resultats-paces');

@@ -42,33 +42,57 @@
                            hover:shadow-xl transition-all duration-300
                            focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
                 
-                {{-- Header avec nom et badges --}}
+                {{-- Header avec nom + abréviation + statuts (refonte compacte) --}}
+                @php
+                    $status = $estDelibere
+                        ? ['txt' => 'Délibération appliquée', 'cls' => 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', 'icon' => 'M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z']
+                        : ['txt' => 'En attente de délibération', 'cls' => 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800', 'icon' => 'M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z'];
+
+                    $resultats = $estDelibere
+                        ? ['txt' => 'Résultats disponibles', 'cls' => 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800', 'icon' => 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z']
+                        : ['txt' => 'Résultats non publiés', 'cls' => 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-700', 'icon' => 'M12 8v4m0 4h.01M5 3a2 2 0 00-2 2v10a2 2 0 002 2h7l5-5V5a2 2 0 00-2-2H5z'];
+                @endphp
+
                 <div class="p-4 pb-3 border-b border-gray-100 dark:border-gray-700">
-                    <div class="flex items-start justify-between gap-3 mb-2">
-                        <h4 class="text-base font-bold text-gray-900 dark:text-gray-100 line-clamp-2 flex-1 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                            {{ $parcours->nom }}
-                        </h4>
-                        <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-primary-600 dark:bg-primary-700 text-white shadow-sm shrink-0">
-                            {{ $parcours->abr }}
-                        </span>
-                    </div>
-                    
-                    <div class="flex items-center gap-2">
-                    @if($estDelibere)
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-sm w-fit">
-                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                            </svg>
-                            Délibération appliquée
-                        </span>
-                    @else
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 w-fit">
-                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                            </svg>
-                            En attente
-                        </span>
-                    @endif
+                    <div class="flex items-start justify-between gap-3">
+                        {{-- Titre + meta --}}
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <div class="p-2 rounded-lg bg-primary-600/10 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                </div>
+                                <h4 class="text-base font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" title="{{ $parcours->nom }}">
+                                    {{ $parcours->nom }}
+                                </h4>
+                            </div>
+
+                            {{-- Badges statut en une seule ligne --}}
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border {{ $status['cls'] }}">
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="{{ $status['icon'] }}" clip-rule="evenodd"/>
+                                    </svg>
+                                    {{ $status['txt'] }}
+                                </span>
+
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border {{ $resultats['cls'] }}">
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="{{ $resultats['icon'] }}" clip-rule="evenodd"/>
+                                    </svg>
+                                    {{ $resultats['txt'] }}
+                                </span>
+                            </div>
+                        </div>
+
+                        {{-- Abréviation parcours à droite --}}
+                        <div class="shrink-0">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-black bg-primary-600 dark:bg-primary-700 text-white shadow-sm">
+                                {{ $parcours->abr }}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
