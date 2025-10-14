@@ -30,3 +30,36 @@ ADD COLUMN quota_redoublant INT NULL AFTER quota_admission,
 ADD COLUMN moyenne_min_redoublement DECIMAL(4,2) DEFAULT 9.50 AFTER moyenne_requise,
 ADD COLUMN credits_min_redoublement INT DEFAULT 50 AFTER moyenne_min_redoublement;
 
+
+
+
+
+/*************************************
+ * CORRECTION DU CHAMP quota_admission
+ *************************************/
+START TRANSACTION;
+
+-- 1️⃣ Modifier la structure pour autoriser les valeurs NULL
+ALTER TABLE parcours
+MODIFY COLUMN quota_admission INT NULL;
+
+-- 2️⃣ Mettre toutes les valeurs existantes à NULL
+UPDATE parcours
+SET quota_admission = NULL;
+
+COMMIT;
+
+/************************************* SCRIPTS_SQL_PYTHON ***************************/
+START TRANSACTION;
+
+DELETE FROM resultats_finaux
+WHERE examen_id = 24;
+
+DELETE FROM resultats_fusion
+WHERE examen_id = 24;
+
+SELECT ROW_COUNT() AS nb_supprime_finaux, 'resultats_finaux' AS table_name
+UNION ALL
+SELECT ROW_COUNT(), 'resultats_fusion';
+
+COMMIT;

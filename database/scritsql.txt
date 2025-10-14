@@ -1,6 +1,6 @@
 START TRANSACTION;
 
--- 🔹 Mise à jour pour code_anonymat_id = 33876 (7.75 → 17.75)
+
 UPDATE copies
 SET note = 14.75
 WHERE code_anonymat_id = 33876
@@ -16,7 +16,7 @@ SET note = 14.75
 WHERE code_anonymat_id = 33876
   AND note = 7.75;
 
--- 🔹 Mise à jour pour code_anonymat_id = 33698 (10.50 → 3.50)
+
 UPDATE copies
 SET note = 3.50
 WHERE code_anonymat_id = 33698
@@ -31,50 +31,5 @@ UPDATE resultats_finaux
 SET note = 3.50
 WHERE code_anonymat_id = 33698
   AND note = 10.50;
-
-COMMIT;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*************************************
- * CORRECTION DU CHAMP quota_admission
- *************************************/
-START TRANSACTION;
-
--- 1️⃣ Modifier la structure pour autoriser les valeurs NULL
-ALTER TABLE parcours
-MODIFY COLUMN quota_admission INT NULL;
-
--- 2️⃣ Mettre toutes les valeurs existantes à NULL
-UPDATE parcours
-SET quota_admission = NULL;
-
-COMMIT;
-
-/************************************* SCRIPTS_SQL_PYTHON ***************************/
-START TRANSACTION;
-
-DELETE FROM resultats_finaux
-WHERE examen_id = 24;
-
-DELETE FROM resultats_fusion
-WHERE examen_id = 24;
-
-SELECT ROW_COUNT() AS nb_supprime_finaux, 'resultats_finaux' AS table_name
-UNION ALL
-SELECT ROW_COUNT(), 'resultats_fusion';
 
 COMMIT;
