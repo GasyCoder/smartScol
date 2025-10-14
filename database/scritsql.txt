@@ -66,3 +66,17 @@ WHERE code_anonymat_id = 33698
   AND note = 10.50;
 
 COMMIT;
+
+==============
+START TRANSACTION;
+
+-- 🔹 Supprimer dans resultats_finaux
+DELETE FROM resultats_finaux
+WHERE examen_id = 24;
+
+-- 🔹 Supprimer dans resultats_fusion
+DELETE FROM resultats_fusion
+WHERE examen_id = 24;
+
+COMMIT;
+
