@@ -32,6 +32,8 @@ ADD COLUMN credits_min_redoublement INT DEFAULT 50 AFTER moyenne_min_redoublemen
 
 
 
+composer require simplesoftwareio/simple-qrcode
+
 
 
 /*************************************
