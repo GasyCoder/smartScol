@@ -529,7 +529,7 @@ namespace App\Models{
  * @property string $nom Ex: Médecine générale, Dentaire, Infirmier
  * @property int $niveau_id Niveau auquel appartient ce parcours
  * @property bool $is_active
- * @property int $quota_admission
+ * @property int|null $quota_admission
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Etudiant> $etudiants

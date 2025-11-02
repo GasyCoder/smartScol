@@ -12,8 +12,9 @@ use App\Models\ResultatFinal;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\Log;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
-class ReleveNotes extends Component
+class ReleveNotesOriginale extends Component
 {
     use WithPagination;
 
@@ -45,7 +46,6 @@ class ReleveNotes extends Component
         $this->sessions = collect();
     }
 
-
     private function calculerStatistiques()
     {
         if (!$this->selectedSession) {
@@ -54,11 +54,9 @@ class ReleveNotes extends Component
         }
 
         try {
-            // ✅ CORRECTION : Partir des étudiants et appliquer les filtres
             $etudiantsQuery = Etudiant::query()
                 ->where('is_active', true);
 
-            // ✅ FILTRER directement sur la table étudiants
             if ($this->selectedNiveau) {
                 $etudiantsQuery->where('niveau_id', $this->selectedNiveau);
             }
@@ -75,7 +73,6 @@ class ReleveNotes extends Component
                 });
             }
 
-            // ✅ SEULEMENT les étudiants qui ont des résultats dans la session sélectionnée
             $etudiantsQuery->whereHas('resultatsFinaux', function($q) {
                 $q->where('session_exam_id', $this->selectedSession)
                 ->where('statut', ResultatFinal::STATUT_PUBLIE);
@@ -83,20 +80,18 @@ class ReleveNotes extends Component
 
             $etudiants = $etudiantsQuery->get();
 
-            // ✅ COMPTER les décisions par étudiant unique
             $decisionsCount = [
                 'admis' => 0,
                 'rattrapage' => 0,
                 'redoublant' => 0,
-                'excluss' => 0
+                'exclus' => 0
             ];
 
             foreach ($etudiants as $etudiant) {
-                // ✅ Récupérer LA décision de cet étudiant pour cette session
                 $decision = ResultatFinal::where('session_exam_id', $this->selectedSession)
                     ->where('etudiant_id', $etudiant->id)
                     ->where('statut', ResultatFinal::STATUT_PUBLIE)
-                    ->value('decision'); // Prend la première décision trouvée
+                    ->value('decision');
 
                 if ($decision && isset($decisionsCount[$decision])) {
                     $decisionsCount[$decision]++;
@@ -107,30 +102,20 @@ class ReleveNotes extends Component
             $admis = $decisionsCount['admis'];
             $rattrapage = $decisionsCount['rattrapage'];
             $redoublant = $decisionsCount['redoublant'];
-            $excluss = $decisionsCount['excluss'];
-            $autres = $redoublant + $excluss;
+            $exclus = $decisionsCount['exclus'];
+            $autres = $redoublant + $exclus;
 
             $this->statistiques = [
                 'total' => $total,
                 'admis' => $admis,
                 'rattrapage' => $rattrapage,
                 'redoublant' => $redoublant,
-                'excluss' => $excluss,
+                'exclus' => $exclus,
                 'autres' => $autres,
                 'pourcentage_admis' => $total > 0 ? round(($admis / $total) * 100, 1) : 0,
                 'pourcentage_rattrapage' => $total > 0 ? round(($rattrapage / $total) * 100, 1) : 0,
                 'pourcentage_autres' => $total > 0 ? round(($autres / $total) * 100, 1) : 0,
             ];
-
-            // ✅ DEBUGGING - Log les statistiques pour vérifier
-            \Log::info('Statistiques calculées', [
-                'niveau' => $this->selectedNiveau,
-                'parcours' => $this->selectedParcours,
-                'session' => $this->selectedSession,
-                'search' => $this->search,
-                'etudiants_total' => $total,
-                'decisions' => $decisionsCount
-            ]);
 
         } catch (\Exception $e) {
             Log::error('Erreur calcul statistiques filtrées', [
@@ -173,19 +158,19 @@ class ReleveNotes extends Component
 
     public function updatedSelectedParcours()
     {
-        $this->calculerStatistiques(); // ✅ RECALCULER lors du changement de parcours
+        $this->calculerStatistiques();
         $this->resetPage();
     }
 
     public function updatedSearch()
     {
-        $this->calculerStatistiques(); // ✅ RECALCULER lors de la recherche
+        $this->calculerStatistiques();
         $this->resetPage();
     }
 
     public function updatedSelectedSession()
     {
-        $this->calculerStatistiques(); // ✅ RECALCULER lors du changement de session
+        $this->calculerStatistiques();
         $this->resetPage();
     }
 
@@ -203,7 +188,6 @@ class ReleveNotes extends Component
                 ->orderBy('type')
                 ->get();
                 
-            // Sélectionner la session normale par défaut
             if ($this->sessions->isNotEmpty()) {
                 $sessionNormale = $this->sessions->where('type', 'Normale')->first();
                 $this->selectedSession = $sessionNormale?->id;
@@ -220,7 +204,6 @@ class ReleveNotes extends Component
             ->with(['niveau', 'parcours'])
             ->where('is_active', true);
 
-        // Filtres
         if ($this->selectedNiveau) {
             $query->where('niveau_id', $this->selectedNiveau);
         }
@@ -229,7 +212,6 @@ class ReleveNotes extends Component
             $query->where('parcours_id', $this->selectedParcours);
         }
 
-        // Recherche
         if ($this->search) {
             $query->where(function($q) {
                 $q->where('nom', 'like', '%' . $this->search . '%')
@@ -238,7 +220,6 @@ class ReleveNotes extends Component
             });
         }
 
-        // Filtrer seulement les étudiants qui ont des résultats dans la session sélectionnée
         if ($this->selectedSession) {
             $query->whereHas('resultatsFinaux', function($q) {
                 $q->where('session_exam_id', $this->selectedSession)
@@ -256,7 +237,7 @@ class ReleveNotes extends Component
             return;
         }
 
-        return redirect()->route('resultats.releve-notes.show', [
+        return redirect()->route('resultats.releve-notes-originale.show', [
             'etudiant' => $etudiantId,
             'session' => $this->selectedSession
         ]);
@@ -272,7 +253,7 @@ class ReleveNotes extends Component
         try {
             $donneesReleve = $this->getDonneesReleve($etudiantId, $this->selectedSession);
             
-            $pdf = Pdf::loadView('exports.releve-notes', $donneesReleve)
+            $pdf = Pdf::loadView('exports.releve-notes-originale', $donneesReleve)
                 ->setPaper('a4', 'portrait')
                 ->setOptions([
                     'defaultFont' => 'Arial',
@@ -280,7 +261,7 @@ class ReleveNotes extends Component
                     'isRemoteEnabled' => true,
                 ]);
 
-            $nomFichier = "Releve_Notes_{$donneesReleve['etudiant']->matricule}_{$donneesReleve['session']->type}.pdf";
+            $nomFichier = "Releve_Notes_Originale_{$donneesReleve['etudiant']->matricule}_{$donneesReleve['session']->type}.pdf";
 
             return response()->streamDownload(function() use ($pdf) {
                 echo $pdf->output();
@@ -294,7 +275,7 @@ class ReleveNotes extends Component
     private function getHeaderImageBase64()
     {
         try {
-            $imagePath = public_path('assets/images/header.png'); // Notez le chemin correct
+            $imagePath = public_path('assets/images/header.png');
             if (file_exists($imagePath)) {
                 $imageData = file_get_contents($imagePath);
                 return 'data:image/png;base64,' . base64_encode($imageData);
@@ -312,11 +293,9 @@ class ReleveNotes extends Component
         $etudiant = Etudiant::with(['niveau', 'parcours'])->findOrFail($etudiantId);
         $session = SessionExam::with('anneeUniversitaire')->findOrFail($sessionId);
 
-        // ✅ NOUVEAU : Vérifier si la session a été délibérée
         $sessionDeliberee = $session->estDeliberee();
         $parametresDeliberation = $sessionDeliberee ? $session->getParametresDeliberation() : null;
 
-        // Récupérer tous les résultats de l'étudiant pour cette session
         $resultats = ResultatFinal::with(['ec.ue', 'examen'])
             ->where('session_exam_id', $sessionId)
             ->where('etudiant_id', $etudiantId)
@@ -327,7 +306,6 @@ class ReleveNotes extends Component
             throw new \Exception('Aucun résultat trouvé pour cet étudiant dans cette session.');
         }
 
-        // Grouper par UE et calculer (logique existante...)
         $resultatsParUE = $resultats->groupBy('ec.ue_id');
         $uesData = [];
         $moyennesUE = [];
@@ -375,11 +353,11 @@ class ReleveNotes extends Component
                 'moyenne_ue' => $moyenneUE,
                 'validee' => $ueValidee,
                 'eliminees' => $hasZeroInUE,
-                'credits' => $ue->credits ?? 0
+                'credits' => floatval($ue->credits ?? 0)
             ];
         }
 
-        // Trier les UE (logique existante...)
+        // Trier les UE
         usort($uesData, function($a, $b) {
             $nomA = $a['ue']->abr ?? $a['ue']->nom;
             $nomB = $b['ue']->abr ?? $b['ue']->nom;
@@ -404,11 +382,9 @@ class ReleveNotes extends Component
             return strcasecmp($nomA, $nomB);
         });
 
-        // Moyenne générale
         $moyenneGenerale = count($moyennesUE) > 0 ? 
             round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
 
-        // ✅ NOUVEAU : Déterminer la décision avec délibération
         $decision = $this->determinerDecisionAvecDeliberation(
             $moyenneGenerale, 
             $creditsValides, 
@@ -416,8 +392,29 @@ class ReleveNotes extends Component
             $hasNoteEliminatoire, 
             $session, 
             $sessionDeliberee, 
-            $parametresDeliberation
+            $parametresDeliberation,
+            $etudiant
         );
+
+        // ✅ Préparer les données pour le QR Code
+        $qrCodeData = "RELEVÉ DE NOTES\n\n" .
+            "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
+            "Session: {$session->type}\n\n" .
+            "Matricule: {$etudiant->matricule}\n" .
+            "Nom: " . strtoupper($etudiant->nom) . "\n" .
+            "Prénom: " . ucfirst($etudiant->prenom ?? '') . "\n" .
+            "Niveau: " . ($etudiant->niveau?->nom ?? 'N/A') . "\n" .
+            "Parcours: " . ($etudiant->parcours?->nom ?? 'Tronc Commun') . "\n\n" .
+            "Moyenne Générale: " . number_format($moyenneGenerale, 2) . "/20\n" .
+            "Crédits Validés: {$creditsValides}/{$totalCredits}\n" .
+            "Décision: " . strtoupper($decision) . "\n\n" .
+            "Document officiel - Faculté de Médecine Mahajanga";
+        // ✅ Générer le QR Code (SVG)
+        $qrcodeImage = QrCode::size(150)
+            ->encoding('UTF-8')
+            ->errorCorrection('M')
+            ->margin(1)
+            ->generate($qrCodeData);
 
         return [
             'etudiant' => $etudiant,
@@ -430,17 +427,17 @@ class ReleveNotes extends Component
                 'pourcentage_credits' => $totalCredits > 0 ? round(($creditsValides / $totalCredits) * 100, 1) : 0,
                 'decision' => $decision,
                 'has_note_eliminatoire' => $hasNoteEliminatoire,
-                'session_deliberee' => $sessionDeliberee, // ✅ NOUVEAU
-                'parametres_deliberation' => $parametresDeliberation // ✅ NOUVEAU
+                'session_deliberee' => $sessionDeliberee,
+                'parametres_deliberation' => $parametresDeliberation
             ],
             'date_generation' => now()->format('d/m/Y à H:i:s'),
-            'header_image_base64' => $this->getHeaderImageBase64()
+            'header_image_base64' => $this->getHeaderImageBase64(),
+            'qrcodeImage' => $qrcodeImage  // ✅ QR Code SVG
         ];
     }
 
-
     /**
-     * MÉTHODE CORRIGÉE : Déterminer la décision avec délibération (75% de crédits)
+     * ✅ MÉTHODE OPTIMISÉE : Utiliser has_rattrapage au lieu de détecter PACES
      */
     private function determinerDecisionAvecDeliberation(
         $moyenneGenerale, 
@@ -449,77 +446,138 @@ class ReleveNotes extends Component
         $hasNoteEliminatoire, 
         $session, 
         $sessionDeliberee, 
-        $parametresDeliberation
+        $parametresDeliberation,
+        $etudiant = null
     ) {
-        // Si pas de délibération, utiliser la logique normale
-        if (!$sessionDeliberee || !$parametresDeliberation) {
-            return $this->determinerDecision($moyenneGenerale, $creditsValides, $totalCredits, $hasNoteEliminatoire, $session->type);
+        $hasRattrapage = true;
+        if ($etudiant && $etudiant->niveau) {
+            $hasRattrapage = $etudiant->niveau->has_rattrapage;
         }
 
-        // LOGIQUE DE DÉLIBÉRATION CORRIGÉE
+        // Si pas de délibération, utiliser la logique normale
+        if (!$sessionDeliberee || !$parametresDeliberation) {
+            return $this->determinerDecision($moyenneGenerale, $creditsValides, $totalCredits, $hasNoteEliminatoire, $session->type, $hasRattrapage);
+        }
+
         $pourcentageCredits = $totalCredits > 0 ? ($creditsValides / $totalCredits) * 100 : 0;
 
         if ($session->type === 'Normale') {
-            // SESSION 1 avec délibération
+            // ===== SESSION 1 (NORMALE) =====
             
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = rattrapage (même avec 75% de crédits)
+            // ❌ Moyenne catastrophique → Exclus direct (ou redoublant si niveau strict)
+            if ($moyenneGenerale < 8) {
+                return $hasRattrapage ? 'redoublant' : 'exclus';
+            }
+            
+            // ❌ Note éliminatoire → Rattrapage obligatoire
             if ($hasNoteEliminatoire) {
-                return 'rattrapage';
+                return $hasRattrapage ? 'rattrapage' : 'exclus';
             }
 
-            // 2. RÈGLE DÉLIBÉRATION : >= 75% crédits + moyenne >= 10 + aucune note 0 = ADMIS
+            // ✅ Admis si 75%+ crédits ET moyenne >= 10
             if ($pourcentageCredits >= 75 && $moyenneGenerale >= 10) {
                 return 'admis';
             }
 
-            // 3. Sinon rattrapage
-            return 'rattrapage';
+            // 🔄 Rattrapage si moyenne acceptable (8-10) ET au moins 50% crédits
+            if ($moyenneGenerale >= 8 && $moyenneGenerale < 10 && $pourcentageCredits >= 50) {
+                return $hasRattrapage ? 'rattrapage' : 'redoublant';
+            }
+
+            // ❌ Sinon redoublant ou exclus
+            return $hasRattrapage ? 'redoublant' : 'exclus';
 
         } else {
-            // SESSION 2 (rattrapage) avec délibération
+            // ===== SESSION 2 (RATTRAPAGE) =====
             
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = exclusion
-            if ($hasNoteEliminatoire) {
-                return 'excluss';
+            // ❌ Moyenne catastrophique → Exclus
+            if ($moyenneGenerale < 8) {
+                return 'exclus';
             }
-
-            // 2. RÈGLE DÉLIBÉRATION S2 : >= 67% crédits (40/60) + moyenne >= 10 = ADMIS
-            if ($pourcentageCredits >= 67 && $moyenneGenerale >= 10) { // 67% ≈ 40 crédits sur 60
-                return 'admis';
-            }
-
-            // 3. Si >= 33% crédits (20/60) = redoublant
-            if ($pourcentageCredits >= 33) {
-                return 'redoublant';
-            }
-
-            // 4. Sinon exclusion
-            return 'excluss';
-        }
-    }
-
-    private function determinerDecision($moyenne, $creditsValides, $totalCredits, $hasNoteEliminatoire, $typeSession)
-    {
-        if ($typeSession === 'Normale') {
-            if ($hasNoteEliminatoire) {
-                return 'rattrapage';
-            }
-            return ($moyenne >= 10 && $creditsValides >= $totalCredits) ? 'admis' : 'rattrapage';
-        } else {
+            
+            // ❌ Note éliminatoire → Exclus
             if ($hasNoteEliminatoire) {
                 return 'exclus';
             }
-            if ($moyenne >= 10 && $creditsValides >= 40) {
+
+            // ✅ Admis si 67%+ crédits ET moyenne >= 10
+            if ($pourcentageCredits >= 67 && $moyenneGenerale >= 10) {
                 return 'admis';
             }
-            return $creditsValides >= 20 ? 'redoublant' : 'excluss';
+
+            // 🔄 Redoublant si au moins 40% crédits ET moyenne >= 8
+            if ($pourcentageCredits >= 40 && $moyenneGenerale >= 8) {
+                return 'redoublant';
+            }
+
+            // ❌ Sinon exclus
+            return 'exclus';
         }
     }
 
 
+    /**
+     * ✅ MÉTHODE OPTIMISÉE : Utiliser has_rattrapage
+     */
+    private function determinerDecision($moyenne, $creditsValides, $totalCredits, $hasNoteEliminatoire, $typeSession, $hasRattrapage = true)
+    {
+        $pourcentageCredits = $totalCredits > 0 ? ($creditsValides / $totalCredits) * 100 : 0;
+
+        if ($typeSession === 'Normale') {
+            // ===== SESSION 1 (NORMALE) =====
+            
+            // ❌ Moyenne catastrophique
+            if ($moyenne < 8) {
+                return $hasRattrapage ? 'redoublant' : 'exclus';
+            }
+            
+            // ❌ Note éliminatoire
+            if ($hasNoteEliminatoire) {
+                return $hasRattrapage ? 'rattrapage' : 'exclus';
+            }
+            
+            // ✅ Admis si moyenne >= 10 ET tous les crédits validés
+            if ($moyenne >= 10 && $creditsValides >= $totalCredits) {
+                return 'admis';
+            }
+            
+            // 🔄 Rattrapage si moyenne acceptable
+            if ($moyenne >= 8 && $pourcentageCredits >= 50) {
+                return $hasRattrapage ? 'rattrapage' : 'redoublant';
+            }
+            
+            return $hasRattrapage ? 'redoublant' : 'exclus';
+
+        } else {
+            // ===== SESSION 2 (RATTRAPAGE) =====
+            
+            // ❌ Moyenne catastrophique
+            if ($moyenne < 8) {
+                return 'exclus';
+            }
+            
+            // ❌ Note éliminatoire
+            if ($hasNoteEliminatoire) {
+                return 'exclus';
+            }
+            
+            // ✅ Admis si moyenne >= 10 ET au moins 67% crédits
+            if ($moyenne >= 10 && $pourcentageCredits >= 67) {
+                return 'admis';
+            }
+            
+            // 🔄 Redoublant si au moins 40% crédits ET moyenne >= 8
+            if ($pourcentageCredits >= 40 && $moyenne >= 8) {
+                return 'redoublant';
+            }
+            
+            return 'exclus';
+        }
+    }
+
     public function render()
     {
-        $this->calculerStatistiques(); // S'assurer que les stats sont à jour
+        $this->calculerStatistiques();
         
         return view('livewire.resultats.releve-notes', [
             'etudiants' => $this->getEtudiants()

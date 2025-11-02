@@ -25,8 +25,11 @@ use App\Livewire\Manchette\ManchettesIndex;
 use App\Livewire\Resultats\ResultatsFinale;
 use App\Livewire\Settings\AnneeUniversites;
 use App\Livewire\Settings\RolesPermissions;
+use App\Http\Controllers\ReleveNotesController;
+use App\Http\Controllers\ReleveNotesVerificationController;
 use App\Livewire\Manchette\ManchettesCorbeille;
 use App\Livewire\Resultats\ListeResultatsPACES;
+use App\Livewire\Resultats\ReleveNotesOriginale;
 use App\Livewire\Resultats\ResultatVerification;
 use App\Livewire\Resultats\SimulationDeliberation;
 
@@ -87,44 +90,44 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/verifier/{examenId}', ResultatVerification::class)->name('verification');
             Route::get('/finale', ResultatsFinale::class)->name('finale');
             
-            // ✅ Route liste PACES (existante)
+            // ✅ Route liste PACES
             Route::get('/resultats-paces', ListeResultatsPACES::class)->name('paces-concours');
-            // ✅ NOUVELLE ROUTE : Simulation avec paramètre parcours
             Route::get('/resultats-paces/deliberation/{parcoursSlug}', SimulationDeliberation::class)
                 ->name('paces-deliberation');
 
-            Route::get('/releve-notes', ReleveNotes::class)->name('releve-notes.index');
-
-            Route::get('/releve-notes/{etudiant}/{session}', function($etudiantId, $sessionId) {
-                $releveComponent = new ReleveNotes();
-                $donneesReleve = $releveComponent->getDonneesReleve($etudiantId, $sessionId);
-                
-                    return view('livewire.resultats.partials.releve-notes-show', $donneesReleve);
-                })->name('releve-notes.show');
-            });
-
+            // ✅ ROUTES RELEVÉ DE NOTES 
+            // 1. Page d'index (liste des étudiants)
+            Route::get('/releve-notes', ReleveNotesOriginale::class)->name('releve-notes.index');
+            
+            // 2. Affichage du relevé (utilise le contrôleur)
+            Route::get('/releve-notes/{etudiant}/{session}', [ReleveNotesVerificationController::class, 'show'])
+                ->name('releve-notes.show');
+            
+            // 3. Génération du PDF (utilise le contrôleur)
+            Route::get('/releve-notes/{etudiant}/{session}/pdf', [ReleveNotesVerificationController::class, 'genererPDF'])
+                ->name('releve-notes.pdf');
         });
 
-            Route::get('/liste-manchettes', ManchettesIndex::class)->name('manchette.index');
-            Route::get('/liste-copies-notes', CopiesIndex::class)->name('copie.index');
+        Route::get('/liste-manchettes', ManchettesIndex::class)->name('manchette.index');
+        Route::get('/liste-copies-notes', CopiesIndex::class)->name('copie.index');
 
-            Route::get('/corbeille/manchettes', ManchettesCorbeille::class)->name('manchettes.corbeille');
-            Route::get('/corbeille/copies', CopiesCorbeille::class)->name('copies.corbeille');
+        Route::get('/corbeille/manchettes', ManchettesCorbeille::class)->name('manchettes.corbeille');
+        Route::get('/corbeille/copies', CopiesCorbeille::class)->name('copies.corbeille');
 
-            Route::prefix('examens')->name('examens.')->group(function () {
+        Route::prefix('examens')->name('examens.')->group(function () {
             Route::get('/', IndexExamen::class)->name('index');
             Route::get('/ajouter/{niveau}-{parcour}', AddExamen::class)->name('create');
             Route::get('/modifier/{examen}', EditExamen::class)->name('edit');
-            });
-            Route::get('/examens/reset', function () {
-                session()->forget(['examen_niveau_id', 'examen_parcours_id']);
-                return redirect()->route('examens.index');
-            })->name('examens.reset');
+        });
+        
+        Route::get('/examens/reset', function () {
+            session()->forget(['examen_niveau_id', 'examen_parcours_id']);
+            return redirect()->route('examens.index');
+        })->name('examens.reset');
 
-
-            Route::get('/unite-enseignement', UniteElement::class)->name('unite_e');
-            Route::get('/unite-enseignement/ajouter/{niveau}-{parcour}', AddUnite::class)->name('add_ue');
-            Route::get('/unite-enseignement/edit/{ue}', EditUnite::class)->name('edit_ue');
+        Route::get('/unite-enseignement', UniteElement::class)->name('unite_e');
+        Route::get('/unite-enseignement/ajouter/{niveau}-{parcour}', AddUnite::class)->name('add_ue');
+        Route::get('/unite-enseignement/edit/{ue}', EditUnite::class)->name('edit_ue');
     });
 
     // ========================================
@@ -138,6 +141,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/roles-permission', RolesPermissions::class)->name('roles_permission');
         });
     });
-
+});
 
 require __DIR__ . '/auth.php';

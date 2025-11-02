@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Relevé des notes - {{ $etudiant->matricule }}</title>
+    <title>Relevé des notes - {{ $etudiant->matricule }} - Vérification</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -236,12 +236,12 @@
                     ADMIS(E)
                     @break
                 @case('rattrapage')
-                    AUTORISÉ(E) AU RATTRAPAGE
+                    <b style="color: red;">EXCLU(E)</b>
                     @break
                 @case('redoublant')
                     AUTORISÉ(E) À REDOUBLER
                     @break
-                @case('excluss')
+                @case('exclus')
                     EXCLU(E)
                     @break
                 @default
