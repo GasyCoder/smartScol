@@ -306,6 +306,9 @@ class ReleveNotesOriginale extends Component
             throw new \Exception('Aucun résultat trouvé pour cet étudiant dans cette session.');
         }
 
+        // ✅ Lire la décision depuis la BDD (ne pas recalculer)
+        $decisionDB = $resultats->first()->decision ?? 'non_definie';
+
         $resultatsParUE = $resultats->groupBy('ec.ue_id');
         $uesData = [];
         $moyennesUE = [];
@@ -315,35 +318,57 @@ class ReleveNotesOriginale extends Component
 
         foreach ($resultatsParUE as $ueId => $resultatsUE) {
             $ue = $resultatsUE->first()->ec->ue;
-            $totalCredits += $ue->credits ?? 0;
+            $creditsUE = floatval($ue->credits ?? 0);
+            $totalCredits += $creditsUE;
 
             $notesEC = [];
             $notesValues = [];
             $hasZeroInUE = false;
+            $nbEC = $resultatsUE->count();
+            
+            // ✅ Diviser les crédits de l'UE par le nombre d'ECs
+            $creditsParEC = $nbEC > 0 ? ($creditsUE / $nbEC) : 0;
+            
+            // ✅ Calculer les crédits validés pour cette UE (somme des ECs validés)
+            $creditsValidesUE = 0;
 
             foreach ($resultatsUE as $resultat) {
+                $noteEC = floatval($resultat->note);
+                $ecValide = $noteEC >= 10;
+                
+                // ✅ Si l'EC est validé (note >= 10), ajouter ses crédits
+                if ($ecValide) {
+                    $creditsValidesUE += $creditsParEC;
+                }
+                
                 $notesEC[] = [
                     'ec' => $resultat->ec,
-                    'note' => $resultat->note,
-                    'est_eliminatoire' => $resultat->note == 0
+                    'note' => $noteEC,
+                    'est_eliminatoire' => $noteEC == 0,
+                    'credits' => $creditsParEC,
+                    'valide' => $ecValide
                 ];
                 
-                $notesValues[] = $resultat->note;
+                $notesValues[] = $noteEC;
                 
-                if ($resultat->note == 0) {
+                if ($noteEC == 0) {
                     $hasZeroInUE = true;
                     $hasNoteEliminatoire = true;
                 }
             }
 
+            // Moyenne UE = somme des notes / nombre d'ECs
             $moyenneUE = count($notesValues) > 0 ? 
                 round(array_sum($notesValues) / count($notesValues), 2) : 0;
 
+            // UE validée si moyenne >= 10 ET pas de note 0
             $ueValidee = ($moyenneUE >= 10) && !$hasZeroInUE;
             
-            if ($ueValidee) {
-                $creditsValides += $ue->credits ?? 0;
-            }
+            // ✅ Arrondir les crédits validés à 2 décimales
+            $creditsValidesUE = round($creditsValidesUE, 2);
+            
+            // ✅ Ajouter au total des crédits validés
+            $creditsValides += $creditsValidesUE;
 
             $moyennesUE[] = $moyenneUE;
 
@@ -353,11 +378,12 @@ class ReleveNotesOriginale extends Component
                 'moyenne_ue' => $moyenneUE,
                 'validee' => $ueValidee,
                 'eliminees' => $hasZeroInUE,
-                'credits' => floatval($ue->credits ?? 0)
+                'credits' => $creditsUE,
+                'credits_valides' => $creditsValidesUE  // ✅ Crédits réellement validés
             ];
         }
 
-        // Trier les UE
+        // Trier les UE par numéro
         usort($uesData, function($a, $b) {
             $nomA = $a['ue']->abr ?? $a['ue']->nom;
             $nomB = $b['ue']->abr ?? $b['ue']->nom;
@@ -382,34 +408,30 @@ class ReleveNotesOriginale extends Component
             return strcasecmp($nomA, $nomB);
         });
 
+        // Moyenne générale = moyenne des moyennes UE
         $moyenneGenerale = count($moyennesUE) > 0 ? 
             round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
 
-        $decision = $this->determinerDecisionAvecDeliberation(
-            $moyenneGenerale, 
-            $creditsValides, 
-            $totalCredits, 
-            $hasNoteEliminatoire, 
-            $session, 
-            $sessionDeliberee, 
-            $parametresDeliberation,
-            $etudiant
-        );
+        // ✅ Utiliser la décision depuis la BDD
+        $decision = $decisionDB;
 
-        // ✅ Préparer les données pour le QR Code
-        $qrCodeData = "RELEVÉ DE NOTES\n\n" .
+        // ✅ QR Code avec texte formaté
+        $qrCodeData = "=== RELEVÉ DE NOTES ===\n\n" .
             "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
             "Session: {$session->type}\n\n" .
+            "--- ÉTUDIANT ---\n" .
             "Matricule: {$etudiant->matricule}\n" .
             "Nom: " . strtoupper($etudiant->nom) . "\n" .
             "Prénom: " . ucfirst($etudiant->prenom ?? '') . "\n" .
             "Niveau: " . ($etudiant->niveau?->nom ?? 'N/A') . "\n" .
             "Parcours: " . ($etudiant->parcours?->nom ?? 'Tronc Commun') . "\n\n" .
+            "--- RÉSULTATS ---\n" .
             "Moyenne Générale: " . number_format($moyenneGenerale, 2) . "/20\n" .
-            "Crédits Validés: {$creditsValides}/{$totalCredits}\n" .
+            "Crédits Validés: " . number_format($creditsValides, 2) . "/" . number_format($totalCredits, 2) . "\n" .
             "Décision: " . strtoupper($decision) . "\n\n" .
+            "Date: " . now()->format('d/m/Y H:i') . "\n" .
             "Document officiel - Faculté de Médecine Mahajanga";
-        // ✅ Générer le QR Code (SVG)
+
         $qrcodeImage = QrCode::size(150)
             ->encoding('UTF-8')
             ->errorCorrection('M')
@@ -422,7 +444,7 @@ class ReleveNotesOriginale extends Component
             'ues_data' => $uesData,
             'synthese' => [
                 'moyenne_generale' => $moyenneGenerale,
-                'credits_valides' => $creditsValides,
+                'credits_valides' => round($creditsValides, 2),
                 'total_credits' => $totalCredits,
                 'pourcentage_credits' => $totalCredits > 0 ? round(($creditsValides / $totalCredits) * 100, 1) : 0,
                 'decision' => $decision,
@@ -432,9 +454,10 @@ class ReleveNotesOriginale extends Component
             ],
             'date_generation' => now()->format('d/m/Y à H:i:s'),
             'header_image_base64' => $this->getHeaderImageBase64(),
-            'qrcodeImage' => $qrcodeImage  // ✅ QR Code SVG
+            'qrcodeImage' => $qrcodeImage
         ];
     }
+
 
     /**
      * ✅ MÉTHODE OPTIMISÉE : Utiliser has_rattrapage au lieu de détecter PACES
