@@ -244,7 +244,7 @@
                     <td>{{ $ueData['ue']->abr ? $ueData['ue']->abr . ' - ' : '' }}{{ strtoupper($ueData['ue']->nom) }}</td>
                     <td class="note-center">{{ number_format($ueData['moyenne_ue'], 2) }}/20</td>
                     <td class="note-center">
-                        {{ $ueData['credits_valides']}}/{{$ueData['credits']}}
+                        {{ $ueData['credits_valides']}}/{{ $ueData['credits'] }}
                     </td>
                 </tr>
                 @php $numeroUE++; @endphp

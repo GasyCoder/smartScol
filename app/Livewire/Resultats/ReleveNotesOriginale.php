@@ -21,6 +21,7 @@ class ReleveNotesOriginale extends Component
     // Filtres
     public $selectedNiveau;
     public $selectedParcours;
+    public $selectedDecision;  
     public $selectedSession;
     public $selectedAnneeUniv;
     public $search = '';
@@ -29,8 +30,8 @@ class ReleveNotesOriginale extends Component
     // Collections
     public $niveaux;
     public $parcours;
-    public $sessions;
-    public $anneesUniv;
+    public $anneeUnivLibelle;
+    public $sessionType;
 
     public function mount()
     {
@@ -41,10 +42,9 @@ class ReleveNotesOriginale extends Component
     private function loadData()
     {
         $this->niveaux = Niveau::where('is_active', true)->orderBy('nom')->get();
-        $this->anneesUniv = AnneeUniversitaire::orderBy('date_start', 'desc')->get();
         $this->parcours = collect();
-        $this->sessions = collect();
     }
+
 
     private function calculerStatistiques()
     {
@@ -76,6 +76,11 @@ class ReleveNotesOriginale extends Component
             $etudiantsQuery->whereHas('resultatsFinaux', function($q) {
                 $q->where('session_exam_id', $this->selectedSession)
                 ->where('statut', ResultatFinal::STATUT_PUBLIE);
+                
+                // Filtre par décision
+                if ($this->selectedDecision) {
+                    $q->where('decision', $this->selectedDecision);
+                }
             });
 
             $etudiants = $etudiantsQuery->get();
@@ -128,12 +133,28 @@ class ReleveNotesOriginale extends Component
         }
     }
 
+
     private function setDefaults()
     {
+        // ✅ Récupérer l'année universitaire active
         $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
-        $this->selectedAnneeUniv = $anneeActive?->id;
-        $this->loadSessions();
+        
+        if ($anneeActive) {
+            $this->selectedAnneeUniv = $anneeActive->id;
+            $this->anneeUnivLibelle = $anneeActive->libelle;
+            
+            // ✅ Récupérer la session normale
+            $sessionNormale = SessionExam::where('annee_universitaire_id', $anneeActive->id)
+                ->where('type', 'Normale')
+                ->first();
+            
+            if ($sessionNormale) {
+                $this->selectedSession = $sessionNormale->id;
+                $this->sessionType = $sessionNormale->type;
+            }
+        }
     }
+
 
     public function updatedSelectedNiveau()
     {
@@ -156,7 +177,15 @@ class ReleveNotesOriginale extends Component
         $this->resetPage();
     }
 
+
     public function updatedSelectedParcours()
+    {
+        $this->calculerStatistiques();
+        $this->resetPage();
+    }
+
+    
+    public function updatedSelectedDecision()
     {
         $this->calculerStatistiques();
         $this->resetPage();
@@ -181,22 +210,6 @@ class ReleveNotesOriginale extends Component
         $this->resetPage();
     }
 
-    private function loadSessions()
-    {
-        if ($this->selectedAnneeUniv) {
-            $this->sessions = SessionExam::where('annee_universitaire_id', $this->selectedAnneeUniv)
-                ->orderBy('type')
-                ->get();
-                
-            if ($this->sessions->isNotEmpty()) {
-                $sessionNormale = $this->sessions->where('type', 'Normale')->first();
-                $this->selectedSession = $sessionNormale?->id;
-            }
-        } else {
-            $this->sessions = collect();
-            $this->selectedSession = null;
-        }
-    }
 
     public function getEtudiants()
     {
@@ -224,11 +237,17 @@ class ReleveNotesOriginale extends Component
             $query->whereHas('resultatsFinaux', function($q) {
                 $q->where('session_exam_id', $this->selectedSession)
                   ->where('statut', ResultatFinal::STATUT_PUBLIE);
+                
+                // ✅ Filtre par décision
+                if ($this->selectedDecision) {
+                    $q->where('decision', $this->selectedDecision);
+                }
             });
         }
 
         return $query->orderBy('nom')->orderBy('prenom')->paginate(20);
     }
+
 
     public function voirReleve($etudiantId)
     {
@@ -237,7 +256,7 @@ class ReleveNotesOriginale extends Component
             return;
         }
 
-        return redirect()->route('resultats.releve-notes-originale.show', [
+        return redirect()->route('resultats.releve-notes.show', [
             'etudiant' => $etudiantId,
             'session' => $this->selectedSession
         ]);
@@ -324,29 +343,14 @@ class ReleveNotesOriginale extends Component
             $notesEC = [];
             $notesValues = [];
             $hasZeroInUE = false;
-            $nbEC = $resultatsUE->count();
-            
-            // ✅ Diviser les crédits de l'UE par le nombre d'ECs
-            $creditsParEC = $nbEC > 0 ? ($creditsUE / $nbEC) : 0;
-            
-            // ✅ Calculer les crédits validés pour cette UE (somme des ECs validés)
-            $creditsValidesUE = 0;
 
             foreach ($resultatsUE as $resultat) {
                 $noteEC = floatval($resultat->note);
-                $ecValide = $noteEC >= 10;
-                
-                // ✅ Si l'EC est validé (note >= 10), ajouter ses crédits
-                if ($ecValide) {
-                    $creditsValidesUE += $creditsParEC;
-                }
                 
                 $notesEC[] = [
                     'ec' => $resultat->ec,
                     'note' => $noteEC,
-                    'est_eliminatoire' => $noteEC == 0,
-                    'credits' => $creditsParEC,
-                    'valide' => $ecValide
+                    'est_eliminatoire' => $noteEC == 0
                 ];
                 
                 $notesValues[] = $noteEC;
@@ -361,13 +365,13 @@ class ReleveNotesOriginale extends Component
             $moyenneUE = count($notesValues) > 0 ? 
                 round(array_sum($notesValues) / count($notesValues), 2) : 0;
 
-            // UE validée si moyenne >= 10 ET pas de note 0
+            // ✅ UE validée si moyenne >= 10 ET pas de note 0
             $ueValidee = ($moyenneUE >= 10) && !$hasZeroInUE;
             
-            // ✅ Arrondir les crédits validés à 2 décimales
-            $creditsValidesUE = round($creditsValidesUE, 2);
+            // ✅ LOGIQUE TOUT OU RIEN : Si UE validée → tous les crédits, sinon 0
+            $creditsValidesUE = $ueValidee ? $creditsUE : 0;
             
-            // ✅ Ajouter au total des crédits validés
+            // Ajouter au total des crédits validés
             $creditsValides += $creditsValidesUE;
 
             $moyennesUE[] = $moyenneUE;
@@ -379,7 +383,7 @@ class ReleveNotesOriginale extends Component
                 'validee' => $ueValidee,
                 'eliminees' => $hasZeroInUE,
                 'credits' => $creditsUE,
-                'credits_valides' => $creditsValidesUE  // ✅ Crédits réellement validés
+                'credits_valides' => $creditsValidesUE  // ✅ 0 ou total
             ];
         }
 
@@ -452,7 +456,7 @@ class ReleveNotesOriginale extends Component
                 'session_deliberee' => $sessionDeliberee,
                 'parametres_deliberation' => $parametresDeliberation
             ],
-            'date_generation' => now()->format('d/m/Y à H:i:s'),
+            'date_generation' => now()->format('d/m/Y'),
             'header_image_base64' => $this->getHeaderImageBase64(),
             'qrcodeImage' => $qrcodeImage
         ];
