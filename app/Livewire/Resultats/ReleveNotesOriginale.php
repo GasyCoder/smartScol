@@ -421,7 +421,7 @@ class ReleveNotesOriginale extends Component
         $decision = $decisionDB;
 
         // ✅ QR Code avec texte formaté
-        $qrCodeData = "RELEVÉ DE NOTES" .
+        $qrCodeData = "RELEVÉ DE NOTES\n\n" .
             "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
             "Matricule: {$etudiant->matricule}\n" .
             "Nom: " . mb_strtoupper($etudiant->nom, 'UTF-8') . "\n" .
@@ -439,6 +439,7 @@ class ReleveNotesOriginale extends Component
             ->margin(1)
             ->generate($qrCodeData);
 
+        // ✅✅✅ AJOUT CRUCIAL : Récupérer les données de délibération PACES ✅✅✅
         $deliberation = null;
         
         try {

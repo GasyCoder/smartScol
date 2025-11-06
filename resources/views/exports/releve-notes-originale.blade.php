@@ -315,7 +315,7 @@
         <div class="footer-info">
             <p>BP : 652 – Mahajanga 401 – Madagascar | Tél : +261 38 41 930 47</p>
             <p>Mail : facmed.mga@gmail.com | Web : www.medecine.mahajanga-univ.mg</p>
-            <p><em>Ce document est officiel et certifie les résultats obtenus par l'étudiant(e) pour la session {{ $session->type }}.</em></p>
+            <p><em>Document officiel attestant les résultats de l’étudiant(e) via le logiciel SmartScol de la Faculté de Médecine.</em></p>
         </div>
 
     </div>
