@@ -204,8 +204,8 @@
                 @endif
                 <hr style="border: none; height: 1px; background-color: rgba(0, 0, 0, 0.2); margin: 15px 0;">
             </div>
-            <h1 class="titre">RELEVÉ DES NOTES POUR VERIFICATION</h1>
-            <span class="annee">Année universitaire: {{ $session->anneeUniversitaire->libelle ?? 'Année universitaire' }} - Session: {{ $session->type }}</span>
+            <h1 class="titre">RELEVÉ DE NOTES</h1>
+            <span class="annee">Année universitaire: {{ $session->anneeUniversitaire->libelle ?? 'Année universitaire' }}</span>
         </div>
 
         <!-- Informations étudiant -->
@@ -216,7 +216,7 @@
             @endif
             <p><strong>Numéro matricule :</strong> {{ $etudiant->matricule }}</p>
             <p><strong>Parcours :</strong> {{ $etudiant->parcours?->nom ?? 'Tronc Commun' }}</p>
-            <p><strong>Année d'études :</strong> {{ $etudiant->niveau?->nom ?? 'N/A' }}</p>
+            <p><strong>Année d'études :</strong> {{ $etudiant->niveau?->abr ?? 'N/A' }}</p>
         </div>
 
         <!-- Tableau des résultats par UE -->
@@ -241,10 +241,10 @@
                 @endphp
                 <tr class="ue-row">
                     <td class="note-center">{{ $numeroUE }}</td>
-                    <td>{{ $ueData['ue']->abr ? $ueData['ue']->abr . ' - ' : '' }}{{ strtoupper($ueData['ue']->nom) }}</td>
+                    <td style="text-transform: uppercase;">{{ $ueData['ue']->abr ? $ueData['ue']->abr . ' - ' : '' }}{{ $ueData['ue']->nom }}</td>
                     <td class="note-center">{{ number_format($ueData['moyenne_ue'], 2) }}/20</td>
                     <td class="note-center">
-                        {{ $ueData['credits_valides']}}/{{ $ueData['credits'] }}
+                        {{ $ueData['credits_valides']}}/{{ $ueData['credits']}}
                     </td>
                 </tr>
                 @php $numeroUE++; @endphp
@@ -254,13 +254,19 @@
             <tr class="synthese-row">
                 <td colspan="2"><strong>TOTAL</strong></td>
                 <td class="note-center"><strong>{{ number_format($totalPoints, 2) }}/{{ $totalMaxPoints }}</strong></td>
-                <td class="note-center"><strong>{{ $synthese['credits_valides'] }}/{{ $synthese['total_credits'] }}</strong></td>
+                <td class="note-center">
+                    <strong>
+                        {{ $synthese['credits_valides'] }}/{{ $synthese['total_credits'] }}
+                    </strong>
+                </td>
             </tr>
             
             <!-- Ligne MOYENNE GÉNÉRALE -->
             <tr class="synthese-row">
                 <td colspan="2"><strong>MOYENNE GÉNÉRALE</strong></td>
-                <td class="note-center" colspan="2"><strong>{{ number_format($synthese['moyenne_generale'], 2) }}/20</strong></td>
+                <td class="note-center" colspan="2">
+                    <strong>{{ number_format($synthese['moyenne_generale'], 2) }}/20</strong>
+                </td>
             </tr>
         </table>
 
@@ -282,12 +288,11 @@
 
         <!-- Note sur les conditions d'admission -->
         <div class="note-admission">
-            <p><strong>Note :</strong>
-                @if($synthese['has_note_eliminatoire'])
-                    Une note éliminatoire (0) a été détectée, rendant certaines UE non validées.
-                @endif
+                @if($etudiant->niveau?->abr != "PACES")
+                <p><strong>Note :</strong>
                 Les règles d'admission varient selon le niveau d'études et le parcours.
-            </p>
+                </p>
+                @endif
         </div>
 
         {{-- FOOTER QR CODE --}}
@@ -300,7 +305,7 @@
         
         <!-- Date de génération -->
         <div class="date-generation">
-            <p>Fait à Mahajanga, le {{ $date_generation }}</p>
+            <p>Fait à Mahajanga, le.......................</p>
         </div>
 
         <!-- Espace pour le cachet -->
