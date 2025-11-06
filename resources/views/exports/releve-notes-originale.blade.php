@@ -244,7 +244,7 @@
                     <td style="text-transform: uppercase;">{{ $ueData['ue']->abr ? $ueData['ue']->abr . ' - ' : '' }}{{ $ueData['ue']->nom }}</td>
                     <td class="note-center">{{ number_format($ueData['moyenne_ue'], 2) }}/20</td>
                     <td class="note-center">
-                        {{ $ueData['credits_valides']}}/{{ $ueData['credits']}}
+                        {{ $ueData['credits_valides']}}
                     </td>
                 </tr>
                 @php $numeroUE++; @endphp
@@ -288,11 +288,11 @@
 
         <!-- Note sur les conditions d'admission -->
         <div class="note-admission">
-                @if($etudiant->niveau?->abr != "PACES")
+            @if($synthese['decision'] === 'redoublant')
                 <p><strong>Note :</strong>
-                Les règles d'admission varient selon le niveau d'études et le parcours.
+                    Seuil de Rédoublement : {{ $deliberation->credit_min_r ?? 'N/A' }} crédit avec moyenne générale >= {{ number_format($deliberation->moyenne_min_r ?? 0, 2) }}/20.
                 </p>
-                @endif
+            @endif
         </div>
 
         {{-- FOOTER QR CODE --}}

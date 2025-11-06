@@ -13,6 +13,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\AnneeUniversitaire;
 use Illuminate\Support\Facades\Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use App\Models\DeliberPaces;
 
 class ReleveNotesOriginale extends Component
 {
@@ -383,7 +384,7 @@ class ReleveNotesOriginale extends Component
                 'validee' => $ueValidee,
                 'eliminees' => $hasZeroInUE,
                 'credits' => $creditsUE,
-                'credits_valides' => $creditsValidesUE  // ✅ 0 ou total
+                'credits_valides' => $creditsValidesUE
             ];
         }
 
@@ -420,20 +421,16 @@ class ReleveNotesOriginale extends Component
         $decision = $decisionDB;
 
         // ✅ QR Code avec texte formaté
-        $qrCodeData = "=== RELEVÉ DE NOTES ===\n\n" .
+        $qrCodeData = "RELEVÉ DE NOTES" .
             "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
-            "Session: {$session->type}\n\n" .
-            "--- ÉTUDIANT ---\n" .
             "Matricule: {$etudiant->matricule}\n" .
-            "Nom: " . strtoupper($etudiant->nom) . "\n" .
+            "Nom: " . mb_strtoupper($etudiant->nom, 'UTF-8') . "\n" .
             "Prénom: " . ucfirst($etudiant->prenom ?? '') . "\n" .
             "Niveau: " . ($etudiant->niveau?->nom ?? 'N/A') . "\n" .
             "Parcours: " . ($etudiant->parcours?->nom ?? 'Tronc Commun') . "\n\n" .
-            "--- RÉSULTATS ---\n" .
             "Moyenne Générale: " . number_format($moyenneGenerale, 2) . "/20\n" .
             "Crédits Validés: " . number_format($creditsValides, 2) . "/" . number_format($totalCredits, 2) . "\n" .
-            "Décision: " . strtoupper($decision) . "\n\n" .
-            "Date: " . now()->format('d/m/Y H:i') . "\n" .
+            "Décision: " . mb_strtoupper($decision, 'UTF-8') . "\n\n" .
             "Document officiel - Faculté de Médecine Mahajanga";
 
         $qrcodeImage = QrCode::size(150)
@@ -441,6 +438,58 @@ class ReleveNotesOriginale extends Component
             ->errorCorrection('M')
             ->margin(1)
             ->generate($qrCodeData);
+
+        $deliberation = null;
+        
+        try {
+            // Chercher dans deliber_paces pour ce niveau/parcours/session
+            $deliberation = DeliberPaces::where('niveau_id', $etudiant->niveau_id)
+                ->where('parcours_id', $etudiant->parcours_id)
+                ->where('session_exam_id', $sessionId)
+                ->where('type', 'deliberation')
+                ->latest('applique_at')
+                ->first();
+            
+            // ✅ Debug : Logger les résultats
+            if ($deliberation) {
+                Log::info('✅ Délibération PACES trouvée', [
+                    'etudiant_id' => $etudiantId,
+                    'etudiant_nom' => $etudiant->nom . ' ' . $etudiant->prenom,
+                    'niveau' => $etudiant->niveau?->nom,
+                    'parcours' => $etudiant->parcours?->nom,
+                    'credit_min_r' => $deliberation->credit_min_r,
+                    'credit_max_r' => $deliberation->credit_max_r,
+                    'moyenne_requise' => $deliberation->moyenne_requise,
+                    'type' => $deliberation->type,
+                    'applique_at' => $deliberation->applique_at
+                ]);
+            } else {
+                Log::warning('⚠️ Aucune délibération PACES trouvée', [
+                    'etudiant_id' => $etudiantId,
+                    'niveau_id' => $etudiant->niveau_id,
+                    'niveau_nom' => $etudiant->niveau?->nom,
+                    'parcours_id' => $etudiant->parcours_id,
+                    'parcours_nom' => $etudiant->parcours?->nom,
+                    'session_exam_id' => $sessionId
+                ]);
+                
+                // ✅ Debug supplémentaire : Compter les délibérations disponibles
+                $countDeliberations = DeliberPaces::where('session_exam_id', $sessionId)
+                    ->where('type', 'deliberation')
+                    ->count();
+                
+                Log::info('📊 Total délibérations pour cette session', [
+                    'session_id' => $sessionId,
+                    'count' => $countDeliberations
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur récupération délibération PACES', [
+                'error' => $e->getMessage(),
+                'etudiant_id' => $etudiantId,
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
 
         return [
             'etudiant' => $etudiant,
@@ -456,6 +505,7 @@ class ReleveNotesOriginale extends Component
                 'session_deliberee' => $sessionDeliberee,
                 'parametres_deliberation' => $parametresDeliberation
             ],
+            'deliberation' => $deliberation, // ✅✅✅ CRUCIAL : Passer la variable à la vue ✅✅✅
             'date_generation' => now()->format('d/m/Y'),
             'header_image_base64' => $this->getHeaderImageBase64(),
             'qrcodeImage' => $qrcodeImage
