@@ -223,7 +223,7 @@
         <table>
             <tr class="header-row">
                 <th style="width: 5%;">N°</th>
-                <th style="width: 65%;">UNITÉ D'ENSEIGNEMENT</th>
+                <th style="width: 65%;">UNITÉS D'ENSEIGNEMENTS</th>
                 <th style="width: 15%;">NOTE</th>
                 <th style="width: 15%;">CRÉDIT</th>
             </tr>
@@ -290,7 +290,7 @@
         <div class="note-admission">
             @if($synthese['decision'] === 'redoublant')
                 <p><strong>Note :</strong>
-                    Seuil de Rédoublement : {{ $deliberation->credit_min_r ?? 'N/A' }} crédit avec moyenne générale >= {{ number_format($deliberation->moyenne_min_r ?? 0, 2) }}/20.
+                    Seuil de Rédoublement : {{ $deliberation->credit_min_r ?? 'N/A' }} crédits avec moyenne générale >= {{ number_format($deliberation->moyenne_min_r ?? 0, 2) }}/20.
                 </p>
             @endif
         </div>
