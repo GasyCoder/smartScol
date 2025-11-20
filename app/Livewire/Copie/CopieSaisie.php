@@ -10,6 +10,7 @@ use App\Models\Parcour;
 
 use Livewire\Component;
 use App\Models\Manchette;
+use App\Models\SessionExam;
 use App\Models\SettingNote;
 use App\Models\CodeAnonymat;
 use Livewire\WithPagination;
@@ -1271,26 +1272,54 @@ class CopieSaisie extends Component
 
         try {
             $sessionId = Manchette::getCurrentSessionId();
+            $session = SessionExam::findOrFail($sessionId);
             $userId = Auth::id();
+            
+            // 🔥 NOUVEAU : Déterminer si on est en rattrapage
+            $isRattrapage = $session->type === 'Rattrapage';
+            
+            // 🔥 NOUVEAU : Récupérer la session normale si on est en rattrapage
+            $sessionNormale = null;
+            if ($isRattrapage) {
+                $sessionNormale = SessionExam::where('annee_universitaire_id', $session->annee_universitaire_id)
+                    ->where('type', 'Normale')
+                    ->first();
+            }
 
             foreach ($this->copiesManquantes as $copieManquante) {
                 try {
-                    // Vérifier une dernière fois que la copie n'existe pas (au cas où)
+                    // Vérifier que la copie n'existe pas
                     $existe = Copie::where('examen_id', $this->examenId)
                         ->where('code_anonymat_id', $copieManquante['code_anonymat_id'])
                         ->where('session_exam_id', $sessionId)
                         ->exists();
 
                     if (!$existe) {
+                        // 🔥 NOUVELLE LOGIQUE : Déterminer la note à utiliser
+                        $noteAUtiliser = 0.00;
+                        $commentaire = 'Copie non remise - Note 0/20';
+                        
+                        if ($isRattrapage && $sessionNormale) {
+                            $noteRecuperee = $this->recupererNoteSessionNormale(
+                                $copieManquante['code_anonymat_id'], 
+                                $sessionNormale->id
+                            );
+                            
+                            if ($noteRecuperee !== null) {
+                                $noteAUtiliser = $noteRecuperee;
+                                $commentaire = "Absent rattrapage - Note session normale reportée: {$noteAUtiliser}/20";
+                            }
+                        }
+
                         Copie::create([
                             'examen_id' => $this->examenId,
                             'ec_id' => $this->ecId,
                             'code_anonymat_id' => $copieManquante['code_anonymat_id'],
                             'session_exam_id' => $sessionId,
-                            'note' => 0.00,
+                            'note' => $noteAUtiliser, // 🔥 Note dynamique
                             'saisie_par' => $userId,
                             'date_saisie' => now(),
-                            'commentaire' => 'Copie non remise - Note automatique',
+                            'commentaire' => $commentaire, // 🔥 Commentaire explicite
                         ]);
 
                         $this->nombreCopiesCreees++;
@@ -1312,18 +1341,24 @@ class CopieSaisie extends Component
             $this->copiesManquantes = [];
             $this->afficherRemplissageAuto = false;
 
-            // Message de succès
+            // Message de succès amélioré
             if ($this->nombreCopiesCreees > 0) {
-                $message = "✅ {$this->nombreCopiesCreees} copie(s) créée(s) avec succès avec la note 0/20.";
+                if ($isRattrapage) {
+                    $message = "✅ {$this->nombreCopiesCreees} copie(s) synchronisée(s) avec report des notes session normale.";
+                } else {
+                    $message = "✅ {$this->nombreCopiesCreees} copie(s) créée(s) avec la note 0/20.";
+                }
+                
                 if (!empty($erreurs)) {
                     $message .= " (" . count($erreurs) . " erreur(s))";
                 }
+                
                 $this->showMessage($message, 'success');
                 toastr()->success($message);
                 
-                // Dispatcher événement
                 $this->dispatch('copiesAutomatiquesCreees', [
-                    'nombre' => $this->nombreCopiesCreees
+                    'nombre' => $this->nombreCopiesCreees,
+                    'avec_report_notes' => $isRattrapage
                 ]);
             } else {
                 $this->showMessage('⚠️ Aucune copie n\'a pu être créée.', 'warning');
@@ -1337,6 +1372,78 @@ class CopieSaisie extends Component
             $this->enCoursRemplissage = false;
         }
     }
+
+
+
+    /**
+     * 🔥 NOUVEAU : Récupère la note d'un étudiant en session normale
+     */
+    private function recupererNoteSessionNormale(int $codeAnonymatRattrapageId, int $sessionNormaleId): ?float
+    {
+        try {
+            // 1. Récupérer l'étudiant via la manchette de rattrapage
+            $manchetteRattrapage = Manchette::where('code_anonymat_id', $codeAnonymatRattrapageId)
+                ->where('examen_id', $this->examenId)
+                ->first();
+            
+            if (!$manchetteRattrapage || !$manchetteRattrapage->etudiant_id) {
+                logger('Manchette rattrapage introuvable', [
+                    'code_anonymat_id' => $codeAnonymatRattrapageId
+                ]);
+                return null;
+            }
+            
+            $etudiantId = $manchetteRattrapage->etudiant_id;
+            
+            // 2. Trouver le code anonymat de session normale pour cet étudiant et cette EC
+            $codeAnonymatNormal = CodeAnonymat::where('examen_id', $this->examenId)
+                ->where('ec_id', $this->ecId)
+                ->whereHas('manchettes', function($q) use ($etudiantId, $sessionNormaleId) {
+                    $q->where('etudiant_id', $etudiantId)
+                    ->where('session_exam_id', $sessionNormaleId);
+                })
+                ->first();
+            
+            if (!$codeAnonymatNormal) {
+                logger('Code anonymat normal introuvable', [
+                    'etudiant_id' => $etudiantId,
+                    'ec_id' => $this->ecId,
+                    'session_normale_id' => $sessionNormaleId
+                ]);
+                return null;
+            }
+            
+            // 3. Récupérer la copie de session normale
+            $copieNormale = Copie::where('examen_id', $this->examenId)
+                ->where('ec_id', $this->ecId)
+                ->where('code_anonymat_id', $codeAnonymatNormal->id)
+                ->where('session_exam_id', $sessionNormaleId)
+                ->first();
+            
+            if ($copieNormale) {
+                logger('✅ Note session normale récupérée', [
+                    'etudiant_id' => $etudiantId,
+                    'ec_id' => $this->ecId,
+                    'note' => $copieNormale->note
+                ]);
+                return floatval($copieNormale->note);
+            }
+            
+            logger('Copie normale introuvable', [
+                'etudiant_id' => $etudiantId,
+                'code_anonymat_normal_id' => $codeAnonymatNormal->id
+            ]);
+            return null;
+            
+        } catch (\Exception $e) {
+            logger('Erreur récupération note session normale', [
+                'code_anonymat_rattrapage_id' => $codeAnonymatRattrapageId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
 
     // Méthode pour annuler l'opération
     public function annulerRemplissageAuto(): void

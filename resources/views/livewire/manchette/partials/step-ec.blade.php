@@ -123,17 +123,17 @@
                 </svg>
                 <div class="flex-1">
                     <h4 class="text-base font-semibold text-orange-800 dark:text-orange-300 mb-2">
-                        Session de Rattrapage
+                        Session de Rattrapage - Après Délibération
                     </h4>
                     
                     @if(!empty($statistiquesRattrapage) && $statistiquesRattrapage['ecs_concernees'] > 0)
                         <div class="grid grid-cols-3 gap-3 mb-3">
                             <div class="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-3 text-center">
                                 <div class="text-lg font-bold text-orange-800 dark:text-orange-300">
-                                    {{ count($statistiquesRattrapage['detail_etudiants'] ?? []) }}
+                                    {{ $statistiquesRattrapage['etudiants_eligibles'] }}
                                 </div>
                                 <div class="text-xs text-orange-600 dark:text-orange-400">
-                                    Étudiants
+                                    Étudiants autorisés
                                 </div>
                             </div>
                             <div class="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-3 text-center">
@@ -141,7 +141,7 @@
                                     {{ count($statistiquesRattrapage['ues_analysees'] ?? []) }}
                                 </div>
                                 <div class="text-xs text-orange-600 dark:text-orange-400">
-                                    UE analysées
+                                    UE à rattraper
                                 </div>
                             </div>
                             <div class="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-3 text-center">
@@ -155,11 +155,11 @@
                         </div>
                         
                         <div class="text-xs italic text-orange-600 dark:text-orange-400">
-                            Rattrapage de TOUTES les ECs des UE non validées (moyenne < 10/20)
+                            ✅ Effectifs basés sur les décisions de délibération (decision = 'rattrapage')
                         </div>
                     @else
                         <div class="text-sm text-orange-700 dark:text-orange-400">
-                            Aucune EC à rattraper trouvée.
+                            ⚠️ Aucun étudiant n'est autorisé au rattrapage après délibération.
                         </div>
                     @endif
                 </div>
