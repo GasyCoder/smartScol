@@ -274,17 +274,35 @@
         <div class="decision decision-{{ $synthese['decision'] }}">
             RÉSULTAT : 
             @if($synthese['decision'] === 'admis')
-                <span style="color: #006400;">ADMIS(E)</span>
+                <span style="color: #006400;">
+                    {{ strtoupper($synthese['message_admission'] ?? 'ADMIS(E)') }}
+                </span>
+                
             @elseif($synthese['decision'] === 'rattrapage')
                 <span style="color: #d97706;">AUTORISÉ(E) AU RATTRAPAGE</span>
+                
             @elseif($synthese['decision'] === 'redoublant')
-                <span style="color: #d97706;">AUTORISÉ(E) À REDOUBLER</span>
+                <span style="color: #d97706;">
+                    {{ strtoupper($synthese['message_redoublement'] ?? 'AUTORISÉ(E) À REDOUBLER') }}
+                </span>
+                
             @elseif($synthese['decision'] === 'exclus')
                 <span style="color: #b91c1c;">EXCLUS(E)</span>
+                
             @else
                 {{ strtoupper($synthese['decision']) }}
             @endif
         </div>
+
+        <!-- Note complémentaire pour admission avec niveau suivant -->
+        @if($synthese['decision'] === 'admis' && !empty($synthese['niveau_suivant']))
+            <div class="note-admission">
+                <p style="font-style: italic; color: #006400; margin-top: 5px;">
+                    L'étudiant(e) est autorisé(e) à s'inscrire en {{ $synthese['niveau_suivant'] }} 
+                    pour l'année universitaire {{ now()->year }}-{{ now()->year + 1 }}.
+                </p>
+            </div>
+        @endif
 
         <!-- Note sur les conditions d'admission -->
         <div class="note-admission">
