@@ -310,12 +310,15 @@ class ReleveNotesOriginale extends Component
 
     public function getDonneesReleve($etudiantId, $sessionId)
     {
+        // ===== 1. RÉCUPÉRATION DES DONNÉES DE BASE =====
         $etudiant = Etudiant::with(['niveau', 'parcours'])->findOrFail($etudiantId);
         $session = SessionExam::with('anneeUniversitaire')->findOrFail($sessionId);
 
+        // Vérifier si la session a été délibérée
         $sessionDeliberee = $session->estDeliberee();
         $parametresDeliberation = $sessionDeliberee ? $session->getParametresDeliberation() : null;
 
+        // ===== 2. RÉCUPÉRATION DES RÉSULTATS =====
         $resultats = ResultatFinal::with(['ec.ue', 'examen'])
             ->where('session_exam_id', $sessionId)
             ->where('etudiant_id', $etudiantId)
@@ -329,6 +332,7 @@ class ReleveNotesOriginale extends Component
         // ✅ Lire la décision depuis la BDD (ne pas recalculer)
         $decisionDB = $resultats->first()->decision ?? 'non_definie';
 
+        // ===== 3. CALCUL DES MOYENNES PAR UE =====
         $resultatsParUE = $resultats->groupBy('ec.ue_id');
         $uesData = [];
         $moyennesUE = [];
@@ -345,6 +349,7 @@ class ReleveNotesOriginale extends Component
             $notesValues = [];
             $hasZeroInUE = false;
 
+            // Parcourir les notes de chaque EC
             foreach ($resultatsUE as $resultat) {
                 $noteEC = floatval($resultat->note);
                 
@@ -362,7 +367,7 @@ class ReleveNotesOriginale extends Component
                 }
             }
 
-            // Moyenne UE = somme des notes / nombre d'ECs
+            // ✅ Moyenne UE = somme des notes / nombre d'ECs (VRAIE MOYENNE)
             $moyenneUE = count($notesValues) > 0 ? 
                 round(array_sum($notesValues) / count($notesValues), 2) : 0;
 
@@ -375,6 +380,7 @@ class ReleveNotesOriginale extends Component
             // Ajouter au total des crédits validés
             $creditsValides += $creditsValidesUE;
 
+            // Ajouter la moyenne UE pour le calcul de la moyenne générale
             $moyennesUE[] = $moyenneUE;
 
             $uesData[] = [
@@ -388,7 +394,7 @@ class ReleveNotesOriginale extends Component
             ];
         }
 
-        // Trier les UE par numéro
+        // ===== 4. TRI DES UE PAR NUMÉRO =====
         usort($uesData, function($a, $b) {
             $nomA = $a['ue']->abr ?? $a['ue']->nom;
             $nomB = $b['ue']->abr ?? $b['ue']->nom;
@@ -413,6 +419,7 @@ class ReleveNotesOriginale extends Component
             return strcasecmp($nomA, $nomB);
         });
 
+        // ===== 5. CALCUL MOYENNE GÉNÉRALE =====
         // Moyenne générale = moyenne des moyennes UE
         $moyenneGenerale = count($moyennesUE) > 0 ? 
             round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
@@ -420,7 +427,74 @@ class ReleveNotesOriginale extends Component
         // ✅ Utiliser la décision depuis la BDD
         $decision = $decisionDB;
 
-        // ✅ QR Code avec texte formaté
+        // ===== 6. CALCUL DU NIVEAU SUIVANT ET MESSAGES =====
+        $niveauSuivant = null;
+        $messageAdmission = 'ADMIS(E)';
+        $messageRedoublement = 'AUTORISÉ(E) À REDOUBLER';
+        
+        if ($etudiant->niveau) {
+            $niveauId = $etudiant->niveau->id;
+            $niveauAbr = $etudiant->niveau->abr ?? '';
+            $niveauNom = $etudiant->niveau->nom ?? '';
+            
+            // Si niveau >= 2 (pas L1)
+            if ($niveauId >= 2) {
+                // Extraire le numéro de l'année
+                $numeroActuel = null;
+                
+                // Cas 1: Format "L2", "L3" → Licence
+                if (preg_match('/^L(\d+)$/i', $niveauAbr, $matches)) {
+                    $numeroActuel = (int)$matches[1];
+                }
+                // Cas 2: Format "2e année", "3e année", "4e année", etc.
+                elseif (preg_match('/(\d+)(?:e|ère|eme)/i', $niveauNom, $matches)) {
+                    $numeroActuel = (int)$matches[1];
+                }
+                // Cas 3: Format direct "2", "3", "4", etc.
+                elseif (is_numeric($niveauAbr)) {
+                    $numeroActuel = (int)$niveauAbr;
+                }
+                
+                if ($numeroActuel) {
+                    $numeroSuivant = $numeroActuel + 1;
+                    
+                    // ✅ RÈGLE DE NOMENCLATURE :
+                    // - 1ère année → 2e année (L2)
+                    // - 2e année (L2) → 3e année (L3)
+                    // - 3e année (L3) → 4e année (pas L4)
+                    // - 4e année → 5e année
+                    // - 5e année → 6e année
+                    // - etc.
+                    
+                    if ($numeroSuivant == 2) {
+                        $niveauSuivant = "L2 (2e année)";
+                    } elseif ($numeroSuivant == 3) {
+                        $niveauSuivant = "L3 (3e année)";
+                    } else {
+                        // 4 et plus : "4e année", "5e année", etc.
+                        $niveauSuivant = $numeroSuivant . "e année";
+                    }
+                    
+                    // Messages selon session
+                    if ($session->type === 'Rattrapage') {
+                        $messageAdmission = "ADMIS(E) EN {$niveauSuivant} APRÈS REPÊCHAGE";
+                    } else {
+                        $messageAdmission = "ADMIS(E) EN {$niveauSuivant} À LA PREMIÈRE SESSION";
+                    }
+                    
+                    // Message redoublement
+                    if ($numeroActuel == 2) {
+                        $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN L2 (2e année)";
+                    } elseif ($numeroActuel == 3) {
+                        $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN L3 (3e année)";
+                    } else {
+                        $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN {$numeroActuel}e année";
+                    }
+                }
+            }
+        }
+
+        // ===== 7. GÉNÉRATION DU QR CODE =====
         $qrCodeData = "RELEVÉ DE NOTES\n\n" .
             "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
             "Matricule: {$etudiant->matricule}\n" .
@@ -439,7 +513,7 @@ class ReleveNotesOriginale extends Component
             ->margin(1)
             ->generate($qrCodeData);
 
-        // ✅✅✅ AJOUT CRUCIAL : Récupérer les données de délibération PACES ✅✅✅
+        // ===== 8. RÉCUPÉRATION DÉLIBÉRATION PACES =====
         $deliberation = null;
         
         try {
@@ -451,47 +525,23 @@ class ReleveNotesOriginale extends Component
                 ->latest('applique_at')
                 ->first();
             
-            // ✅ Debug : Logger les résultats
-            if ($deliberation) {
-                Log::info('✅ Délibération PACES trouvée', [
-                    'etudiant_id' => $etudiantId,
-                    'etudiant_nom' => $etudiant->nom . ' ' . $etudiant->prenom,
-                    'niveau' => $etudiant->niveau?->nom,
-                    'parcours' => $etudiant->parcours?->nom,
-                    'credit_min_r' => $deliberation->credit_min_r,
-                    'credit_max_r' => $deliberation->credit_max_r,
-                    'moyenne_requise' => $deliberation->moyenne_requise,
-                    'type' => $deliberation->type,
-                    'applique_at' => $deliberation->applique_at
-                ]);
-            } else {
-                Log::warning('⚠️ Aucune délibération PACES trouvée', [
+            // ✅ Log uniquement en cas d'absence de délibération
+            if (!$deliberation) {
+                Log::info('⚠️ Aucune délibération PACES trouvée', [
                     'etudiant_id' => $etudiantId,
                     'niveau_id' => $etudiant->niveau_id,
-                    'niveau_nom' => $etudiant->niveau?->nom,
                     'parcours_id' => $etudiant->parcours_id,
-                    'parcours_nom' => $etudiant->parcours?->nom,
                     'session_exam_id' => $sessionId
-                ]);
-                
-                // ✅ Debug supplémentaire : Compter les délibérations disponibles
-                $countDeliberations = DeliberPaces::where('session_exam_id', $sessionId)
-                    ->where('type', 'deliberation')
-                    ->count();
-                
-                Log::info('📊 Total délibérations pour cette session', [
-                    'session_id' => $sessionId,
-                    'count' => $countDeliberations
                 ]);
             }
         } catch (\Exception $e) {
             Log::error('❌ Erreur récupération délibération PACES', [
                 'error' => $e->getMessage(),
-                'etudiant_id' => $etudiantId,
-                'trace' => $e->getTraceAsString()
+                'etudiant_id' => $etudiantId
             ]);
         }
 
+        // ===== 9. RETOUR DES DONNÉES =====
         return [
             'etudiant' => $etudiant,
             'session' => $session,
@@ -504,15 +554,18 @@ class ReleveNotesOriginale extends Component
                 'decision' => $decision,
                 'has_note_eliminatoire' => $hasNoteEliminatoire,
                 'session_deliberee' => $sessionDeliberee,
-                'parametres_deliberation' => $parametresDeliberation
+                'parametres_deliberation' => $parametresDeliberation,
+                // ✅ Nouvelles infos pour affichage niveau
+                'niveau_suivant' => $niveauSuivant,
+                'message_admission' => $messageAdmission,
+                'message_redoublement' => $messageRedoublement
             ],
-            'deliberation' => $deliberation, // ✅✅✅ CRUCIAL : Passer la variable à la vue ✅✅✅
+            'deliberation' => $deliberation,
             'date_generation' => now()->format('d/m/Y'),
             'header_image_base64' => $this->getHeaderImageBase64(),
             'qrcodeImage' => $qrcodeImage
         ];
     }
-
 
     /**
      * ✅ MÉTHODE OPTIMISÉE : Utiliser has_rattrapage au lieu de détecter PACES
