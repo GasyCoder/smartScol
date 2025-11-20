@@ -2,9 +2,6 @@
 
 namespace App\Livewire\Manchette;
 
-use App\Models\EC;
-use App\Models\Salle;
-use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;

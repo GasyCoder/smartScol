@@ -490,9 +490,16 @@
                                 <h4 class="text-base font-bold font-heading text-gray-900 dark:text-white">
                                     {{ count($copiesManquantes) }} copie(s) non remise(s) détectée(s)
                                 </h4>
-                                <p class="text-sm font-body text-gray-600 dark:text-gray-400">
-                                    Cliquez pour créer automatiquement avec la note 0/20
-                                </p>
+                                {{-- 🔥 NOUVEAU : Message dynamique selon session --}}
+                                @if($sessionType === 'rattrapage')
+                                    <p class="text-sm font-body text-gray-600 dark:text-gray-400">
+                                        📋 Les notes de session normale seront automatiquement reportées
+                                    </p>
+                                @else
+                                    <p class="text-sm font-body text-gray-600 dark:text-gray-400">
+                                        Cliquez pour créer automatiquement avec la note 0/20
+                                    </p>
+                                @endif
                             </div>
                         </div>
                         
@@ -503,13 +510,7 @@
                             wire:target="creerCopiesManquantes"
                             class="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg font-bold font-body text-sm shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 whitespace-nowrap
                                 {{ $enCoursRemplissage ? 'opacity-50 cursor-not-allowed' : '' }}">
-                            <svg wire:loading.remove wire:target="creerCopiesManquantes" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                            </svg>
-                            <svg wire:loading wire:target="creerCopiesManquantes" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
+                            {{-- SVG icons --}}
                             <span wire:loading.remove wire:target="creerCopiesManquantes">
                                 Synchroniser maintenant
                             </span>
@@ -517,24 +518,6 @@
                                 Synchronisation...
                             </span>
                         </button>
-                    </div>
-                </div>
-            @elseif($modeSync && $this->copiesRestantes > 0 && empty($copiesManquantes))
-                <div class="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg animate-fadeIn">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <h4 class="text-base font-bold font-heading text-green-900 dark:text-green-300">
-                                Aucune copie non remise
-                            </h4>
-                            <p class="text-sm font-body text-green-700 dark:text-green-400">
-                                Toutes les copies présentes ont été saisies
-                            </p>
-                        </div>
                     </div>
                 </div>
             @endif

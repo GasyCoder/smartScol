@@ -3,7 +3,6 @@
     <div class="flex items-center justify-between">
         {{-- Fil d'Ariane à gauche --}}
         <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-            <span class="text-gray-900 dark:text-white font-bold text-xl ">Résultats Finaux des Examens</span>
             @if($selectedNiveau)
                 <em class="ni ni-bold-right text-xs"></em>
                 <span class="text-gray-900 dark:text-white font-medium">
@@ -43,28 +42,12 @@
 
 {{-- Filtres principaux en format cards --}}
 <div class="">
-    
-    {{-- Année Universitaire (reste en select) --}}
-    {{-- <div class="mb-6">
-        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-            <em class="ni ni-calendar-grid-58 mr-2"></em>
-            Année Universitaire
-        </label>
-        <select wire:model.defer="selectedAnneeUniversitaire"
-                wire:change="$refresh"
-                class="w-full max-w-xs px-4 py-3 text-sm text-gray-900 transition-all duration-200 bg-white border-2 border-gray-200 rounded-xl dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-300 dark:hover:border-gray-500">
-            <option value="">Choisir l'année...</option>
-            @foreach($anneesUniversitaires as $annee)
-                <option value="{{ $annee->id }}">{{ $annee->libelle }}</option>
-            @endforeach
-        </select>
-    </div> --}}
 
     {{-- Sélection du niveau --}}
     @if($etape_actuelle === 'niveau')
     <div>
         <div class="text-center mb-8">
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Sélection du Niveau</h2>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Résultats Finaux des Examens</h2>
             <p class="text-gray-600 dark:text-gray-400">Choisissez un niveau d'études pour continuer</p>
         </div>
 

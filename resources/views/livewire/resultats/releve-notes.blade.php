@@ -3,7 +3,7 @@
         <!-- En-tête -->
         <div class="p-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <div class="flex justify-between items-center">
-                <div>
+                <div class="flex-1">
                     <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
                         Relevés de Notes
                     </h2>
@@ -11,40 +11,48 @@
                         Générer les relevés de notes des étudiants
                     </p>
                 </div>
+                
+                <!-- ✅ Affichage Année et Session -->
+                <div class="flex items-center space-x-6">
+                    <!-- Année Universitaire -->
+                    <div class="text-right">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Année Universitaire
+                        </p>
+                        <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                            {{ $anneeUnivLibelle ?? 'N/A' }}
+                        </p>
+                    </div>
+                    
+                    <!-- Séparateur -->
+                    <div class="h-10 w-px bg-gray-300 dark:bg-gray-600"></div>
+                    
+                    <!-- Session -->
+                    <div class="text-right">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Session
+                        </p>
+                        <p class="mt-1">
+                            @if($sessionType === 'Normale')
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                    Session Normale
+                                </span>
+                            @elseif($sessionType === 'Rattrapage')
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                                    Session Rattrapage
+                                </span>
+                            @else
+                                <span class="text-sm text-gray-900 dark:text-white">N/A</span>
+                            @endif
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
         @include('livewire.resultats.partials.releve-compteur')
         <!-- Filtres -->
         <div class="p-6 bg-gray-50 dark:bg-gray-900">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <!-- Année Universitaire -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Année Universitaire
-                    </label>
-                    <select wire:model.live="selectedAnneeUniv" 
-                            class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Toutes</option>
-                        @foreach($anneesUniv as $annee)
-                            <option value="{{ $annee->id }}">{{ $annee->libelle }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <!-- Session -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Session
-                    </label>
-                    <select wire:model.live="selectedSession" 
-                            class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Sélectionner</option>
-                        @foreach($sessions as $session)
-                            <option value="{{ $session->id }}">{{ $session->type }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <!-- Niveau -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -74,15 +82,30 @@
                     </select>
                 </div>
 
+                <!-- Décision -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Décision
+                    </label>
+                    <select wire:model.live="selectedDecision" 
+                            class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Toutes</option>
+                        <option value="admis">Admis</option>
+                        <option value="rattrapage">Rattrapage</option>
+                        <option value="redoublant">Redoublant</option>
+                        <option value="exclus">Exclus</option>
+                    </select>
+                </div>
+
                 <!-- Recherche -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Recherche
                     </label>
                     <input type="text" 
-                           wire:model.live.debounce.300ms="search" 
-                           placeholder="Nom, prénom, matricule..."
-                           class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500">
+                        wire:model.live.debounce.300ms="search" 
+                        placeholder="Nom, prénom, matricule..."
+                        class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500">
                 </div>
             </div>
         </div>
@@ -116,6 +139,9 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                     Parcours
                                 </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                    Décision
+                                </th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                     Actions
                                 </th>
@@ -123,13 +149,20 @@
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
                             @foreach($etudiants as $etudiant)
+                                @php
+                                    // Récupérer la décision de l'étudiant
+                                    $decision = \App\Models\ResultatFinal::where('etudiant_id', $etudiant->id)
+                                        ->where('session_exam_id', $selectedSession)
+                                        ->where('statut', \App\Models\ResultatFinal::STATUT_PUBLIE)
+                                        ->value('decision');
+                                @endphp
                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center">
                                             <div class="flex-shrink-0 h-10 w-10">
                                                 <div class="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
                                                     <span class="text-sm font-medium text-indigo-600 dark:text-indigo-300">
-                                                        {{ substr($etudiant->prenom, 0, 1) }}{{ substr($etudiant->nom, 0, 1) }}
+                                                        {{ substr($etudiant->prenom ?? 'X', 0, 1) }}{{ substr($etudiant->nom, 0, 1) }}
                                                     </span>
                                                 </div>
                                             </div>
@@ -148,6 +181,41 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                                         {{ $etudiant->parcours?->nom ?? 'Aucun' }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        @if($decision === 'admis')
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Admis
+                                            </span>
+                                        @elseif($decision === 'rattrapage')
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Rattrapage
+                                            </span>
+                                        @elseif($decision === 'redoublant')
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                                                <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Redoublant
+                                            </span>
+                                        @elseif($decision === 'exclus')
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                                <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                                </svg>
+                                                Exclus
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                                                N/A
+                                            </span>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div class="flex justify-end space-x-2">
@@ -188,7 +256,9 @@
                 </div>
             @else
                 <div class="p-6 text-center">
-                   <em class="text-2xl ni ni-users"></em>
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
                     <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">Aucun étudiant trouvé</h3>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Ajustez vos filtres pour voir les étudiants disponibles.

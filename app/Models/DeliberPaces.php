@@ -17,6 +17,8 @@ class DeliberPaces extends Model
         'session_exam_id',
         'quota_admission',
         'credits_requis',
+        'credit_max_r',
+        'credit_min_r',
         'moyenne_requise',
         'note_eliminatoire',
         'nb_admis',

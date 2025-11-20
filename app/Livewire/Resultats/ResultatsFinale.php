@@ -169,7 +169,9 @@ class ResultatsFinale extends Component
     {
         try {
             $this->anneesUniversitaires = AnneeUniversitaire::orderBy('date_start', 'desc')->get();
-            $this->niveaux = Niveau::where('is_active', true)->orderBy('id', 'asc')->get();
+            $this->niveaux = Niveau::where('is_active', true)
+                                    ->where('abr', '!=', 'PACES')
+                                    ->orderBy('id', 'asc')->get();
         } catch (\Exception $e) {
             Log::error('Erreur initialisation données: ' . $e->getMessage());
             $this->anneesUniversitaires = collect();
