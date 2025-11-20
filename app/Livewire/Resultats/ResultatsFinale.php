@@ -734,106 +734,101 @@ class ResultatsFinale extends Component
     }
 
 
-    public function simulerDeliberation()
-    {
-        try {
-            if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
-                $this->addError('deliberation', 'Configuration incomplète.');
-                return;
-            }
-
-            $resultatsActuels = $this->deliberationParams['session_type'] === 'session1'
-                ? $this->resultatsSession1 : $this->resultatsSession2;
-
-            if (empty($resultatsActuels)) {
-                $this->addError('deliberation', 'Aucun résultat disponible.');
-                return;
-            }
-
-            $resultatsDetailles = [];
-            $statistiques = ['admis' => 0, 'rattrapage' => 0, 'redoublant' => 0, 'excluss' => 0, 'changements' => 0];
-            $erreursCriteres = []; // ✅ NOUVEAU : Tracer les erreurs de critères
-
-            foreach ($resultatsActuels as $index => $resultat) {
-                $etudiant = $resultat['etudiant'] ?? null;
-                if (!$etudiant) continue;
-
-                // ✅ NOUVEAU : Valider les critères avant de calculer la décision
-                $validation = $this->validerCriteresAdmission($resultat, $this->deliberationParams['session_type']);
-                
-                $decisionSimulee = $this->calculerDecisionSelonParametres($resultat);
-                $decisionActuelle = $resultat['decision'] ?? 'rattrapage';
-                $changement = $decisionActuelle !== $decisionSimulee;
-
-                // ✅ NOUVEAU : Détecter les incohérences
-                if ($decisionSimulee === 'admis' && !$validation['peut_etre_admis']) {
-                    $erreursCriteres[] = [
-                        'etudiant' => $etudiant->nom . ' ' . $etudiant->prenom,
-                        'matricule' => $etudiant->matricule,
-                        'decision_calculee' => $decisionSimulee,
-                        'erreurs' => $validation['erreurs'],
-                        'details' => $validation['details']
-                    ];
-                    
-                    // Forcer la correction de la décision
-                    $decisionSimulee = 'rattrapage';
-                    $changement = $decisionActuelle !== $decisionSimulee;
-                }
-
-                if ($changement) $statistiques['changements']++;
-                $statistiques[$decisionSimulee]++;
-
-                $resultatsDetailles[] = [
-                    'etudiant_id' => $etudiant->id,
-                    'etudiant' => $etudiant,
-                    'nom' => $etudiant->nom,
-                    'prenom' => $etudiant->prenom,
-                    'matricule' => $etudiant->matricule,
-                    'nom_complet' => $etudiant->nom . ' ' . $etudiant->prenom,
-                    'rang' => $index + 1,
-                    'moyenne_generale' => $resultat['moyenne_generale'] ?? 0,
-                    'credits_valides' => $resultat['credits_valides'] ?? 0,
-                    'total_credits' => $resultat['total_credits'] ?? 60,
-                    'has_note_eliminatoire' => $resultat['has_note_eliminatoire'] ?? false,
-                    'decision_actuelle' => $decisionActuelle,
-                    'decision_simulee' => $decisionSimulee,
-                    'changement' => $changement,
-                    'validation_criteres' => $validation // ✅ NOUVEAU : Inclure la validation
-                ];
-            }
-
-            $this->simulationDeliberation = [
-                'success' => true,
-                'total_etudiants' => count($resultatsDetailles),
-                'statistiques' => $statistiques,
-                'resultats_detailles' => $resultatsDetailles,
-                'parametres_utilises' => $this->deliberationParams,
-                'erreurs_criteres' => $erreursCriteres // ✅ NOUVEAU : Inclure les erreurs détectées
-            ];
-
-            $sessionName = $this->deliberationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
-            
-            // ✅ NOUVEAU : Afficher les erreurs s'il y en a
-            if (!empty($erreursCriteres)) {
-                $nombreErreurs = count($erreursCriteres);
-                toastr()->warning("Simulation {$sessionName} : {$statistiques['changements']} changements détectés. ATTENTION : {$nombreErreurs} incohérence(s) corrigée(s) automatiquement.");
-                
-                // Logger les erreurs pour investigation
-                Log::warning('Incohérences détectées dans la simulation de délibération', [
-                    'session_type' => $sessionName,
-                    'nombre_erreurs' => $nombreErreurs,
-                    'erreurs' => $erreursCriteres
-                ]);
-            } else {
-                toastr()->info("Simulation {$sessionName} : {$statistiques['changements']} changements détectés. Tous les critères sont cohérents.");
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur simulation délibération: ' . $e->getMessage());
-            $this->addError('deliberation', 'Erreur simulation: ' . $e->getMessage());
+  public function simulerDeliberation()
+{
+    try {
+        if (!$this->selectedNiveau || !$this->selectedAnneeUniversitaire) {
+            $this->addError('deliberation', 'Configuration incomplète.');
+            return;
         }
-    }
 
+        $resultatsActuels = $this->deliberationParams['session_type'] === 'session1'
+            ? $this->resultatsSession1 : $this->resultatsSession2;
+
+        if (empty($resultatsActuels)) {
+            $this->addError('deliberation', 'Aucun résultat disponible.');
+            return;
+        }
+
+        $resultatsDetailles = [];
+        // ✅ CORRECTION : 'excluss' → 'exclus'
+        $statistiques = ['admis' => 0, 'rattrapage' => 0, 'redoublant' => 0, 'exclus' => 0, 'changements' => 0];
+        $erreursCriteres = [];
+
+        foreach ($resultatsActuels as $index => $resultat) {
+            $etudiant = $resultat['etudiant'] ?? null;
+            if (!$etudiant) continue;
+
+            $validation = $this->validerCriteresAdmission($resultat, $this->deliberationParams['session_type']);
+            
+            $decisionSimulee = $this->calculerDecisionSelonParametres($resultat);
+            $decisionActuelle = $resultat['decision'] ?? 'rattrapage';
+            $changement = $decisionActuelle !== $decisionSimulee;
+
+            if ($decisionSimulee === 'admis' && !$validation['peut_etre_admis']) {
+                $erreursCriteres[] = [
+                    'etudiant' => $etudiant->nom . ' ' . $etudiant->prenom,
+                    'matricule' => $etudiant->matricule,
+                    'decision_calculee' => $decisionSimulee,
+                    'erreurs' => $validation['erreurs'],
+                    'details' => $validation['details']
+                ];
+                
+                $decisionSimulee = 'rattrapage';
+                $changement = $decisionActuelle !== $decisionSimulee;
+            }
+
+            if ($changement) $statistiques['changements']++;
+            $statistiques[$decisionSimulee]++;
+
+            $resultatsDetailles[] = [
+                'etudiant_id' => $etudiant->id,
+                'etudiant' => $etudiant,
+                'nom' => $etudiant->nom,
+                'prenom' => $etudiant->prenom,
+                'matricule' => $etudiant->matricule,
+                'nom_complet' => $etudiant->nom . ' ' . $etudiant->prenom,
+                'rang' => $index + 1,
+                'moyenne_generale' => $resultat['moyenne_generale'] ?? 0,
+                'credits_valides' => $resultat['credits_valides'] ?? 0,
+                'total_credits' => $resultat['total_credits'] ?? 60,
+                'has_note_eliminatoire' => $resultat['has_note_eliminatoire'] ?? false,
+                'decision_actuelle' => $decisionActuelle,
+                'decision_simulee' => $decisionSimulee,
+                'changement' => $changement,
+                'validation_criteres' => $validation
+            ];
+        }
+
+        $this->simulationDeliberation = [
+            'success' => true,
+            'total_etudiants' => count($resultatsDetailles),
+            'statistiques' => $statistiques,
+            'resultats_detailles' => $resultatsDetailles,
+            'parametres_utilises' => $this->deliberationParams,
+            'erreurs_criteres' => $erreursCriteres
+        ];
+
+        $sessionName = $this->deliberationParams['session_type'] === 'session1' ? 'Session 1' : 'Session 2';
+        
+        if (!empty($erreursCriteres)) {
+            $nombreErreurs = count($erreursCriteres);
+            toastr()->warning("Simulation {$sessionName} : {$statistiques['changements']} changements détectés. ATTENTION : {$nombreErreurs} incohérence(s) corrigée(s) automatiquement.");
+            
+            Log::warning('Incohérences détectées dans la simulation de délibération', [
+                'session_type' => $sessionName,
+                'nombre_erreurs' => $nombreErreurs,
+                'erreurs' => $erreursCriteres
+            ]);
+        } else {
+            toastr()->info("Simulation {$sessionName} : {$statistiques['changements']} changements détectés. Tous les critères sont cohérents.");
+        }
+
+    } catch (\Exception $e) {
+        Log::error('Erreur simulation délibération: ' . $e->getMessage());
+        $this->addError('deliberation', 'Erreur simulation: ' . $e->getMessage());
+    }
+}
 
     public function verifierCoherenceResultat($resultat)
     {
@@ -870,77 +865,67 @@ class ResultatsFinale extends Component
     }
 
 
-    private function calculerDecisionSelonParametres($resultat)
-    {
-        $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
-        $creditsValides = $resultat['credits_valides'] ?? 0;
-        $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
-        $moyenneGenerale = $resultat['moyenne_generale'] ?? 0;
+private function calculerDecisionSelonParametres($resultat)
+{
+    $sessionType = $this->deliberationParams['session_type'] ?? 'session1';
+    $creditsValides = $resultat['credits_valides'] ?? 0;
+    $hasNoteEliminatoire = $resultat['has_note_eliminatoire'] ?? false;
+    $moyenneGenerale = $resultat['moyenne_generale'] ?? 0;
 
-        if ($sessionType === 'session1') {
-            $creditsRequis = $this->deliberationParams['credits_admission_s1'] ?? 60;
-            $bloquerSiNote0 = $this->deliberationParams['note_eliminatoire_bloque_s1'] ?? true;
+    if ($sessionType === 'session1') {
+        $creditsRequis = $this->deliberationParams['credits_admission_s1'] ?? 60;
+        $bloquerSiNote0 = $this->deliberationParams['note_eliminatoire_bloque_s1'] ?? true;
 
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = rattrapage (même avec tous les crédits)
-            if ($hasNoteEliminatoire && $bloquerSiNote0) {
-                return 'rattrapage';
-            }
-            
-            // 2. RÈGLE ACADÉMIQUE STRICTE : Moyenne >= 10 ET crédits >= seuil = ADMIS
-            if ($moyenneGenerale >= 10.0 && $creditsValides >= $creditsRequis) {
-                return 'admis';
-            }
-            
-            // 3. ✅ NOUVEAU : Si moyenne < 10, TOUJOURS rattrapage (même avec tous les crédits)
-            if ($moyenneGenerale < 10.0) {
-                return 'rattrapage';
-            }
-            
-            // 4. Si moyenne >= 10 mais crédits insuffisants = rattrapage
-            if ($creditsValides < $creditsRequis) {
-                return 'rattrapage';
-            }
-            
-            // 5. Par défaut = rattrapage
+        if ($hasNoteEliminatoire && $bloquerSiNote0) {
             return 'rattrapage';
-            
-        } else {
-            // Session 2 (rattrapage)
-            $creditsAdmission = $this->deliberationParams['credits_admission_s2'] ?? 40;
-            $creditsRedoublement = $this->deliberationParams['credits_redoublement_s2'] ?? 20;
-            $exclusionSiNote0 = $this->deliberationParams['note_eliminatoire_exclusion_s2'] ?? true;
+        }
+        
+        if ($moyenneGenerale >= 10.0 && $creditsValides >= $creditsRequis) {
+            return 'admis';
+        }
+        
+        if ($moyenneGenerale < 10.0) {
+            return 'rattrapage';
+        }
+        
+        if ($creditsValides < $creditsRequis) {
+            return 'rattrapage';
+        }
+        
+        return 'rattrapage';
+        
+    } else {
+        // Session 2 (rattrapage)
+        $creditsAdmission = $this->deliberationParams['credits_admission_s2'] ?? 40;
+        $creditsRedoublement = $this->deliberationParams['credits_redoublement_s2'] ?? 20;
+        $exclusionSiNote0 = $this->deliberationParams['note_eliminatoire_exclusion_s2'] ?? true;
 
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = exclusion
-            if ($hasNoteEliminatoire && $exclusionSiNote0) {
-                return 'exclus';
-            }
+        if ($hasNoteEliminatoire && $exclusionSiNote0) {
+            // ✅ CORRECTION : 'excluss' → 'exclus'
+            return 'exclus';
+        }
 
-            // 2. RÈGLE ACADÉMIQUE STRICTE : Moyenne >= 10 ET crédits >= seuil admission = ADMIS
-            if ($moyenneGenerale >= 10.0 && $creditsValides >= $creditsAdmission) {
-                return 'admis';
-            }
-            
-            // 3. ✅ NOUVEAU : Si moyenne < 10, pas d'admission possible
-            if ($moyenneGenerale < 10.0) {
-                // Mais peut être redoublant si assez de crédits
-                if ($creditsValides >= $creditsRedoublement) {
-                    return 'redoublant';
-                } else {
-                    return 'excluss';
-                }
-            }
-            
-            // 4. Si moyenne >= 10 mais crédits insuffisants pour admission
+        if ($moyenneGenerale >= 10.0 && $creditsValides >= $creditsAdmission) {
+            return 'admis';
+        }
+        
+        if ($moyenneGenerale < 10.0) {
             if ($creditsValides >= $creditsRedoublement) {
                 return 'redoublant';
+            } else {
+                // ✅ CORRECTION : 'excluss' → 'exclus'
+                return 'exclus';
             }
-            
-            // 5. Sinon = exclusion
-            return 'excluss';
         }
+        
+        if ($creditsValides >= $creditsRedoublement) {
+            return 'redoublant';
+        }
+        
+        // ✅ CORRECTION : 'excluss' → 'exclus'
+        return 'exclus';
     }
-
-
+}
     private function validerCriteresAdmission($resultat, $sessionType = 'session1')
     {
         $moyenneGenerale = $resultat['moyenne_generale'] ?? 0;

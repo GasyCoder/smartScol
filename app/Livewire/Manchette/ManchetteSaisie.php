@@ -1927,37 +1927,80 @@ class ManchetteSaisie extends Component
     }
 
 
+/**
+ * Synchronise automatiquement les manchettes pour les étudiants absents
+ * 
+ * SESSION NORMALE : Tous les étudiants inscrits sans manchette
+ * SESSION RATTRAPAGE : Uniquement les étudiants avec decision='rattrapage' ET éligibles pour cette EC
+ */
+public function synchroniserManchettesAbsents()
+{
+    if (!$this->examenSelected || !$this->ecSelected || !$this->salleId) {
+        $this->showMessage('Configuration incomplète pour la synchronisation.', 'error');
+        toastr()->error('Configuration incomplète');
+        return;
+    }
 
-    /**
-     * Synchronise automatiquement les manchettes pour les étudiants absents
-     * Les absents sont les étudiants inscrits qui n'ont PAS encore de manchette
-     */
-    public function synchroniserManchettesAbsents()
-    {
-        if (!$this->examenSelected || !$this->ecSelected || !$this->salleId) {
-            $this->showMessage('Configuration incomplète pour la synchronisation.', 'error');
-            toastr()->error('Configuration incomplète');
-            return;
-        }
+    if ($this->progressCount < $this->totalManchettesPresentes) {
+        $restantes = $this->totalManchettesPresentes - $this->progressCount;
+        $this->showMessage("Vous devez d'abord terminer la saisie des {$restantes} manchette(s) présente(s).", 'warning');
+        toastr()->warning("Il reste {$restantes} manchette(s) à saisir");
+        return;
+    }
 
-        if ($this->progressCount < $this->totalManchettesPresentes) {
-            $restantes = $this->totalManchettesPresentes - $this->progressCount;
-            $this->showMessage("Vous devez d'abord terminer la saisie des {$restantes} manchette(s) présente(s).", 'warning');
-            toastr()->warning("Il reste {$restantes} manchette(s) à saisir");
-            return;
-        }
-
-        try {
-            // Augmenter les limites de temps pour éviter le timeout
-            set_time_limit(300); // 5 minutes
-            ini_set('max_execution_time', 300);
+    try {
+        set_time_limit(300);
+        ini_set('max_execution_time', 300);
+        
+        $sessionId = Manchette::getCurrentSessionId();
+        $sessionType = Manchette::getCurrentSessionType();
+        $lettresCode = $this->genererLettresCode();
+        $now = now();
+        
+        // ✅ LOGIQUE DIFFÉRENCIÉE SELON TYPE DE SESSION
+        if ($sessionType === 'rattrapage') {
+            // ===== SESSION RATTRAPAGE : Uniquement étudiants avec decision='rattrapage' ET éligibles pour cette EC =====
             
-            $sessionId = Manchette::getCurrentSessionId();
-            $sessionType = Manchette::getCurrentSessionType();
-            $lettresCode = $this->genererLettresCode();
-            $now = now();
+            if (!$this->sessionNormaleId) {
+                $this->showMessage('Session normale non trouvée pour ce rattrapage.', 'error');
+                return;
+            }
             
-            // ✅ OPTIMISATION : Requête SQL directe ultra-rapide
+            // 1. Récupérer les étudiants éligibles pour cette EC spécifique
+            $etudiantsEligibles = $this->getEtudiantsEligiblesPourEC($this->ecSelected->id);
+            
+            if ($etudiantsEligibles->isEmpty()) {
+                $this->showMessage('Aucun étudiant éligible au rattrapage pour cette EC.', 'info');
+                toastr()->info('Aucun étudiant à synchroniser pour cette matière');
+                return;
+            }
+            
+            $etudiantsEligiblesIds = $etudiantsEligibles->pluck('etudiant_id')->toArray();
+            
+            // 2. Filtrer ceux qui n'ont PAS encore de manchette
+            $manchettesExistantes = DB::table('manchettes as m')
+                ->join('codes_anonymat as ca', 'm.code_anonymat_id', '=', 'ca.id')
+                ->where('m.examen_id', $this->examenSelected->id)
+                ->where('m.session_exam_id', $sessionId)
+                ->where('ca.ec_id', $this->ecSelected->id)
+                ->whereIn('m.etudiant_id', $etudiantsEligiblesIds)
+                ->pluck('m.etudiant_id')
+                ->toArray();
+            
+            // 3. Étudiants absents = éligibles - ayant déjà manchette
+            $etudiantsAbsentsIds = array_diff($etudiantsEligiblesIds, $manchettesExistantes);
+            
+            \Log::info('🔄 Synchronisation rattrapage pour EC', [
+                'ec_id' => $this->ecSelected->id,
+                'ec_nom' => $this->ecSelected->nom,
+                'etudiants_eligibles' => count($etudiantsEligiblesIds),
+                'deja_manchettes' => count($manchettesExistantes),
+                'a_synchroniser' => count($etudiantsAbsentsIds)
+            ]);
+            
+        } else {
+            // ===== SESSION NORMALE : Tous les étudiants du niveau/parcours sans manchette =====
+            
             $etudiantsAbsentsIds = DB::select("
                 SELECT e.id
                 FROM etudiants e
@@ -1982,126 +2025,132 @@ class ManchetteSaisie extends Component
             ]));
             
             $etudiantsAbsentsIds = array_column($etudiantsAbsentsIds, 'id');
-            
-            if (empty($etudiantsAbsentsIds)) {
-                $this->showMessage('Aucun étudiant absent à synchroniser.', 'info');
-                toastr()->info('Tous les étudiants ont déjà une manchette');
-                return;
-            }
-            
-            // Trouver le prochain numéro
-            $maxSequence = DB::table('codes_anonymat')
-                ->where('examen_id', $this->examenSelected->id)
-                ->where('session_exam_id', $sessionId)
-                ->where('ec_id', $this->ecSelected->id)
-                ->where('code_complet', 'LIKE', $lettresCode . '%')
-                ->max('sequence') ?? 0;
-            
-            $prochainNumero = $maxSequence + 1;
-            $totalCrees = 0;
-            
-            // ✅ OPTIMISATION : Insertion par lots plus petits (50 au lieu de 100)
-            $chunkSize = 50;
-            
-            foreach (array_chunk($etudiantsAbsentsIds, $chunkSize) as $chunkIndex => $chunkIds) {
-                try {
-                    DB::transaction(function() use ($chunkIds, &$prochainNumero, $lettresCode, $sessionId, $now, &$totalCrees) {
-                        // Préparation des données
-                        $codesData = [];
-                        foreach ($chunkIds as $etudiantId) {
-                            $codesData[] = [
-                                'examen_id' => $this->examenSelected->id,
-                                'session_exam_id' => $sessionId,
-                                'ec_id' => $this->ecSelected->id,
-                                'code_complet' => $lettresCode . $prochainNumero,
-                                'sequence' => $prochainNumero,
-                                'is_absent' => true,
-                                'created_at' => $now,
-                                'updated_at' => $now,
-                            ];
-                            $prochainNumero++;
-                        }
-                        
-                        // Insertion des codes
-                        DB::table('codes_anonymat')->insert($codesData);
-                        
-                        // Récupération des IDs
-                        $codesIds = DB::table('codes_anonymat')
-                            ->whereIn('code_complet', array_column($codesData, 'code_complet'))
-                            ->where('examen_id', $this->examenSelected->id)
-                            ->where('session_exam_id', $sessionId)
-                            ->where('ec_id', $this->ecSelected->id)
-                            ->pluck('id', 'code_complet')
-                            ->toArray();
-                        
-                        // Préparation des manchettes
-                        $manchettesData = [];
-                        $i = 0;
-                        foreach ($chunkIds as $etudiantId) {
-                            $codeComplet = $codesData[$i]['code_complet'];
-                            $manchettesData[] = [
-                                'etudiant_id' => $etudiantId,
-                                'code_anonymat_id' => $codesIds[$codeComplet],
-                                'examen_id' => $this->examenSelected->id,
-                                'session_exam_id' => $sessionId,
-                                'saisie_par' => Auth::id(),
-                                'date_saisie' => $now,
-                                'created_at' => $now,
-                                'updated_at' => $now,
-                            ];
-                            $i++;
-                        }
-                        
-                        // Insertion des manchettes
-                        DB::table('manchettes')->insert($manchettesData);
-                        $totalCrees += count($manchettesData);
-                    }, 3);
-                    
-                    // Petit délai pour éviter la surcharge
-                    usleep(10000); // 10ms
-                    
-                } catch (\Exception $e) {
-                    \Log::error("Erreur chunk {$chunkIndex}", [
-                        'error' => $e->getMessage(),
-                        'chunk_size' => count($chunkIds)
-                    ]);
-                    throw $e;
-                }
-            }
-
-            // Rafraîchir les données
-            $this->loadStatistiques();
-            $this->progressCount = $this->getManchettesCount();
-
-            $successMessage = "✅ Synchronisation réussie : {$totalCrees} manchette(s) créée(s) pour les étudiants absents";
-            $this->showMessage($successMessage, 'success');
-            
-            toastr()->success($successMessage, [
-                'timeOut' => 6000,
-                'closeButton' => true
-            ]);
-
-            $this->dispatch('manchettes-absents-synchronisees', [
-                'total_crees' => $totalCrees,
-                'session_type' => ucfirst($sessionType),
-                'matiere' => $this->ecSelected->nom ?? 'Matière inconnue',
-            ]);
-
-        } catch (\Exception $e) {
-            $errorMessage = 'Erreur lors de la synchronisation : ' . $e->getMessage();
-            $this->showMessage($errorMessage, 'error');
-            toastr()->error($errorMessage, ['timeOut' => 8000]);
-            
-            \Log::error('Erreur synchroniserManchettesAbsents', [
-                'examen_id' => $this->examenSelected->id,
-                'ec_id' => $this->ecSelected->id,
-                'session_id' => $sessionId ?? null,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
         }
+        
+        // ✅ VÉRIFICATION COMMUNE
+        if (empty($etudiantsAbsentsIds)) {
+            $messageInfo = $sessionType === 'rattrapage' 
+                ? 'Aucun étudiant éligible au rattrapage à synchroniser pour cette EC.'
+                : 'Aucun étudiant absent à synchroniser.';
+            
+            $this->showMessage($messageInfo, 'info');
+            toastr()->info($messageInfo);
+            return;
+        }
+        
+        // ✅ CRÉATION DES MANCHETTES (LOGIQUE COMMUNE)
+        $maxSequence = DB::table('codes_anonymat')
+            ->where('examen_id', $this->examenSelected->id)
+            ->where('session_exam_id', $sessionId)
+            ->where('ec_id', $this->ecSelected->id)
+            ->where('code_complet', 'LIKE', $lettresCode . '%')
+            ->max('sequence') ?? 0;
+        
+        $prochainNumero = $maxSequence + 1;
+        $totalCrees = 0;
+        $chunkSize = 50;
+        
+        foreach (array_chunk($etudiantsAbsentsIds, $chunkSize) as $chunkIndex => $chunkIds) {
+            try {
+                DB::transaction(function() use ($chunkIds, &$prochainNumero, $lettresCode, $sessionId, $now, &$totalCrees) {
+                    // Préparation des codes
+                    $codesData = [];
+                    foreach ($chunkIds as $etudiantId) {
+                        $codesData[] = [
+                            'examen_id' => $this->examenSelected->id,
+                            'session_exam_id' => $sessionId,
+                            'ec_id' => $this->ecSelected->id,
+                            'code_complet' => $lettresCode . $prochainNumero,
+                            'sequence' => $prochainNumero,
+                            'is_absent' => true,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                        $prochainNumero++;
+                    }
+                    
+                    // Insertion des codes
+                    DB::table('codes_anonymat')->insert($codesData);
+                    
+                    // Récupération des IDs
+                    $codesIds = DB::table('codes_anonymat')
+                        ->whereIn('code_complet', array_column($codesData, 'code_complet'))
+                        ->where('examen_id', $this->examenSelected->id)
+                        ->where('session_exam_id', $sessionId)
+                        ->where('ec_id', $this->ecSelected->id)
+                        ->pluck('id', 'code_complet')
+                        ->toArray();
+                    
+                    // Préparation des manchettes
+                    $manchettesData = [];
+                    $i = 0;
+                    foreach ($chunkIds as $etudiantId) {
+                        $codeComplet = $codesData[$i]['code_complet'];
+                        $manchettesData[] = [
+                            'etudiant_id' => $etudiantId,
+                            'code_anonymat_id' => $codesIds[$codeComplet],
+                            'examen_id' => $this->examenSelected->id,
+                            'session_exam_id' => $sessionId,
+                            'saisie_par' => Auth::id(),
+                            'date_saisie' => $now,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                        $i++;
+                    }
+                    
+                    // Insertion des manchettes
+                    DB::table('manchettes')->insert($manchettesData);
+                    $totalCrees += count($manchettesData);
+                }, 3);
+                
+                usleep(10000);
+                
+            } catch (\Exception $e) {
+                \Log::error("Erreur chunk {$chunkIndex}", [
+                    'error' => $e->getMessage(),
+                    'chunk_size' => count($chunkIds)
+                ]);
+                throw $e;
+            }
+        }
+
+        // Rafraîchir les données
+        $this->loadStatistiques();
+        $this->progressCount = $this->getManchettesCount();
+
+        $successMessage = $sessionType === 'rattrapage'
+            ? "✅ Synchronisation rattrapage réussie : {$totalCrees} étudiant(s) éligible(s) synchronisé(s)"
+            : "✅ Synchronisation réussie : {$totalCrees} manchette(s) créée(s) pour les étudiants absents";
+        
+        $this->showMessage($successMessage, 'success');
+        
+        toastr()->success($successMessage, [
+            'timeOut' => 6000,
+            'closeButton' => true
+        ]);
+
+        $this->dispatch('manchettes-absents-synchronisees', [
+            'total_crees' => $totalCrees,
+            'session_type' => ucfirst($sessionType),
+            'matiere' => $this->ecSelected->nom ?? 'Matière inconnue',
+        ]);
+
+    } catch (\Exception $e) {
+        $errorMessage = 'Erreur lors de la synchronisation : ' . $e->getMessage();
+        $this->showMessage($errorMessage, 'error');
+        toastr()->error($errorMessage, ['timeOut' => 8000]);
+        
+        \Log::error('Erreur synchroniserManchettesAbsents', [
+            'examen_id' => $this->examenSelected->id,
+            'ec_id' => $this->ecSelected->id,
+            'session_id' => $sessionId ?? null,
+            'session_type' => $sessionType ?? null,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
     }
-    
+}
     /**
      * Vérifie si la synchronisation des absents est possible
      */
