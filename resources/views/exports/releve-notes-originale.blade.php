@@ -294,6 +294,8 @@
             @endif
         </div>
 
+        
+
         <!-- Note complémentaire pour admission avec niveau suivant -->
         @if($synthese['decision'] === 'admis' && !empty($synthese['niveau_suivant']))
             <div class="note-admission">

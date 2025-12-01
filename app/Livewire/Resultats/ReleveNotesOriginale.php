@@ -420,26 +420,25 @@ class ReleveNotesOriginale extends Component
         $niveauSuivant = null;
         $messageAdmission = 'ADMIS(E)';
         $messageRedoublement = 'AUTORISÉ(E) À REDOUBLER';
-        $estSortantIfirp = false;
-        
+
         if ($etudiant->niveau) {
             $niveauId = $etudiant->niveau->id;
             $niveauAbr = $etudiant->niveau->abr ?? '';
             $niveauNom = $etudiant->niveau->nom ?? '';
             
-            // ✅ VÉRIFIER SI L3 IFIRP (SORTANT)
+            // ✅ CONDITION STATIQUE : L3 avec parcours IFIRP (INF-G, INF-A, MAI)
             $isL3 = ($niveauId == 3 || $niveauAbr === 'L3');
-            $isIfirp = $etudiant->parcours && $etudiant->parcours->is_ifirp == 1;
-            $estSortantIfirp = $isL3 && $isIfirp;
+            $parcoursAbr = $etudiant->parcours->abr ?? '';
+            $estSortantIfirp = $isL3 && in_array($parcoursAbr, ['INF-G', 'INF-A', 'MAI']);
             
-            // Si sortant IFIRP, message spécifique
             if ($estSortantIfirp) {
+                // SORTANT IFIRP - pas de niveau suivant
                 $messageAdmission = 'SORTANT(E)';
                 $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN L3 (3e année)";
                 $niveauSuivant = null;
             }
-            // Si niveau >= 2 (pas L1) et pas sortant IFIRP
             elseif ($niveauId >= 2) {
+                // AUTRES NIVEAUX - calcul du niveau suivant
                 $numeroActuel = null;
                 
                 if (preg_match('/^L(\d+)$/i', $niveauAbr, $matches)) {
@@ -479,7 +478,6 @@ class ReleveNotesOriginale extends Component
                 }
             }
         }
-
         // ===== 7. GÉNÉRATION DU QR CODE =====
         $qrCodeData = "RELEVÉ DE NOTES\n\n" .
             "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
