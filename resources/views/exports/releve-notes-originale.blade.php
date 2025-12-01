@@ -3,193 +3,181 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Relevé des notes - {{ $etudiant->matricule }}</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 14px;  /* ✅ Augmenté de 11px à 12px */
-            line-height: 1.3;
-            margin: 0;
-            padding: 8px 12px;
-            color: black;
-        }
-        
-        .content-wrapper {
-            max-width: 100%;
-            padding: 10px 15px 15px 15px;
-            box-sizing: border-box;
-        }
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        font-size: 11px;  /* ✅ Réduit de 14px à 11px */
+        line-height: 1.2;  /* ✅ Réduit de 1.3 à 1.2 */
+        margin: 0;
+        padding: 5px 10px;  /* ✅ Réduit de 8px 12px */
+        color: black;
+    }
+    
+    .content-wrapper {
+        max-width: 100%;
+        padding: 5px 10px;  /* ✅ Réduit */
+        box-sizing: border-box;
+    }
 
-        .header {
-            text-align: center;
-            margin-bottom: 5px;
-            border-bottom: 1px solid black;
-            padding-bottom: 5px;
-        }
-        
-        .titre {
-            font-size: 15px;  /* ✅ Augmenté de 14px à 15px */
-            font-weight: bold;
-            margin: 5px 0;
-            text-transform: uppercase;
-        }
-        
-        .annee {
-            font-size: 12px;  /* ✅ Augmenté de 11px à 12px */
-            font-weight: normal;
-        }
-        
-        .info {
-            margin: 8px 0;
-            background: none;
-            padding: 0;
-            font-size: 14px;
-        }
-        
-        .info p {
-            margin: 2px 0;
-            font-size: 14px;  /* ✅ Augmenté de 11px à 12px */
-        }
-        
-        /* Styles des tableaux */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 5px 0;
-            font-size: 12px;  /* ✅ Gardé à 11px pour le tableau */
-        }
-        
-        th, td {
-            border: 1px solid black;
-            padding: 4px 6px;  /* ✅ Augmenté de 3px 5px à 4px 6px */
-            text-align: left;
-        }
-        
-        .header-row th {
-            background: none;
-            font-weight: bold;
-            text-align: center;
-            text-transform: uppercase;
-            font-size: 12px;
-        }
-        
-        .ue-header {
-            background: none;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        
-        .ec-row td {
-            font-size: 12px;
-            padding-left: 15px;
-        }
-        
-        .note-center {
-            text-align: center;
-        }
-        
-        .synthese-row {
-            font-weight: bold;
-            background: none;
-            font-size: 12px;  /* ✅ Augmenté de 11px à 12px */
-        }
-        
-        .total-row {
-            font-weight: bold;
-            border-top: 2px solid black;
-        }
-        
-        .decision {
-            text-align: left;
-            font-size: 13px;  /* ✅ Augmenté de 12px à 13px */
-            font-weight: bold;
-            margin: 5px 0;
-            padding: 6px;  /* ✅ Augmenté de 5px à 6px */
-            border: 1px solid black;
-            text-transform: uppercase;
-        }
-        
-        .deliberation-info {
-            margin: 3px 0;
-            font-size: 10px;  /* ✅ Augmenté de 9px à 10px */
-            font-style: italic;
-            color: #666;
-        }
-        
-        .deliberation-info p {
-            margin: 1px 0;
-        }
-        
-        .note-admission {
-            margin: 5px 0;
-            font-size: 11px;  /* ✅ Augmenté de 9px à 10px */
-            font-style: italic;
-        }
-        
-        .note-admission p {
-            margin: 2px 0;
-        }
-        
-        .date-generation {
-            text-align: right;
-            font-size: 11px;  /* ✅ Augmenté de 10px à 11px */
-            margin: 5px 0;
-        }
+    .header {
+        text-align: center;
+        margin-bottom: 3px;  /* ✅ Réduit de 5px à 3px */
+        border-bottom: 1px solid black;
+        padding-bottom: 2px;
+    }
+    
+    .titre {
+        font-size: 14px;  /* ✅ Réduit de 15px à 14px */
+        font-weight: bold;
+        margin: 3px 0;  /* ✅ Réduit de 5px à 3px */
+        text-transform: uppercase;
+    }
+    
+    .annee {
+        font-size: 10px;  /* ✅ Réduit de 12px à 10px */
+        font-weight: normal;
+    }
+    
+    .info {
+        margin: 5px 0;  /* ✅ Réduit de 8px à 5px */
+        background: none;
+        padding: 0;
+        font-size: 11px;  /* ✅ Réduit */
+    }
+    
+    .info p {
+        margin: 1px 0;  /* ✅ Réduit de 2px à 1px */
+        font-size: 11px;
+    }
+    
+    /* Styles des tableaux */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 3px 0;  /* ✅ Réduit de 5px à 3px */
+        font-size: 10px;  /* ✅ Réduit */
+    }
+    
+    th, td {
+        border: 1px solid black;
+        padding: 2px 4px;  /* ✅ Réduit de 4px 6px */
+        text-align: left;
+    }
+    
+    .header-row th {
+        background: none;
+        font-weight: bold;
+        text-align: center;
+        text-transform: uppercase;
+        font-size: 10px;
+    }
+    
+    .ue-header {
+        background: none;
+        font-weight: bold;
+        font-size: 10px;
+    }
+    
+    .ec-row td {
+        font-size: 10px;
+        padding-left: 10px;
+    }
+    
+    .note-center {
+        text-align: center;
+    }
+    
+    .synthese-row {
+        font-weight: bold;
+        background: none;
+        font-size: 10px;
+    }
+    
+    .total-row {
+        font-weight: bold;
+        border-top: 2px solid black;
+    }
+    
+    .decision {
+        text-align: left;
+        font-size: 11px;  /* ✅ Réduit */
+        font-weight: bold;
+        margin: 3px 0;  /* ✅ Réduit */
+        padding: 4px;  /* ✅ Réduit */
+        border: 1px solid black;
+        text-transform: uppercase;
+    }
+    
+    .note-admission {
+        margin: 3px 0;  /* ✅ Réduit */
+        font-size: 9px;  /* ✅ Réduit */
+        font-style: italic;
+    }
+    
+    .note-admission p {
+        margin: 1px 0;
+    }
+    
+    .date-generation {
+        text-align: right;
+        font-size: 9px;  /* ✅ Réduit */
+        margin: 3px 0;
+    }
 
-        .signature-space {
-            height: 80px;  /* ✅ Réduit de 60px à 50px */
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }
+    .signature-space {
+        height: 50px;  /* ✅ Réduit de 80px à 50px */
+        margin-top: 15px;  /* ✅ Réduit */
+        margin-bottom: 10px;
+    }
 
-        .footer-info {
-            position: fixed;
-            left:0px;
-            right:0px;
-            margin-top: 30px;  /* ✅ Espace avant le footer */
-            text-align: center;
-            font-size: 10px;  /* ✅ Augmenté de 9px à 10px */
-            border-top: 1px solid black;
-            padding: 8px 15px;
-            background: white;
-        }
-                
-        .footer-info p {
-            margin: 2px 0;
-        }
+    .footer-info {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 8px;  /* ✅ Réduit */
+        border-top: 1px solid black;
+        padding: 5px 10px;  /* ✅ Réduit */
+        background: white;
+    }
+            
+    .footer-info p {
+        margin: 1px 0;
+    }
 
-        
-        @media print {
-            body { 
-                margin: 0; 
-                padding: 8px 12px;
-            }
-            .content-wrapper { 
-                page-break-inside: avoid;
-            }
+    @media print {
+        body { 
+            margin: 0; 
+            padding: 5px 10px;
         }
+        .content-wrapper { 
+            page-break-inside: avoid;
+        }
+    }
 
-        /* ✅ QR CODE STYLES */
-        .footer-qrcode {
-            float: left;
-            text-align: center;
-            margin: 5px 0;
-            padding: 5px;
-        }
-        
-        .qr-img {
-            width: 100px;
-            height: 100px;
-            display: block;
-            margin: 0 auto;
-        }
-        
-        .qr-legend {
-            font-size: 8px;
-            color: #666;
-            margin-top: 2px;
-            font-style: italic;
-        }
-    </style>
+    /* ✅ QR CODE STYLES */
+    .footer-qrcode {
+        float: left;
+        text-align: center;
+        margin: 3px 0;
+        padding: 3px;
+    }
+    
+    .qr-img {
+        width: 80px;  /* ✅ Réduit de 100px à 80px */
+        height: 80px;
+        display: block;
+        margin: 0 auto;
+    }
+    
+    .qr-legend {
+        font-size: 7px;
+        color: #666;
+        margin-top: 1px;
+        font-style: italic;
+    }
+</style>
 </head>
 <body>
     <div class="content-wrapper">
@@ -202,7 +190,7 @@
                          alt="En-tête Faculté de Médecine"
                          style="max-width: 100%; height: auto;">
                 @endif
-                <hr style="border: none; height: 1px; background-color: rgba(0, 0, 0, 0.2); margin: 15px 0;">
+                <hr style="border: none; height: 1px; background-color: rgba(0, 0, 0, 0.2); margin: 8px 0;">
             </div>
             <h1 class="titre">RELEVÉ DE NOTES</h1>
             <span class="annee">Année universitaire: {{ $session->anneeUniversitaire->libelle ?? 'Année universitaire' }}</span>
