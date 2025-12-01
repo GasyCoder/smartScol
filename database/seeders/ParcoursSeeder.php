@@ -37,6 +37,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MG',
                 'nom' => 'Médecine Générale',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -45,6 +46,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'DENT',
                 'nom' => 'Chirurgie Dentaire',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -53,6 +55,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'INF-G',
                 'nom' => 'Infirmier Général',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -61,6 +64,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'INF-A',
                 'nom' => 'Infirmier Anesthésiste',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -69,6 +73,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MAI',
                 'nom' => 'Maïeutique',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -77,6 +82,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'VET',
                 'nom' => 'Vétérinaire',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -85,6 +91,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'DIET',
                 'nom' => 'Diététique',
                 'niveau_id' => $niveauPACES->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
         ];
@@ -99,6 +106,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MG',
                 'nom' => 'Médecine Générale',
                 'niveau_id' => $niveauL2->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -107,6 +115,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'INF-G',
                 'nom' => 'Infirmier Général',
                 'niveau_id' => $niveauL2->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -115,6 +124,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'INF-A',
                 'nom' => 'Infirmier Anesthésiste',
                 'niveau_id' => $niveauL2->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -123,6 +133,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MAI',
                 'nom' => 'Maïeutique',
                 'niveau_id' => $niveauL2->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -131,6 +142,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'DIET',
                 'nom' => 'Diététique',
                 'niveau_id' => $niveauL2->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
         ];
@@ -145,6 +157,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MG',
                 'nom' => 'Médecine Générale',
                 'niveau_id' => $niveauL3->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -153,6 +166,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'INF-G',
                 'nom' => 'Infirmier Général',
                 'niveau_id' => $niveauL3->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -161,6 +175,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'INF-A',
                 'nom' => 'Infirmier Anesthésiste',
                 'niveau_id' => $niveauL3->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -169,6 +184,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MAI',
                 'nom' => 'Maïeutique',
                 'niveau_id' => $niveauL3->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
 
@@ -177,6 +193,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'DIET',
                 'nom' => 'Diététique',
                 'niveau_id' => $niveauL3->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
         ];
@@ -191,6 +208,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MG',
                 'nom' => 'Médecine Générale',
                 'niveau_id' => $niveauM1->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
         ];
@@ -205,6 +223,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MG',
                 'nom' => 'Médecine Générale',
                 'niveau_id' => $niveauM2->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
         ];
@@ -219,6 +238,7 @@ class ParcoursSeeder extends Seeder
                 'abr' => 'MG',
                 'nom' => 'Médecine Générale',
                 'niveau_id' => $niveauD1->id,
+                'is_ifirp' => false,
                 'is_active' => true,
             ],
         ];

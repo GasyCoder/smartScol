@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('abr', 10)->comment('Ex: MG, DENT, INF');
             $table->string('nom', 100)->comment('Ex: Médecine générale, Dentaire, Infirmier');
             $table->unsignedBigInteger('niveau_id')->comment('Niveau auquel appartient ce parcours');
+            $table->boolean('is_ifirp')->default(false);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 

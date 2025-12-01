@@ -349,7 +349,6 @@ class ReleveNotesOriginale extends Component
             $notesValues = [];
             $hasZeroInUE = false;
 
-            // Parcourir les notes de chaque EC
             foreach ($resultatsUE as $resultat) {
                 $noteEC = floatval($resultat->note);
                 
@@ -367,20 +366,12 @@ class ReleveNotesOriginale extends Component
                 }
             }
 
-            // ✅ Moyenne UE = somme des notes / nombre d'ECs (VRAIE MOYENNE)
             $moyenneUE = count($notesValues) > 0 ? 
                 round(array_sum($notesValues) / count($notesValues), 2) : 0;
 
-            // ✅ UE validée si moyenne >= 10 ET pas de note 0
             $ueValidee = ($moyenneUE >= 10) && !$hasZeroInUE;
-            
-            // ✅ LOGIQUE TOUT OU RIEN : Si UE validée → tous les crédits, sinon 0
             $creditsValidesUE = $ueValidee ? $creditsUE : 0;
-            
-            // Ajouter au total des crédits validés
             $creditsValides += $creditsValidesUE;
-
-            // Ajouter la moyenne UE pour le calcul de la moyenne générale
             $moyennesUE[] = $moyenneUE;
 
             $uesData[] = [
@@ -420,37 +411,43 @@ class ReleveNotesOriginale extends Component
         });
 
         // ===== 5. CALCUL MOYENNE GÉNÉRALE =====
-        // Moyenne générale = moyenne des moyennes UE
         $moyenneGenerale = count($moyennesUE) > 0 ? 
             round(array_sum($moyennesUE) / count($moyennesUE), 2) : 0;
 
-        // ✅ Utiliser la décision depuis la BDD
         $decision = $decisionDB;
 
         // ===== 6. CALCUL DU NIVEAU SUIVANT ET MESSAGES =====
         $niveauSuivant = null;
         $messageAdmission = 'ADMIS(E)';
         $messageRedoublement = 'AUTORISÉ(E) À REDOUBLER';
+        $estSortantIfirp = false;
         
         if ($etudiant->niveau) {
             $niveauId = $etudiant->niveau->id;
             $niveauAbr = $etudiant->niveau->abr ?? '';
             $niveauNom = $etudiant->niveau->nom ?? '';
             
-            // Si niveau >= 2 (pas L1)
-            if ($niveauId >= 2) {
-                // Extraire le numéro de l'année
+            // ✅ VÉRIFIER SI L3 IFIRP (SORTANT)
+            $isL3 = ($niveauId == 3 || $niveauAbr === 'L3');
+            $isIfirp = $etudiant->parcours && $etudiant->parcours->is_ifirp == 1;
+            $estSortantIfirp = $isL3 && $isIfirp;
+            
+            // Si sortant IFIRP, message spécifique
+            if ($estSortantIfirp) {
+                $messageAdmission = 'SORTANT(E)';
+                $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN L3 (3e année)";
+                $niveauSuivant = null;
+            }
+            // Si niveau >= 2 (pas L1) et pas sortant IFIRP
+            elseif ($niveauId >= 2) {
                 $numeroActuel = null;
                 
-                // Cas 1: Format "L2", "L3" → Licence
                 if (preg_match('/^L(\d+)$/i', $niveauAbr, $matches)) {
                     $numeroActuel = (int)$matches[1];
                 }
-                // Cas 2: Format "2e année", "3e année", "4e année", etc.
                 elseif (preg_match('/(\d+)(?:e|ère|eme)/i', $niveauNom, $matches)) {
                     $numeroActuel = (int)$matches[1];
                 }
-                // Cas 3: Format direct "2", "3", "4", etc.
                 elseif (is_numeric($niveauAbr)) {
                     $numeroActuel = (int)$niveauAbr;
                 }
@@ -458,31 +455,20 @@ class ReleveNotesOriginale extends Component
                 if ($numeroActuel) {
                     $numeroSuivant = $numeroActuel + 1;
                     
-                    // ✅ RÈGLE DE NOMENCLATURE :
-                    // - 1ère année → 2e année (L2)
-                    // - 2e année (L2) → 3e année (L3)
-                    // - 3e année (L3) → 4e année (pas L4)
-                    // - 4e année → 5e année
-                    // - 5e année → 6e année
-                    // - etc.
-                    
                     if ($numeroSuivant == 2) {
                         $niveauSuivant = "L2 (2e année)";
                     } elseif ($numeroSuivant == 3) {
                         $niveauSuivant = "L3 (3e année)";
                     } else {
-                        // 4 et plus : "4e année", "5e année", etc.
                         $niveauSuivant = $numeroSuivant . "e année";
                     }
                     
-                    // Messages selon session
                     if ($session->type === 'Rattrapage') {
                         $messageAdmission = "ADMIS(E) EN {$niveauSuivant} APRÈS REPÊCHAGE";
                     } else {
                         $messageAdmission = "ADMIS(E) EN {$niveauSuivant} À LA PREMIÈRE SESSION";
                     }
                     
-                    // Message redoublement
                     if ($numeroActuel == 2) {
                         $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN L2 (2e année)";
                     } elseif ($numeroActuel == 3) {
@@ -517,23 +503,12 @@ class ReleveNotesOriginale extends Component
         $deliberation = null;
         
         try {
-            // Chercher dans deliber_paces pour ce niveau/parcours/session
             $deliberation = DeliberPaces::where('niveau_id', $etudiant->niveau_id)
                 ->where('parcours_id', $etudiant->parcours_id)
                 ->where('session_exam_id', $sessionId)
                 ->where('type', 'deliberation')
                 ->latest('applique_at')
                 ->first();
-            
-            // ✅ Log uniquement en cas d'absence de délibération
-            if (!$deliberation) {
-                Log::info('⚠️ Aucune délibération PACES trouvée', [
-                    'etudiant_id' => $etudiantId,
-                    'niveau_id' => $etudiant->niveau_id,
-                    'parcours_id' => $etudiant->parcours_id,
-                    'session_exam_id' => $sessionId
-                ]);
-            }
         } catch (\Exception $e) {
             Log::error('❌ Erreur récupération délibération PACES', [
                 'error' => $e->getMessage(),
@@ -555,10 +530,10 @@ class ReleveNotesOriginale extends Component
                 'has_note_eliminatoire' => $hasNoteEliminatoire,
                 'session_deliberee' => $sessionDeliberee,
                 'parametres_deliberation' => $parametresDeliberation,
-                // ✅ Nouvelles infos pour affichage niveau
                 'niveau_suivant' => $niveauSuivant,
                 'message_admission' => $messageAdmission,
-                'message_redoublement' => $messageRedoublement
+                'message_redoublement' => $messageRedoublement,
+                'est_sortant_ifirp' => $estSortantIfirp
             ],
             'deliberation' => $deliberation,
             'date_generation' => now()->format('d/m/Y'),

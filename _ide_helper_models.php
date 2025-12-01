@@ -528,6 +528,7 @@ namespace App\Models{
  * @property string $abr Ex: MG, DENT, INF
  * @property string $nom Ex: Médecine générale, Dentaire, Infirmier
  * @property int $niveau_id Niveau auquel appartient ce parcours
+ * @property bool $is_ifirp
  * @property bool $is_active
  * @property int|null $quota_admission
  * @property \Illuminate\Support\Carbon|null $created_at
@@ -548,6 +549,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereIsIfirp($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereQuotaAdmission($value)

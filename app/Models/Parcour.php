@@ -15,11 +15,13 @@ class Parcour extends Model
         'abr',
         'nom',
         'niveau_id',
-        'is_active'
+        'is_active',
+        'is_ifirp',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_ifirp' => 'boolean',
     ];
 
     /**
