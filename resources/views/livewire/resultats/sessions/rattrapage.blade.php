@@ -86,13 +86,13 @@
                 <div class="flex items-center space-x-2">
                     <div class="flex items-center space-x-3">
                         {{-- Bouton Export Excel --}}
-                        {{-- <button wire:click="exporterExcel" 
+                        <button wire:click="exporterExcel" 
                                 wire:loading.attr="disabled"
                                 class="flex items-center px-4 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
                             <em class="mr-2 ni ni-file-excel" wire:loading.class="animate-spin" wire:target="exporterExcel"></em>
                             <span wire:loading.remove wire:target="exporterExcel">Export tableau Excel</span>
                             <span wire:loading wire:target="exporterExcel">Export...</span>
-                        </button> --}}
+                        </button>
                         {{-- Bouton Actualiser --}}
                         <button wire:click="forceReloadData"
                                 wire:loading.attr="disabled"
