@@ -840,176 +840,131 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
     private function executerEtape1Rattrapage($examenId, $sessionRattrapageId, $sessionRattrapage)
     {
         try {
-            // 1. Trouver la session normale correspondante
+            // 1. Session normale correspondante (même année universitaire)
             $sessionNormale = SessionExam::where('annee_universitaire_id', $sessionRattrapage->annee_universitaire_id)
                 ->where('type', 'Normale')
                 ->first();
 
             if (!$sessionNormale) {
-                return [
-                    'success' => false,
-                    'message' => 'Session normale correspondante introuvable pour ce rattrapage.',
-                ];
+                return ['success' => false, 'message' => 'Session normale introuvable pour cet année universitaire'];
             }
 
-            // ✅ CORRECTION PRINCIPALE : Récupérer SEULEMENT les étudiants éligibles au rattrapage
-            $etudiantsEligibles = $this->getEtudiantsEligiblesRattrapage($examenId, $sessionNormale->id, $sessionRattrapage->id);
-            
-            if ($etudiantsEligibles->isEmpty()) {
-                return [
-                    'success' => false,
-                    'message' => 'Aucun étudiant éligible au rattrapage trouvé.',
-                ];
+            // 2. Récupérer les étudiants éligibles au rattrapage
+            $eligibles = $this->getEtudiantsEligiblesRattrapage($examenId, $sessionNormale->id, $sessionRattrapageId);
+
+            if ($eligibles->isEmpty()) {
+                return ['success' => false, 'message' => 'Aucun étudiant éligible au rattrapage'];
             }
 
-            $etudiantsEligiblesIds = $etudiantsEligibles->pluck('etudiant_id')->toArray();
+            $etudiantsEligiblesIds = $eligibles->pluck('etudiant_id')->toArray(); // ← CORRIGÉ
 
-            // 2. Récupérer SEULEMENT les résultats des étudiants éligibles (pas les admis)
+            // 3. Notes de la session normale (seulement pour les éligibles)
             $resultatsNormale = ResultatFinal::where('examen_id', $examenId)
                 ->where('session_exam_id', $sessionNormale->id)
                 ->where('statut', ResultatFinal::STATUT_PUBLIE)
-                ->whereIn('etudiant_id', $etudiantsEligiblesIds) // ✅ FILTRAGE CRUCIAL
+                ->whereIn('etudiant_id', $etudiantsEligiblesIds)
                 ->get()
-                ->groupBy(function($item) {
+                ->keyBy(function ($item) {
                     return $item->etudiant_id . '_' . $item->ec_id;
                 });
 
             if ($resultatsNormale->isEmpty()) {
-                return [
-                    'success' => false,
-                    'message' => 'Aucun résultat de session normale trouvé pour les étudiants éligibles au rattrapage.',
-                ];
+                return ['success' => false, 'message' => 'Aucune note trouvée en session normale pour les étudiants éligibles'];
             }
 
-            // 3. Récupérer copies de rattrapage RÉELLES
-            $copiesRattrapage = Copie::where('examen_id', $examenId)
-                ->where('session_exam_id', $sessionRattrapageId)
-                ->whereNotNull('note')
-                ->with(['codeAnonymat'])
-                ->get();
+            // 4. Copies du rattrapage (avec jointure propre pour éviter ambiguïté SQL)
+            $copiesRattrapage = Copie::where('copies.examen_id', $examenId)
+                ->where('copies.session_exam_id', $sessionRattrapageId)
+                ->whereNotNull('copies.note')
+                ->whereNotNull('copies.code_anonymat_id')
+                ->join('manchettes as m', function ($join) use ($sessionRattrapageId, $examenId) {
+                    $join->on('m.code_anonymat_id', '=', 'copies.code_anonymat_id')
+                        ->where('m.session_exam_id', $sessionRattrapageId)
+                        ->where('m.examen_id', $examenId);
+                })
+                ->join('etudiants as e', 'm.etudiant_id', '=', 'e.id')
+                ->select('copies.*', 'm.etudiant_id', 'copies.ec_id', 'copies.note', 'copies.code_anonymat_id')
+                ->get()
+                ->keyBy(function ($copie) {
+                    return $copie->etudiant_id . '_' . $copie->ec_id;
+                });
 
-            // 4. Vérifier les résultats fusion existants
-            $resultatsExistants = ResultatFusion::where('examen_id', $examenId)
+            // 5. Éviter les doublons (résultats déjà fusionnés)
+            $existants = ResultatFusion::where('examen_id', $examenId)
                 ->where('session_exam_id', $sessionRattrapageId)
                 ->get()
-                ->groupBy(function($item) {
+                ->keyBy(function ($item) {
                     return $item->etudiant_id . '_' . $item->ec_id;
                 });
 
-            // 5. Grouper les copies par étudiant + EC
-            $copiesParEtudiantEc = collect();
-            foreach ($copiesRattrapage as $copie) {
-                $etudiant = $copie->etudiant;
-                
-                if ($etudiant) {
-                    $cle = $etudiant->id . '_' . $copie->ec_id;
-                    $copiesParEtudiantEc->put($cle, [
-                        'etudiant_id' => $etudiant->id,
-                        'ec_id' => $copie->ec_id,
-                        'note' => $copie->note,
-                        'code_anonymat_id' => $copie->code_anonymat_id,
-                        'copie' => $copie
-                    ]);
-                }
-            }
-
             $resultatsAInserer = [];
-            $resultatsGeneres = 0;
+            $compteur = 0;
 
-            // 6. LOGIQUE PRINCIPALE : Pour chaque résultat de session normale (étudiants éligibles seulement)
-            foreach ($resultatsNormale as $cleNormale => $resultatsGroupe) {
-                $resultatNormale = $resultatsGroupe->first();
-                $etudiantId = $resultatNormale->etudiant_id;
-                $ecId = $resultatNormale->ec_id;
-                $noteNormale = $resultatNormale->note;
+            foreach ($resultatsNormale as $key => $resNormale) {
+                [$etudiantId, $ecId] = explode('_', $key);
 
-                // ✅ VÉRIFICATION SUPPLÉMENTAIRE : S'assurer que l'étudiant est bien éligible
-                if (!in_array($etudiantId, $etudiantsEligiblesIds)) {
+                // Ne pas retraiter
+                if ($existants->has($key)) {
                     continue;
                 }
 
-                // Vérifier si déjà traité
-                if ($resultatsExistants->has($cleNormale)) {
-                    continue;
-                }
-
-                // Chercher s'il y a une copie de rattrapage pour cet étudiant/EC
-                $copieRattrapageData = $copiesParEtudiantEc->get($cleNormale);
+                $noteNormale = $resNormale->note;
                 $noteRattrapage = null;
-                $codeAnonymatId = null;
+                $codeAnonymatId = $resNormale->code_anonymat_id; // par défaut
 
-                if ($copieRattrapageData) {
-                    $noteRattrapage = $copieRattrapageData['note'];
-                    $codeAnonymatId = $copieRattrapageData['code_anonymat_id'];
+                // S'il y a une copie de rattrapage pour cet étudiant + EC
+                if ($copiesRattrapage->has($key)) {
+                    $copie = $copiesRattrapage->get($key);
+                    $noteRattrapage = $copie->note;
+                    $codeAnonymatId = $copie->code_anonymat_id;
                 }
 
-                // FUSION DES NOTES : Appliquer la logique médecine
+                // LOGIQUE MÉDECINE CORRIGÉE : on prend TOUJOURS la note de rattrapage si elle existe
                 $noteFinale = $this->determinerMeilleureNote($noteNormale, $noteRattrapage);
-                $sourceNote = $this->determinerSourceNote($noteNormale, $noteRattrapage, $noteFinale);
 
-                // Créer le code anonymat pour rattrapage si pas existant
-                if (!$codeAnonymatId) {
-                    $codeAnonymat = CodeAnonymat::firstOrCreate([
-                        'examen_id' => $examenId,
-                        'ec_id' => $ecId,
-                        'code_complet' => "RAT-{$ecId}-{$etudiantId}-" . time(),
-                    ], [
-                        'sequence' => $etudiantId * 1000 + $ecId
-                    ]);
-                    $codeAnonymatId = $codeAnonymat->id;
-                }
-
-                // Créer le résultat fusion SANS metadata
                 $resultatsAInserer[] = [
-                    'etudiant_id' => $etudiantId,
-                    'examen_id' => $examenId,
-                    'code_anonymat_id' => $codeAnonymatId,
-                    'ec_id' => $ecId,
-                    'note' => $noteFinale,
-                    'genere_par' => Auth::id(),
-                    'statut' => ResultatFusion::STATUT_VERIFY_1,
-                    'etape_fusion' => 1,
-                    'session_exam_id' => $sessionRattrapageId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'etudiant_id'       => $etudiantId,
+                    'examen_id'         => $examenId,
+                    'ec_id'             => $ecId,
+                    'code_anonymat_id'  => $codeAnonymatId,
+                    'note'              => $noteFinale,
+                    'genere_par'        => Auth::id(),
+                    'statut'            => ResultatFusion::STATUT_VERIFY_1,
+                    'etape_fusion'      => 1,
+                    'session_exam_id'   => $sessionRattrapageId,
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
                 ];
 
-                $resultatsGeneres++;
+                $compteur++;
             }
 
-            // 7. Insérer les résultats en masse
+            // Insertion en masse
             if (!empty($resultatsAInserer)) {
-                $chunks = array_chunk($resultatsAInserer, 500);
-                foreach ($chunks as $chunk) {
-                  DB::table('resultats_fusion')->upsert(
+                foreach (array_chunk($resultatsAInserer, 500) as $chunk) {
+                    DB::table('resultats_fusion')->upsert(
                         $chunk,
                         ['etudiant_id', 'examen_id', 'ec_id', 'session_exam_id'],
-                        ['code_anonymat_id', 'note', 'statut', 'etape_fusion', 'genere_par', 'updated_at']
+                        ['note', 'code_anonymat_id', 'statut', 'etape_fusion', 'genere_par', 'updated_at']
                     );
                 }
             }
 
             return [
                 'success' => true,
-                'resultats_generes' => $resultatsGeneres,
-                'fusion_rattrapage' => true,
-                'etudiants_eligibles_traites' => count($etudiantsEligiblesIds),
-                'notes_normales_recuperees' => $resultatsNormale->count(),
-                'copies_rattrapage_integrees' => $copiesRattrapage->count()
+                'resultats_generes' => $compteur,
+                'message' => "$compteur notes fusionnées (rattrapage prioritaire)"
             ];
 
         } catch (\Exception $e) {
-            Log::error('Erreur fusion rattrapage corrigée', [
+            \Log::error('Erreur fusion rattrapage', [
                 'examen_id' => $examenId,
-                'session_rattrapage_id' => $sessionRattrapageId,
+                'session_id' => $sessionRattrapageId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return [
-                'success' => false,
-                'message' => 'Erreur lors de la fusion rattrapage : ' . $e->getMessage(),
-            ];
+            return ['success' => false, 'message' => 'Erreur : ' . $e->getMessage()];
         }
     }
 
@@ -1080,18 +1035,19 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
      */
     private function determinerMeilleureNote($noteNormale, $noteRattrapage)
     {
-        // Si pas de note de rattrapage, garder la normale
+        // Cas 1 : Pas de rattrapage passé → on garde la note normale
         if ($noteRattrapage === null) {
             return $noteNormale;
         }
 
-        // Si note de rattrapage = 0 et normale > 0 → Note éliminatoire
-        if ($noteRattrapage == 0 && $noteNormale > 0) {
+        // Cas 2 : Note de rattrapage = 0 → ÉLIMINATOIRE (règle médecine)
+        if ($noteRattrapage == 0) {
             return 0;
         }
 
-        // Sinon prendre la meilleure note
-        return max($noteNormale, $noteRattrapage);
+        // Cas 3 : Il y a une note de rattrapage valide → ON PREND TOUJOURS LA NOTE DE RATTRAPAGE
+        // (même si elle est inférieure !)
+        return $noteRattrapage;
     }
 
     /**

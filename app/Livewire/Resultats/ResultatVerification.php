@@ -9,7 +9,9 @@ use App\Models\Examen;
 use App\Models\Niveau;
 use App\Models\Parcour;
 use Livewire\Component;
+use App\Models\Etudiant;
 use App\Models\SessionExam;
+use Livewire\WithPagination;
 use App\Models\PresenceExamen;
 use App\Models\ResultatFusion;
 use App\Services\FusionService;
@@ -19,7 +21,6 @@ use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Services\CalculAcademiqueService;
 use App\Exports\ResultatsVerificationExport;
-use Livewire\WithPagination;
 
 /**
  * @property \Illuminate\Support\Collection $niveaux
@@ -91,13 +92,35 @@ class ResultatVerification extends Component
             return;
         }
 
-        $this->sessionActive = SessionExam::where('is_active', true)
-            ->where('is_current', true)
+        // MODIFICATION CRITIQUE ICI : 
+        // Au lieu de chercher la session active, on cherche spécifiquement la session "Rattrapage"
+        $this->sessionActive = SessionExam::where('type', 'Rattrapage')
+            ->where('annee_universitaire_id', function($query) {
+                // Optionnel : filtrer par l'année universitaire active
+                $query->select('id')
+                    ->from('annees_universitaires')
+                    ->where('is_active', true)
+                    ->limit(1);
+            })
             ->with('anneeUniversitaire')
             ->first();
 
+        // Fallback : si on ne trouve pas par type, chercher par ID 2
         if (!$this->sessionActive) {
-            toastr()->error('Aucune session active trouvée.');
+            $this->sessionActive = SessionExam::find(2); // ID de la session rattrapage
+        }
+
+        // Fallback ultime : prendre la première session de rattrapage
+        if (!$this->sessionActive) {
+            $this->sessionActive = SessionExam::where('type', 'like', '%rattrapage%')
+                ->orWhere('type', 'like', '%session2%')
+                ->orWhere('type', 'like', '%compensatoire%')
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        if (!$this->sessionActive) {
+            toastr()->error('Session de rattrapage non trouvée. Vérifiez les sessions dans la base de données.');
             return;
         }
 
@@ -593,7 +616,7 @@ class ResultatVerification extends Component
     // Nouvelle méthode pour récupérer les étudiants avec au moins un résultat
     private function getEtudiantsAvecResultats()
     {
-        $query = \App\Models\Etudiant::whereHas('resultatsFusion', function($q) {
+        $query = Etudiant::whereHas('resultatsFusion', function($q) {
             $q->where('examen_id', $this->examenId)
               ->where('session_exam_id', $this->sessionActive->id)
               ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
