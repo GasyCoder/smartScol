@@ -636,113 +636,145 @@ class ResultatVerification extends Component
                     ->get();
     }
 
-    // Nouvelle méthode pour générer le dataset complet
+
+    /**
+     * Génère le dataset complet Étudiant × EC.
+     * En session "Rattrapage", on n'affiche QUE les EC qui ont
+     * effectivement un résultat dans cette session (pas de lignes vides).
+     */
     private function genererDatasetComplet($etudiants, $ecs)
     {
         $datasetComplet = collect();
 
-        // Charger les utilisateurs une seule fois pour optimiser les performances
-        $userIds = [];
-        $usersCache = [];
+        // 1. Récupérer toutes les copies de la SESSION ACTIVE uniquement
+        $copiesCollection = Copie::where('examen_id', $this->examenId)
+            ->where('session_exam_id', $this->sessionActive->id)
+            ->with(['utilisateurSaisie:id,name', 'utilisateurModification:id,name'])
+            ->get();
 
-        // Récupérer tous les résultats existants avec les relations utilisateurs
-        $resultatsExistants = ResultatFusion::where('examen_id', $this->examenId)
+        // Codes anonymat et EC réellement présents dans cette session (normal ou rattrapage)
+        $codesActifs = $copiesCollection->pluck('code_anonymat_id')->unique()->values();
+        $ecsActifs   = $copiesCollection->pluck('ec_id')->unique()->values();
+
+        // Index des copies par (code_anonymat_id + ec_id)
+        $copies = $copiesCollection->keyBy(function ($copie) {
+            return $copie->code_anonymat_id . '_' . $copie->ec_id;
+        });
+
+        // 2. Récupérer les résultats de fusion de la session ACTIVE,
+        //    uniquement pour les copies réellement présentes dans cette session
+        $resultatsQuery = ResultatFusion::where('examen_id', $this->examenId)
             ->where('session_exam_id', $this->sessionActive->id)
             ->whereIn('statut', [ResultatFusion::STATUT_VERIFY_1, ResultatFusion::STATUT_VERIFY_2])
             ->where('etape_fusion', $this->etapeFusion)
             ->with([
-                'etudiant:id,matricule,nom,prenom', 
-                'ec:id,nom,enseignant,ue_id', 
+                'etudiant:id,matricule,nom,prenom',
+                'ec:id,nom,enseignant,ue_id',
                 'ec.ue:id,nom,abr,credits'
-            ])
-            ->get()
-            ->keyBy(function($item) {
+            ]);
+
+        // Important : ne garder que les résultats qui correspondent à de vraies copies
+        if ($codesActifs->isNotEmpty()) {
+            $resultatsQuery->whereIn('code_anonymat_id', $codesActifs);
+        }
+        if ($ecsActifs->isNotEmpty()) {
+            $resultatsQuery->whereIn('ec_id', $ecsActifs);
+        }
+
+        $resultatsExistants = $resultatsQuery->get()
+            ->keyBy(function ($item) {
                 return $item->etudiant_id . '_' . $item->ec_id;
             });
 
-        // Récupérer toutes les copies avec les relations utilisateurs
-        $copies = Copie::where('examen_id', $this->examenId)
-            ->where('session_exam_id', $this->sessionActive->id)
-            ->with(['utilisateurSaisie:id,name', 'utilisateurModification:id,name'])
-            ->get()
-            ->keyBy(function($copie) {
-                return $copie->code_anonymat_id . '_' . $copie->ec_id;
-            });
+        // 3. Déterminer la liste des EC à parcourir
+        $ecsAParcourir = $ecs;
 
+        // Pour les sessions de RATTRAPAGE (ou assimilé), on limite aux EC qui ont au moins une copie
+        $typeSession = strtolower($this->sessionActive->type ?? '');
+        $isRattrapage = str_contains($typeSession, 'rattrap')
+            || str_contains($typeSession, 'session2')
+            || str_contains($typeSession, 'compens');
+
+        if ($isRattrapage && $ecsActifs->isNotEmpty()) {
+            $ecsAParcourir = $ecs->filter(function ($ec) use ($ecsActifs) {
+                return $ecsActifs->contains($ec->id);
+            })->values();
+        }
+
+        // 4. Construction du dataset complet (étudiants × EC)
         foreach ($etudiants as $etudiant) {
-            foreach ($ecs as $ec) {
+            foreach ($ecsAParcourir as $ec) {
                 $key = $etudiant->id . '_' . $ec->id;
                 $resultat = $resultatsExistants->get($key);
 
                 if ($resultat) {
+                    // On retrouve la copie à partir du code anonymat + EC
                     $copieKey = $resultat->code_anonymat_id . '_' . $resultat->ec_id;
                     $copie = $copies->get($copieKey);
 
                     $noteAffichee = $resultat->note;
-                    $sourceNote = 'resultats_fusion';
+                    $sourceNote   = 'resultats_fusion';
 
                     if ($copie && $copie->is_checked) {
                         $noteAffichee = $copie->note;
-                        $sourceNote = 'copies';
+                        $sourceNote   = 'copies';
                     }
 
-                    // Résoudre les noms des utilisateurs pour saisie_par et modifie_par
-                    $saisieParName = 'Inconnu';
+                    // Résolution des noms pour saisie/modification
+                    $saisieParName  = 'Inconnu';
                     $modifieParName = 'Inconnu';
 
                     if ($copie) {
-                        // Toujours résoudre saisie_par depuis la copie, car c'est requis dans la table
-                        $saisieParName = $copie->utilisateurSaisie ? $copie->utilisateurSaisie->name : 'Système';
-                        // Résoudre modifie_par si présent
+                        $saisieParName  = $copie->utilisateurSaisie ? $copie->utilisateurSaisie->name : 'Système';
                         $modifieParName = $copie->utilisateurModification ? $copie->utilisateurModification->name : 'Inconnu';
                     } elseif ($resultat->genere_par) {
-                        // Si pas de copie mais resultat généré par le système
                         $saisieParName = 'Système';
                     }
 
                     $datasetComplet->push([
-                        'resultat_id' => $resultat->id,
-                        'etudiant_id' => $etudiant->id,
-                        'matricule' => $etudiant->matricule,
-                        'nom' => $etudiant->nom,
-                        'prenom' => $etudiant->prenom,
-                        'ec_id' => $ec->id,
-                        'matiere' => $ec->nom,
-                        'enseignant' => $ec->enseignant ?? 'Non défini',
-                        'ue_id' => $ec->ue->id,
-                        'ue_nom' => $ec->ue->nom,
-                        'ue_abr' => $ec->ue->abr ?? 'UE',
-                        'ue_credits' => $ec->ue->credits ?? 0,
-                        'note_affichee' => $noteAffichee,
-                        'note_source' => $sourceNote,
-                        'note_old' => $copie->note_old ?? null,
-                        'is_checked' => $copie->is_checked ?? false,
-                        'commentaire' => $copie->commentaire ?? '',
-                        'copie_id' => $copie->id ?? null,
+                        'resultat_id'      => $resultat->id,
+                        'etudiant_id'      => $etudiant->id,
+                        'matricule'        => $etudiant->matricule,
+                        'nom'              => $etudiant->nom,
+                        'prenom'           => $etudiant->prenom,
+                        'ec_id'            => $ec->id,
+                        'matiere'          => $ec->nom,
+                        'enseignant'       => $ec->enseignant ?? 'Non défini',
+                        'ue_id'            => $ec->ue->id,
+                        'ue_nom'           => $ec->ue->nom,
+                        'ue_abr'           => $ec->ue->abr ?? 'UE',
+                        'ue_credits'       => $ec->ue->credits ?? 0,
+                        'note_affichee'    => $noteAffichee,
+                        'note_source'      => $sourceNote,
+                        'note_old'         => $copie->note_old ?? null,
+                        'is_checked'       => $copie->is_checked ?? false,
+                        'commentaire'      => $copie->commentaire ?? '',
+                        'copie_id'         => $copie->id ?? null,
                         'code_anonymat_id' => $resultat->code_anonymat_id,
-                        'created_at' => $copie->created_at ?? $resultat->created_at,
-                        'updated_at' => $copie->updated_at ?? $resultat->updated_at,
-                        'saisie_par' => $saisieParName,        // AJOUTÉ
-                        'modifie_par' => $modifieParName,      // AJOUTÉ
+                        'created_at'       => $copie->created_at ?? $resultat->created_at,
+                        'updated_at'       => $copie->updated_at ?? $resultat->updated_at,
+                        'saisie_par'       => $saisieParName,
+                        'modifie_par'      => $modifieParName,
                     ]);
                 } else {
-                    // EC sans résultat - afficher vide
+                    // EC sans résultat pour cet étudiant dans CETTE session
+                    // (seulement affiché en session normale ou si tu enlèves le filtrage ci-dessus)
                     $datasetComplet->push([
-                        'etudiant_id' => $etudiant->id,
-                        'matricule' => $etudiant->matricule,
-                        'nom' => $etudiant->nom,
-                        'prenom' => $etudiant->prenom,
-                        'ec_id' => $ec->id,
-                        'matiere' => $ec->nom,
-                        'enseignant' => $ec->enseignant ?? 'Non défini',
-                        'ue_id' => $ec->ue->id,
-                        'ue_nom' => $ec->ue->nom,
-                        'ue_abr' => $ec->ue->abr ?? 'UE',
-                        'ue_credits' => $ec->ue->credits ?? 0,
-                        'created_at' => null,
-                        'updated_at' => null,
-                        'saisie_par' => 'Inconnu',
-                        'modifie_par' => 'Inconnu',
+                        'etudiant_id'      => $etudiant->id,
+                        'matricule'        => $etudiant->matricule,
+                        'nom'              => $etudiant->nom,
+                        'prenom'           => $etudiant->prenom,
+                        'ec_id'            => $ec->id,
+                        'matiere'          => $ec->nom,
+                        'enseignant'       => $ec->enseignant ?? 'Non défini',
+                        'ue_id'            => $ec->ue->id,
+                        'ue_nom'           => $ec->ue->nom,
+                        'ue_abr'           => $ec->ue->abr ?? 'UE',
+                        'ue_credits'       => $ec->ue->credits ?? 0,
+                        'created_at'       => null,
+                        'updated_at'       => null,
+                        'saisie_par'       => 'Inconnu',
+                        'modifie_par'      => 'Inconnu',
                     ]);
                 }
             }
@@ -750,6 +782,9 @@ class ResultatVerification extends Component
 
         return $datasetComplet;
     }
+
+
+
 
     // Nouvelle méthode pour calculer les statistiques avec dataset complet
     private function calculerStatistiquesAvecDatasetComplet($datasetComplet)

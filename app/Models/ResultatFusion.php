@@ -431,29 +431,44 @@ class ResultatFusion extends Model
     /**
      * Retourne les statistiques de vérification pour un examen
      */
-    public static function getStatistiquesVerification($examenId, $etape = null)
+    public static function getStatistiquesVerification($examenId, $etape = null, $sessionId = null)
     {
-        $query = self::where('examen_id', $examenId);
+        // Base de la requête : examen concerné
+        $query = self::query()
+            ->where('examen_id', $examenId);
 
-        if ($etape) {
+        // Filtre par session (Normale / Rattrapage) si fourni
+        if (!is_null($sessionId)) {
+            $query->where('session_exam_id', $sessionId);
+        }
+
+        // Filtre par étape de fusion si fourni
+        if (!is_null($etape)) {
             $query->where('etape_fusion', $etape);
         }
 
-        $total = $query->count();
-        $verify1 = $query->where('statut', self::STATUT_VERIFY_1)->count();
-        $verify2 = $query->where('statut', self::STATUT_VERIFY_2)->count();
-        $verify3 = $query->where('statut', self::STATUT_VERIFY_3)->count();
-        $valide = $query->where('statut', self::STATUT_VALIDE)->count();
+        // On clone la requête de base pour éviter d'empiler les where
+        $baseQuery = $query;
+
+        $total   = (clone $baseQuery)->count();
+        $verify1 = (clone $baseQuery)->where('statut', self::STATUT_VERIFY_1)->count();
+        $verify2 = (clone $baseQuery)->where('statut', self::STATUT_VERIFY_2)->count();
+        $verify3 = (clone $baseQuery)->where('statut', self::STATUT_VERIFY_3)->count();
+        $valide  = (clone $baseQuery)->where('statut', self::STATUT_VALIDE)->count();
+
+        $termines = $verify3 + $valide;
 
         return [
-            'total' => $total,
+            'total'    => $total,
             'verify_1' => $verify1,
             'verify_2' => $verify2,
             'verify_3' => $verify3,
-            'valide' => $valide,
+            'valide'   => $valide,
             'en_cours' => $verify1 + $verify2,
-            'termines' => $verify3 + $valide,
-            'pourcentage_completion' => $total > 0 ? round((($verify3 + $valide) / $total) * 100, 1) : 0
+            'termines' => $termines,
+            'pourcentage_completion' => $total > 0
+                ? round(($termines / $total) * 100, 1)
+                : 0,
         ];
     }
 
@@ -529,5 +544,35 @@ class ResultatFusion extends Model
                 'message' => 'Erreur lors du retour : ' . $e->getMessage(),
             ];
         }
+    }
+
+
+    /**
+     * Retourne toutes les notes d'un étudiant pour UN examen et UNE session donnée
+     * (par exemple session de rattrapage).
+     *
+     * @param  int  $etudiantId   ID de l'étudiant
+     * @param  int  $examenId     ID de l'examen
+     * @param  int  $sessionId    ID de la session d'examen (ex: 2 pour Rattrapage)
+     * @return \Illuminate\Support\Collection
+     */
+    public static function getNotesEtudiantPourSession(
+    int $etudiantId,
+    int $examenId,
+    int $sessionExamId
+    ) {
+        return self::query()
+            ->where('etudiant_id', $etudiantId)
+            ->where('examen_id', $examenId)
+            ->where('session_exam_id', $sessionExamId)
+            ->whereIn('statut', [
+                self::STATUT_VERIFY_1,
+                self::STATUT_VERIFY_2,
+                self::STATUT_VERIFY_3,
+            ])
+            // On prend en priorité les lignes avec la plus grande étape de fusion
+            ->orderByDesc('etape_fusion')
+            ->get()
+            ->keyBy('ec_id'); // très important : indexé par EC
     }
 }

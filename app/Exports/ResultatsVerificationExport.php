@@ -28,14 +28,46 @@ class ResultatsVerificationExport implements FromArray, WithStyles, WithColumnWi
 
     public function __construct($resultats, $examen, $afficherMoyennesUE = false, $metadonnees = [])
     {
-        $this->resultats = collect($resultats);
         $this->examen = $examen;
         $this->afficherMoyennesUE = $afficherMoyennesUE;
         $this->metadonnees = $metadonnees;
+
+        // On part sur la collection brute envoyée par le composant Livewire
+        $collection = collect($resultats);
+
+        // Détection du type de session à partir des métadonnées
+        $sessionType = strtolower($metadonnees['session_info']['type'] ?? '');
+        $isRattrapage = str_contains($sessionType, 'rattrap')
+            || str_contains($sessionType, 'session2')
+            || str_contains($sessionType, 'compens');
+
+        if ($isRattrapage) {
+            // 1) On récupère tous les EC qui ont AU MOINS une copie dans cette session
+            $ecIdsAvecCopies = $collection
+                ->filter(function ($row) {
+                    // copie_id non nul => il y a une copie réelle en session active
+                    return !empty($row['copie_id']);
+                })
+                ->pluck('ec_id')
+                ->unique()
+                ->values();
+
+            // 2) On ne garde que les lignes correspondant à ces EC
+            //    => les UE/EC sans copie (uniquement issues de la fusion) sont exclus
+            $collection = $collection->filter(function ($row) use ($ecIdsAvecCopies) {
+                return $ecIdsAvecCopies->contains($row['ec_id']);
+            });
+        }
+
+        // Données filtrées (ou non, si session normale)
+        $this->resultats = $collection;
+
+        // Reste de l'initialisation inchangé
         $this->ueColumns = [];
         $this->prepareUEStructure();
         $this->prepareData();
     }
+
 
     public function title(): string
     {

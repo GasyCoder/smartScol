@@ -168,7 +168,10 @@ namespace App\Models{
  * @property int $session_exam_id
  * @property int|null $quota_admission Quota d'admission appliqué
  * @property int $credits_requis Crédits requis
- * @property string $moyenne_requise Moyenne minimale
+ * @property int|null $credit_max_r
+ * @property int|null $credit_min_r
+ * @property string|null $moyenne_min_r
+ * @property string|null $moyenne_requise Moyenne minimale
  * @property bool $note_eliminatoire Note 0 éliminatoire
  * @property int $nb_admis Nombre d'admis
  * @property int $nb_redoublants Nombre de redoublants
@@ -195,11 +198,14 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereAppliqueAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereAppliquePar($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreditMaxR($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreditMinR($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereCreditsRequis($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereDureeSecondes($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereErrorMessage($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereGroupes($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereMoyenneMinR($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereMoyenneRequise($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNbAdmis($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliberPaces whereNbExclus($value)
@@ -528,7 +534,6 @@ namespace App\Models{
  * @property string $abr Ex: MG, DENT, INF
  * @property string $nom Ex: Médecine générale, Dentaire, Infirmier
  * @property int $niveau_id Niveau auquel appartient ce parcours
- * @property bool $is_ifirp
  * @property bool $is_active
  * @property int|null $quota_admission
  * @property \Illuminate\Support\Carbon|null $created_at
@@ -549,7 +554,6 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereIsActive($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereIsIfirp($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereNiveauId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereNom($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Parcour whereQuotaAdmission($value)
