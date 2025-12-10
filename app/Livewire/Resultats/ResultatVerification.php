@@ -637,6 +637,7 @@ class ResultatVerification extends Component
     }
 
 
+
     /**
      * Génère le dataset complet Étudiant × EC.
      * En session "Rattrapage", on n'affiche QUE les EC qui ont
@@ -689,8 +690,9 @@ class ResultatVerification extends Component
         // 3. Déterminer la liste des EC à parcourir
         $ecsAParcourir = $ecs;
 
-        // Pour les sessions de RATTRAPAGE (ou assimilé), on limite aux EC qui ont au moins une copie
-        $typeSession = strtolower($this->sessionActive->type ?? '');
+        // Pour les sessions de RATTRAPAGE (ou assimilé),
+        // on limite aux EC qui ont au moins une copie
+        $typeSession  = strtolower($this->sessionActive->type ?? '');
         $isRattrapage = str_contains($typeSession, 'rattrap')
             || str_contains($typeSession, 'session2')
             || str_contains($typeSession, 'compens');
@@ -704,13 +706,13 @@ class ResultatVerification extends Component
         // 4. Construction du dataset complet (étudiants × EC)
         foreach ($etudiants as $etudiant) {
             foreach ($ecsAParcourir as $ec) {
-                $key = $etudiant->id . '_' . $ec->id;
+                $key      = $etudiant->id . '_' . $ec->id;
                 $resultat = $resultatsExistants->get($key);
 
                 if ($resultat) {
                     // On retrouve la copie à partir du code anonymat + EC
                     $copieKey = $resultat->code_anonymat_id . '_' . $resultat->ec_id;
-                    $copie = $copies->get($copieKey);
+                    $copie    = $copies->get($copieKey);
 
                     $noteAffichee = $resultat->note;
                     $sourceNote   = 'resultats_fusion';
@@ -758,7 +760,12 @@ class ResultatVerification extends Component
                     ]);
                 } else {
                     // EC sans résultat pour cet étudiant dans CETTE session
-                    // (seulement affiché en session normale ou si tu enlèves le filtrage ci-dessus)
+                    // En session de rattrapage, on NE crée pas de ligne vide
+                    if ($isRattrapage) {
+                        continue;
+                    }
+
+                    // En session normale, on garde la ligne vide
                     $datasetComplet->push([
                         'etudiant_id'      => $etudiant->id,
                         'matricule'        => $etudiant->matricule,
@@ -782,6 +789,7 @@ class ResultatVerification extends Component
 
         return $datasetComplet;
     }
+
 
 
 

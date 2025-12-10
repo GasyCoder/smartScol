@@ -325,7 +325,11 @@ class FusionIndex extends Component
             $this->fusionStep = 'Préparation des données...';
             $this->fusionProgress = 10;
 
-            $result = (new FusionService())->fusionner($this->examen_id);
+            // 🔥 IMPORTANT : on passe explicitement la session active
+            $result = (new FusionService())->fusionner(
+                $this->examen_id,
+                $this->sessionActive->id,   // 👈 session exacte (Normale OU Rattrapage)
+            );
 
             if (!$result['success']) {
                 toastr()->error($result['message']);
@@ -335,8 +339,6 @@ class FusionIndex extends Component
 
             $this->fusionProgress = 100;
             $this->fusionStep = 'Fusion terminée !';
-            
-            // Cacher la barre après 2 secondes
             $this->dispatch('hide-progress-after-delay');
 
             $this->setEtat('fusion', 30, 1, true);
@@ -348,6 +350,7 @@ class FusionIndex extends Component
             toastr()->error('Erreur lors du démarrage de la fusion : ' . $e->getMessage());
         }
     }
+
 
     public function passerAVerify2()
     {

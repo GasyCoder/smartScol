@@ -190,13 +190,19 @@
                                                         </div>
                                                     </div>
                                                 @else
-                                                    <!-- Affichage normal -->
-                                                    <div class="flex items-center justify-between">
-                                                        <div class="flex items-center space-x-3">
-                                                            <span class="text-sm text-gray-600 dark:text-gray-400">Note:</span>
-                                                            <div class="relative">
+                                                {{-- Affichage normal --}}
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex items-center space-x-3">
+                                                        <span class="text-sm text-gray-600 dark:text-gray-400">Note:</span>
+                                                        <div class="relative">
+                                                            @if(is_null($resultat['note']))
+                                                                {{-- Pas de note pour cet EC dans cette session --}}
+                                                                <span class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-xl shadow-sm bg-gray-100 text-gray-500 border border-dashed border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600">
+                                                                    —
+                                                                </span>
+                                                            @else
                                                                 @if($resultat['note_old'])
-                                                                    <!-- Note modifiée -->
+                                                                    {{-- Note modifiée --}}
                                                                     <span class="inline-flex items-center px-3 py-2 text-lg font-bold rounded-xl cursor-help shadow-sm transition-all duration-200 hover:shadow-md {{ $resultat['note'] >= 10 ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
                                                                         {{ number_format($resultat['note'], 2) }}
                                                                         <em class="ml-2 text-orange-500 icon ni ni-edit-alt" title="Note modifiée"></em>
@@ -204,29 +210,26 @@
                                                                     <span class="px-2 py-1 rounded-md bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                                                         Ancienne: {{ number_format($resultat['note_old'], 2) }}
                                                                     </span>
-                                                                    <!-- Tooltip info -->
-                                                                    <div class="absolute z-20 px-3 py-2 text-xs text-white bg-gray-800 rounded-lg shadow-lg opacity-0 pointer-events-none -top-16 left-1/2 transform -translate-x-1/2 hover:opacity-100 transition-opacity duration-300">
-                                                                        <div class="font-semibold">Note modifiée</div>
-                                                                        <div>Ancienne: {{ number_format($resultat['note_old'], 2) }}</div>
-                                                                        <div>Actuelle: {{ number_format($resultat['note'], 2) }}</div>
-                                                                    </div>
                                                                 @else
-                                                                    <!-- Note normale -->
+                                                                    {{-- Note simple --}}
                                                                     <span class="inline-flex items-center px-3 py-2 text-lg font-bold rounded-xl shadow-sm transition-all duration-200 hover:shadow-md {{ $resultat['note'] >= 10 ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900 dark:text-red-200' }}">
                                                                         {{ number_format($resultat['note'], 2) }}
                                                                     </span>
                                                                 @endif
-                                                            </div>
+                                                            @endif
                                                         </div>
-                                                        
-                                                        <!-- Bouton modifier -->
+                                                    </div>
+
+                                                    @if(!is_null($resultat['note']))
+                                                        <!-- Bouton modifier (seulement si une note existe) -->
                                                         <button wire:click="startEditing('{{ $resultat['unique_key'] }}')" 
                                                                 wire:key="edit-{{ $resultat['unique_key'] }}"
                                                                 class="px-3 py-2 text-xs font-medium text-primary-700 bg-primary-100 rounded-lg shadow-sm hover:bg-primary-200 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 dark:bg-primary-900 dark:text-primary-200 dark:hover:bg-primary-800">
                                                             <em class="mr-1 icon ni ni-edit"></em>
                                                             Modifier
                                                         </button>
-                                                    </div>
+                                                    @endif
+                                                </div>
                                                 @endif
 
                                                 <!-- Informations d'audit modernisées -->
