@@ -14,12 +14,12 @@
 namespace App\Models{
 /**
  * @property int $id
+ * @property string $libelle
  * @property \Illuminate\Support\Carbon $date_start
  * @property \Illuminate\Support\Carbon $date_end
  * @property bool $is_active
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read mixed $libelle
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\SessionExam> $sessionExams
  * @property-read int|null $session_exams_count
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire newModelQuery()
@@ -30,6 +30,7 @@ namespace App\Models{
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire whereDateStart($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire whereLibelle($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|AnneeUniversitaire whereUpdatedAt($value)
  */
 	class AnneeUniversitaire extends \Eloquent {}

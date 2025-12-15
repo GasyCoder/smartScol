@@ -652,7 +652,7 @@ class ResultatFinal extends Model
             }
 
             // Utiliser le service complet
-            $calculService = new \App\Services\CalculAcademiqueService();
+            $calculService = new CalculAcademiqueService();
             $resultats = $calculService->calculerResultatsComplets($this->etudiant_id, $this->session_exam_id, true);
             
             $nouvelleDecision = $resultats['decision']['code'];
@@ -689,7 +689,7 @@ class ResultatFinal extends Model
     public function getDetailCompletviaService()
     {
         try {
-            $calculService = new \App\Services\CalculAcademiqueService();
+            $calculService = new CalculAcademiqueService();
             return $calculService->calculerResultatsComplets($this->etudiant_id, $this->session_exam_id, true);
         } catch (\Exception $e) {
             \Log::error('Erreur récupération détail via service', [

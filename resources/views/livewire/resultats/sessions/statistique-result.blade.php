@@ -74,12 +74,27 @@
                             <div class="text-xs text-orange-600 dark:text-orange-400">Rattrapage</div>
                         </div>
 
-                        <div class="p-2 text-center rounded-lg bg-red-50 dark:bg-red-900/20">
-                            <div class="text-lg font-bold text-red-600 dark:text-red-400">
-                                {{ $stats1['exclus'] ?? 0 }}
+                        {{-- ✅ MODIFICATION : Afficher Redoublant ou Exclus selon niveau --}}
+                        @php
+                            $niveau = \App\Models\Niveau::find($selectedNiveau);
+                            $afficherExclus = $niveau && in_array($niveau->abr, ['PACES', 'L1']);
+                        @endphp
+                        
+                        @if($afficherExclus)
+                            <div class="p-2 text-center rounded-lg bg-red-50 dark:bg-red-900/20">
+                                <div class="text-lg font-bold text-red-600 dark:text-red-400">
+                                    {{ $stats1['exclus'] ?? 0 }}
+                                </div>
+                                <div class="text-xs text-red-600 dark:text-red-400">Exclus</div>
                             </div>
-                            <div class="text-xs text-red-600 dark:text-red-400">Exclus</div>
-                        </div>
+                        @else
+                            <div class="p-2 text-center rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                                <div class="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                                    {{ $stats1['redoublant'] ?? 0 }}
+                                </div>
+                                <div class="text-xs text-yellow-600 dark:text-yellow-400">Redoublant</div>
+                            </div>
+                        @endif
                     </div>
 
                     {{-- Barre de progression S1 --}}
@@ -189,12 +204,22 @@
                             <div class="text-xs text-yellow-600 dark:text-yellow-400">Redoublants</div>
                         </div>
 
-                        <div class="p-2 text-center border border-red-200 rounded-lg bg-red-50 dark:bg-red-900/20 dark:border-red-800">
-                            <div class="text-lg font-bold text-red-700 dark:text-red-300">
-                                {{ $stats2['exclus'] ?? 0 }}
+                        {{-- ✅ MODIFICATION : Afficher Exclus seulement pour PACES --}}
+                        @if($afficherExclus)
+                            <div class="p-2 text-center border border-red-200 rounded-lg bg-red-50 dark:bg-red-900/20 dark:border-red-800">
+                                <div class="text-lg font-bold text-red-700 dark:text-red-300">
+                                    {{ $stats2['exclus'] ?? 0 }}
+                                </div>
+                                <div class="text-xs text-red-700 dark:text-red-300">Exclus</div>
                             </div>
-                            <div class="text-xs text-red-700 dark:text-red-300">Exclus</div>
-                        </div>
+                        @else
+                            <div class="p-2 text-center rounded-lg bg-gray-50 dark:bg-gray-900/20">
+                                <div class="text-lg font-bold text-gray-600 dark:text-gray-400">
+                                    -
+                                </div>
+                                <div class="text-xs text-gray-600 dark:text-gray-400">-</div>
+                            </div>
+                        @endif
                     </div>
 
                     {{-- Barre de progression S2 --}}

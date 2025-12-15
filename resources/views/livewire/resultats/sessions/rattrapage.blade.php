@@ -126,20 +126,11 @@
                             <span class="px-2 py-1 font-medium text-green-700 bg-green-100 rounded-full dark:bg-green-900/50 dark:text-green-300">
                                 ✅ {{ $statistiquesSession2['admis'] ?? 0 }} admis
                             </span>
-                            <span class="px-2 py-1 font-medium text-orange-700 bg-orange-100 rounded-full dark:bg-orange-900/50 dark:text-orange-300">
-                                📚 {{ $statistiquesSession2['rattrapage'] ?? 0 }} rattrapage
-                            </span>
                             @if(isset($statistiquesSession2['redoublant']) && $statistiquesSession2['redoublant'] > 0)
                                 <span class="px-2 py-1 font-medium text-yellow-700 bg-yellow-100 rounded-full dark:bg-yellow-900/50 dark:text-yellow-300">
                                     🔄 {{ $statistiquesSession2['redoublant'] }} redoublant
                                 </span>
                             @endif
-                            @if(isset($statistiquesSession2['exclus']) && $statistiquesSession2['exclus'] > 0)
-                                <span class="px-2 py-1 font-medium text-red-700 bg-red-100 rounded-full dark:bg-red-900/50 dark:text-red-300">
-                                    ❌ {{ $statistiquesSession2['exclus'] }} exclus
-                                </span>
-                            @endif
-
                             {{-- Taux de réussite calculé en temps réel --}}
                             @php
                                 $totalEtudiants = $statistiquesSession2['total_etudiants'] ?? count($resultatsSession2);

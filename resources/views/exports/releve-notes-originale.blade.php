@@ -6,47 +6,55 @@
 <style>
     body {
         font-family: Arial, sans-serif;
-        font-size: 11px;  /* ✅ Réduit de 14px à 11px */
-        line-height: 1.2;  /* ✅ Réduit de 1.3 à 1.2 */
+        font-size: 11px;
+        line-height: 1.2;
         margin: 0;
-        padding: 5px 10px;  /* ✅ Réduit de 8px 12px */
+        padding: 5px 10px;
         color: black;
     }
     
     .content-wrapper {
         max-width: 100%;
-        padding: 5px 10px;  /* ✅ Réduit */
+        padding: 5px 10px;
         box-sizing: border-box;
     }
 
     .header {
         text-align: center;
-        margin-bottom: 3px;  /* ✅ Réduit de 5px à 3px */
+        margin-bottom: 3px;
         border-bottom: 1px solid black;
         padding-bottom: 2px;
     }
     
     .titre {
-        font-size: 14px;  /* ✅ Réduit de 15px à 14px */
+        font-size: 14px;
         font-weight: bold;
-        margin: 3px 0;  /* ✅ Réduit de 5px à 3px */
+        margin: 3px 0;
         text-transform: uppercase;
     }
     
+    /* ✅ MODIFIÉ : Style simple pour la session */
+    .session-info {
+        font-size: 11px;
+        font-weight: bold;
+        margin: 2px 0;
+        color: black;
+    }
+    
     .annee {
-        font-size: 10px;  /* ✅ Réduit de 12px à 10px */
+        font-size: 10px;
         font-weight: normal;
     }
     
     .info {
-        margin: 5px 0;  /* ✅ Réduit de 8px à 5px */
+        margin: 5px 0;
         background: none;
         padding: 0;
-        font-size: 11px;  /* ✅ Réduit */
+        font-size: 11px;
     }
     
     .info p {
-        margin: 1px 0;  /* ✅ Réduit de 2px à 1px */
+        margin: 1px 0;
         font-size: 11px;
     }
     
@@ -54,13 +62,13 @@
     table {
         width: 100%;
         border-collapse: collapse;
-        margin: 3px 0;  /* ✅ Réduit de 5px à 3px */
-        font-size: 10px;  /* ✅ Réduit */
+        margin: 3px 0;
+        font-size: 10px;
     }
     
     th, td {
         border: 1px solid black;
-        padding: 2px 4px;  /* ✅ Réduit de 4px 6px */
+        padding: 2px 4px;
         text-align: left;
     }
     
@@ -100,17 +108,18 @@
     
     .decision {
         text-align: left;
-        font-size: 11px;  /* ✅ Réduit */
+        font-size: 11px;
         font-weight: bold;
-        margin: 3px 0;  /* ✅ Réduit */
-        padding: 4px;  /* ✅ Réduit */
+        margin: 3px 0;
+        padding: 4px;
         border: 1px solid black;
         text-transform: uppercase;
+        color: black;
     }
     
     .note-admission {
-        margin: 3px 0;  /* ✅ Réduit */
-        font-size: 9px;  /* ✅ Réduit */
+        margin: 3px 0;
+        font-size: 9px;
         font-style: italic;
     }
     
@@ -120,13 +129,13 @@
     
     .date-generation {
         text-align: right;
-        font-size: 9px;  /* ✅ Réduit */
+        font-size: 9px;
         margin: 3px 0;
     }
 
     .signature-space {
-        height: 50px;  /* ✅ Réduit de 80px à 50px */
-        margin-top: 15px;  /* ✅ Réduit */
+        height: 50px;
+        margin-top: 15px;
         margin-bottom: 10px;
     }
 
@@ -136,9 +145,9 @@
         left: 0;
         right: 0;
         text-align: center;
-        font-size: 8px;  /* ✅ Réduit */
+        font-size: 8px;
         border-top: 1px solid black;
-        padding: 5px 10px;  /* ✅ Réduit */
+        padding: 5px 10px;
         background: white;
     }
             
@@ -156,7 +165,6 @@
         }
     }
 
-    /* ✅ QR CODE STYLES */
     .footer-qrcode {
         float: left;
         text-align: center;
@@ -165,7 +173,7 @@
     }
     
     .qr-img {
-        width: 80px;  /* ✅ Réduit de 100px à 80px */
+        width: 80px;
         height: 80px;
         display: block;
         margin: 0 auto;
@@ -183,7 +191,6 @@
     <div class="content-wrapper">
         <!-- En-tête -->
         <div class="header">
-            {{-- HEADER OFFICIEL COMPACT --}}
             <div class="header-officiel">
                 @if(!empty($header_image_base64))
                     <img src="{{ $header_image_base64 }}" 
@@ -192,7 +199,20 @@
                 @endif
                 <hr style="border: none; height: 1px; background-color: rgba(0, 0, 0, 0.2); margin: 8px 0;">
             </div>
+            
             <h1 class="titre">RELEVÉ DE NOTES</h1>
+            
+            {{-- ✅ MODIFIÉ : Session simple en noir, sans badge ni couleur --}}
+            <div class="session-info">
+                @if($session->type === 'Normale')
+                    SESSION NORMALE (Première Session)
+                @elseif($session->type === 'Rattrapage')
+                    SESSION DE RATTRAPAGE (Deuxième Session)
+                @else
+                    {{ strtoupper($session->type) }}
+                @endif
+            </div>
+            
             <span class="annee">Année universitaire: {{ $session->anneeUniversitaire->libelle ?? 'Année universitaire' }}</span>
         </div>
 
@@ -258,47 +278,45 @@
             </tr>
         </table>
 
-        <!-- Décision finale -->
-        <div class="decision decision-{{ $synthese['decision'] }}">
+        {{-- ✅ MODIFIÉ : Décision finale sans couleur --}}
+        <div class="decision">
             RÉSULTAT : 
             @if($synthese['decision'] === 'admis')
-                <span style="color: #006400;">
-                    {{ strtoupper($synthese['message_admission'] ?? 'ADMIS(E)') }}
-                </span>
-                
+                {{ strtoupper($synthese['message_admission'] ?? 'ADMIS(E)') }}
             @elseif($synthese['decision'] === 'rattrapage')
-                <span style="color: #d97706;">AUTORISÉ(E) AU RATTRAPAGE</span>
-                
+                AUTORISÉ(E) AU RATTRAPAGE
             @elseif($synthese['decision'] === 'redoublant')
-                <span style="color: #d97706;">
-                    {{ strtoupper($synthese['message_redoublement'] ?? 'AUTORISÉ(E) À REDOUBLER') }}
-                </span>
-                
+                {{ strtoupper($synthese['message_redoublement'] ?? 'AUTORISÉ(E) À REDOUBLER') }}
             @elseif($synthese['decision'] === 'exclus')
-                <span style="color: #b91c1c;">EXCLUS(E)</span>
-                
+                EXCLUS(E)
             @else
                 {{ strtoupper($synthese['decision']) }}
             @endif
         </div>
 
-        
-
         <!-- Note complémentaire pour admission avec niveau suivant -->
         @if($synthese['decision'] === 'admis' && !empty($synthese['niveau_suivant']))
             <div class="note-admission">
-                <p style="font-style: italic; color: #006400; margin-top: 5px;">
+                <p style="font-style: italic; margin-top: 5px;">
                     L'étudiant(e) est autorisé(e) à s'inscrire en {{ $synthese['niveau_suivant'] }} 
                     pour l'année universitaire {{ now()->year }}-{{ now()->year + 1 }}.
                 </p>
             </div>
         @endif
-
+        {{-- ✅ NOUVEAU : Note éliminatoire PACES --}}
+        @if($etudiant->niveau && $etudiant->niveau->abr === 'PACES' && !empty($synthese['has_note_eliminatoire_paces']) && $synthese['has_note_eliminatoire_paces'])
+            <div class="note-admission">
+                <p style="color: #d32f2f; font-weight: bold; margin-top: 5px;">
+                    ⚠ Vous avez une note éliminatoire (note = 0). 
+                    Les crédits des UE concernées ne sont pas validés même si la moyenne est >= 10/20.
+                </p>
+            </div>
+        @endif    
         <!-- Note sur les conditions d'admission -->
         <div class="note-admission">
             @if($synthese['decision'] === 'redoublant')
                 <p><strong>Note :</strong>
-                    Seuil de Rédoublement : {{ $deliberation->credit_min_r ?? 'N/A' }} crédits avec moyenne générale >= {{ number_format($deliberation->moyenne_min_r ?? 0, 2) }}/20.
+                    Seuil de Redoublement : {{ $deliberation->credit_min_r ?? 'N/A' }} crédits avec moyenne générale >= {{ number_format($deliberation->moyenne_min_r ?? 0, 2) }}/20.
                 </p>
             @endif
         </div>
@@ -323,7 +341,7 @@
         <div class="footer-info">
             <p>BP : 652 – Mahajanga 401 – Madagascar | Tél : +261 38 41 930 47</p>
             <p>Mail : facmed.mga@gmail.com | Web : www.medecine.mahajanga-univ.mg</p>
-            <p><em>Document officiel attestant les résultats de l’étudiant(e) via le logiciel SmartScol de la Faculté de Médecine.</em></p>
+            <p><em>Document officiel attestant les résultats de l'étudiant(e) via le logiciel SmartScol de la Faculté de Médecine.</em></p>
         </div>
 
     </div>

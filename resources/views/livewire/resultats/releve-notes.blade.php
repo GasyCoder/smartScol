@@ -12,44 +12,14 @@
                     </p>
                 </div>
                 
-                <!-- ✅ Affichage Année et Session -->
-                <div class="flex items-center space-x-6">
-                    <!-- Année Universitaire -->
-                    <div class="text-right">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Année Universitaire
-                        </p>
-                        <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-                            {{ $anneeUnivLibelle ?? 'N/A' }}
-                        </p>
-                    </div>
-                    
-                    <!-- Séparateur -->
-                    <div class="h-10 w-px bg-gray-300 dark:bg-gray-600"></div>
-                    
-                    <!-- Session -->
-                    <div class="text-right">
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Session
-                        </p>
-                        <p class="mt-1">
-                            @if($sessionType === 'Normale')
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                    Session Normale
-                                </span>
-                            @elseif($sessionType === 'Rattrapage')
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
-                                    Session Rattrapage
-                                </span>
-                            @else
-                                <span class="text-sm text-gray-900 dark:text-white">N/A</span>
-                            @endif
-                        </p>
-                    </div>
-                </div>
+                <!-- ✅ PARTIAL : Sélecteur Année et Session -->
+                @include('livewire.resultats.partials.session-selector')
             </div>
         </div>
+
+        <!-- ✅ Compteur de statistiques -->
         @include('livewire.resultats.partials.releve-compteur')
+
         <!-- Filtres -->
         <div class="p-6 bg-gray-50 dark:bg-gray-900">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -82,7 +52,7 @@
                     </select>
                 </div>
 
-                <!-- Décision -->
+                <!-- ✅ MODIFIÉ : Décision avec options dynamiques -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Décision
@@ -90,11 +60,20 @@
                     <select wire:model.live="selectedDecision" 
                             class="w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Toutes</option>
-                        <option value="admis">Admis</option>
-                        <option value="rattrapage">Rattrapage</option>
-                        <option value="redoublant">Redoublant</option>
-                        <option value="exclus">Exclus</option>
+                        @foreach($this->decisionsDisponibles as $key => $label)
+                            <option value="{{ $key }}">{{ $label }}</option>
+                        @endforeach
                     </select>
+                    
+                    {{-- ✅ Message d'information si session Rattrapage --}}
+                    @if($sessionType === 'Rattrapage')
+                        <p class="mt-1 text-xs text-orange-600 dark:text-orange-400">
+                            <svg class="inline w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                            Session Rattrapage : pas de statut "Rattrapage"
+                        </p>
+                    @endif
                 </div>
 
                 <!-- Recherche -->
@@ -150,7 +129,6 @@
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
                             @foreach($etudiants as $etudiant)
                                 @php
-                                    // Récupérer la décision de l'étudiant
                                     $decision = \App\Models\ResultatFinal::where('etudiant_id', $etudiant->id)
                                         ->where('session_exam_id', $selectedSession)
                                         ->where('statut', \App\Models\ResultatFinal::STATUT_PUBLIE)
@@ -256,7 +234,7 @@
                 </div>
             @else
                 <div class="p-6 text-center">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                     </svg>
                     <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">Aucun étudiant trouvé</h3>

@@ -31,6 +31,8 @@ class ReleveNotesOriginale extends Component
     // Collections
     public $niveaux;
     public $parcours;
+    public $sessions;
+    public $anneesUniversitaires;
     public $anneeUnivLibelle;
     public $sessionType;
 
@@ -44,8 +46,74 @@ class ReleveNotesOriginale extends Component
     {
         $this->niveaux = Niveau::where('is_active', true)->orderBy('nom')->get();
         $this->parcours = collect();
+        $this->sessions = collect();
+        $this->anneesUniversitaires = AnneeUniversitaire::orderBy('date_start', 'desc')->get();
     }
 
+    private function setDefaults()
+    {
+        $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
+        
+        if ($anneeActive) {
+            $this->selectedAnneeUniv = $anneeActive->id;
+            $this->anneeUnivLibelle = $anneeActive->getLibelleAttribute();
+            
+            $this->loadSessions();
+            
+            $sessionNormale = $this->sessions->firstWhere('type', 'Normale');
+            
+            if ($sessionNormale) {
+                $this->selectedSession = $sessionNormale->id;
+                $this->sessionType = $sessionNormale->type;
+            } elseif ($this->sessions->isNotEmpty()) {
+                $premiereSession = $this->sessions->first();
+                $this->selectedSession = $premiereSession->id;
+                $this->sessionType = $premiereSession->type;
+            }
+        }
+    }
+
+    private function loadSessions()
+    {
+        if ($this->selectedAnneeUniv) {
+            $this->sessions = SessionExam::where('annee_universitaire_id', $this->selectedAnneeUniv)
+                ->where('is_active', true)
+                ->orderByRaw("CASE WHEN type = 'Normale' THEN 1 WHEN type = 'Rattrapage' THEN 2 ELSE 3 END")
+                ->get();
+        } else {
+            $this->sessions = collect();
+        }
+    }
+
+    // ✅ NOUVELLE PROPRIÉTÉ COMPUTED : Décisions disponibles selon la session
+    public function getDecisionsDisponiblesProperty()
+    {
+        if (!$this->sessionType) {
+            return [
+                'admis' => 'Admis',
+                'rattrapage' => 'Rattrapage',
+                'redoublant' => 'Redoublant',
+                'exclus' => 'Exclus'
+            ];
+        }
+
+        if ($this->sessionType === 'Rattrapage') {
+            // ✅ En session de rattrapage : PAS de "Rattrapage" comme décision
+            return [
+                'admis' => 'Admis',
+                'redoublant' => 'Redoublant',
+                'exclus' => 'Exclus'
+            ];
+        }
+
+        // Session Normale : toutes les décisions possibles
+        return [
+            'admis' => 'Admis',
+            'rattrapage' => 'Rattrapage',
+            'redoublant' => 'Redoublant',
+            'exclus' => 'Exclus'
+        ];
+    }
 
     private function calculerStatistiques()
     {
@@ -78,7 +146,6 @@ class ReleveNotesOriginale extends Component
                 $q->where('session_exam_id', $this->selectedSession)
                 ->where('statut', ResultatFinal::STATUT_PUBLIE);
                 
-                // Filtre par décision
                 if ($this->selectedDecision) {
                     $q->where('decision', $this->selectedDecision);
                 }
@@ -134,29 +201,6 @@ class ReleveNotesOriginale extends Component
         }
     }
 
-
-    private function setDefaults()
-    {
-        // ✅ Récupérer l'année universitaire active
-        $anneeActive = AnneeUniversitaire::where('is_active', true)->first();
-        
-        if ($anneeActive) {
-            $this->selectedAnneeUniv = $anneeActive->id;
-            $this->anneeUnivLibelle = $anneeActive->libelle;
-            
-            // ✅ Récupérer la session normale
-            $sessionNormale = SessionExam::where('annee_universitaire_id', $anneeActive->id)
-                ->where('type', 'Normale')
-                ->first();
-            
-            if ($sessionNormale) {
-                $this->selectedSession = $sessionNormale->id;
-                $this->sessionType = $sessionNormale->type;
-            }
-        }
-    }
-
-
     public function updatedSelectedNiveau()
     {
         if ($this->selectedNiveau) {
@@ -178,14 +222,12 @@ class ReleveNotesOriginale extends Component
         $this->resetPage();
     }
 
-
     public function updatedSelectedParcours()
     {
         $this->calculerStatistiques();
         $this->resetPage();
     }
 
-    
     public function updatedSelectedDecision()
     {
         $this->calculerStatistiques();
@@ -198,8 +240,20 @@ class ReleveNotesOriginale extends Component
         $this->resetPage();
     }
 
+    // ✅ MODIFIÉ : Reset la décision si elle n'est plus valide
     public function updatedSelectedSession()
     {
+        if ($this->selectedSession) {
+            $session = SessionExam::find($this->selectedSession);
+            if ($session) {
+                $this->sessionType = $session->type;
+                
+                // ✅ Reset la décision si "rattrapage" est sélectionné en session Rattrapage
+                if ($this->sessionType === 'Rattrapage' && $this->selectedDecision === 'rattrapage') {
+                    $this->selectedDecision = '';
+                }
+            }
+        }
         $this->calculerStatistiques();
         $this->resetPage();
     }
@@ -207,10 +261,28 @@ class ReleveNotesOriginale extends Component
     public function updatedSelectedAnneeUniv()
     {
         $this->loadSessions();
+        
+        $sessionNormale = $this->sessions->firstWhere('type', 'Normale');
+        if ($sessionNormale) {
+            $this->selectedSession = $sessionNormale->id;
+            $this->sessionType = $sessionNormale->type;
+        } elseif ($this->sessions->isNotEmpty()) {
+            $premiereSession = $this->sessions->first();
+            $this->selectedSession = $premiereSession->id;
+            $this->sessionType = $premiereSession->type;
+        } else {
+            $this->selectedSession = null;
+            $this->sessionType = null;
+        }
+        
+        if ($this->selectedAnneeUniv) {
+            $annee = AnneeUniversitaire::find($this->selectedAnneeUniv);
+            $this->anneeUnivLibelle = $annee?->getLibelleAttribute() ?? 'N/A';
+        }
+        
         $this->calculerStatistiques();
         $this->resetPage();
     }
-
 
     public function getEtudiants()
     {
@@ -239,7 +311,6 @@ class ReleveNotesOriginale extends Component
                 $q->where('session_exam_id', $this->selectedSession)
                   ->where('statut', ResultatFinal::STATUT_PUBLIE);
                 
-                // ✅ Filtre par décision
                 if ($this->selectedDecision) {
                     $q->where('decision', $this->selectedDecision);
                 }
@@ -248,7 +319,6 @@ class ReleveNotesOriginale extends Component
 
         return $query->orderBy('nom')->orderBy('prenom')->paginate(20);
     }
-
 
     public function voirReleve($etudiantId)
     {
@@ -307,7 +377,6 @@ class ReleveNotesOriginale extends Component
         }
     }
 
-
     public function getDonneesReleve($etudiantId, $sessionId)
     {
         // ===== 1. RÉCUPÉRATION DES DONNÉES DE BASE =====
@@ -339,6 +408,7 @@ class ReleveNotesOriginale extends Component
         $totalCredits = 0;
         $creditsValides = 0;
         $hasNoteEliminatoire = false;
+        $hasNoteEliminatoirePACES = false; // ✅ NOUVEAU : Spécifique pour PACES
 
         foreach ($resultatsParUE as $ueId => $resultatsUE) {
             $ue = $resultatsUE->first()->ec->ue;
@@ -373,6 +443,13 @@ class ReleveNotesOriginale extends Component
             $creditsValidesUE = $ueValidee ? $creditsUE : 0;
             $creditsValides += $creditsValidesUE;
             $moyennesUE[] = $moyenneUE;
+
+            // ✅ NOUVEAU : Détecter si PACES avec moyenne >= 10 mais crédits = 0 à cause d'une note éliminatoire
+            if ($etudiant->niveau && $etudiant->niveau->abr === 'PACES') {
+                if ($moyenneUE >= 10 && $creditsValidesUE == 0 && $hasZeroInUE) {
+                    $hasNoteEliminatoirePACES = true;
+                }
+            }
 
             $uesData[] = [
                 'ue' => $ue,
@@ -420,31 +497,28 @@ class ReleveNotesOriginale extends Component
         $niveauSuivant = null;
         $messageAdmission = 'ADMIS(E)';
         $messageRedoublement = 'AUTORISÉ(E) À REDOUBLER';
+        $estSortantIfirp = false;
 
         if ($etudiant->niveau) {
             $niveauId = $etudiant->niveau->id;
             $niveauAbr = $etudiant->niveau->abr ?? '';
-            $niveauNom = $etudiant->niveau->nom ?? '';
             
-            // ✅ CONDITION STATIQUE : L3 avec parcours IFIRP (INF-G, INF-A, MAI)
             $isL3 = ($niveauId == 3 || $niveauAbr === 'L3');
             $parcoursAbr = $etudiant->parcours->abr ?? '';
             $estSortantIfirp = $isL3 && in_array($parcoursAbr, ['INF-G', 'INF-A', 'MAI']);
             
             if ($estSortantIfirp) {
-                // SORTANT IFIRP - pas de niveau suivant
                 $messageAdmission = 'SORTANT(E)';
                 $messageRedoublement = "AUTORISÉ(E) À REDOUBLER EN L3 (3e année)";
                 $niveauSuivant = null;
             }
             elseif ($niveauId >= 2) {
-                // AUTRES NIVEAUX - calcul du niveau suivant
                 $numeroActuel = null;
                 
                 if (preg_match('/^L(\d+)$/i', $niveauAbr, $matches)) {
                     $numeroActuel = (int)$matches[1];
                 }
-                elseif (preg_match('/(\d+)(?:e|ère|eme)/i', $niveauNom, $matches)) {
+                elseif (preg_match('/(\d+)(?:e|ère|eme)/i', $etudiant->niveau->nom, $matches)) {
                     $numeroActuel = (int)$matches[1];
                 }
                 elseif (is_numeric($niveauAbr)) {
@@ -478,6 +552,7 @@ class ReleveNotesOriginale extends Component
                 }
             }
         }
+
         // ===== 7. GÉNÉRATION DU QR CODE =====
         $qrCodeData = "RELEVÉ DE NOTES\n\n" .
             "Année Universitaire: {$session->anneeUniversitaire->libelle}\n" .
@@ -526,6 +601,7 @@ class ReleveNotesOriginale extends Component
                 'pourcentage_credits' => $totalCredits > 0 ? round(($creditsValides / $totalCredits) * 100, 1) : 0,
                 'decision' => $decision,
                 'has_note_eliminatoire' => $hasNoteEliminatoire,
+                'has_note_eliminatoire_paces' => $hasNoteEliminatoirePACES, // ✅ NOUVEAU
                 'session_deliberee' => $sessionDeliberee,
                 'parametres_deliberation' => $parametresDeliberation,
                 'niveau_suivant' => $niveauSuivant,
@@ -538,145 +614,6 @@ class ReleveNotesOriginale extends Component
             'header_image_base64' => $this->getHeaderImageBase64(),
             'qrcodeImage' => $qrcodeImage
         ];
-    }
-
-    /**
-     * ✅ MÉTHODE OPTIMISÉE : Utiliser has_rattrapage au lieu de détecter PACES
-     */
-    private function determinerDecisionAvecDeliberation(
-        $moyenneGenerale, 
-        $creditsValides, 
-        $totalCredits, 
-        $hasNoteEliminatoire, 
-        $session, 
-        $sessionDeliberee, 
-        $parametresDeliberation,
-        $etudiant = null
-    ) {
-        $hasRattrapage = true;
-        if ($etudiant && $etudiant->niveau) {
-            $hasRattrapage = $etudiant->niveau->has_rattrapage;
-        }
-
-        // Si pas de délibération, utiliser la logique normale
-        if (!$sessionDeliberee || !$parametresDeliberation) {
-            return $this->determinerDecision($moyenneGenerale, $creditsValides, $totalCredits, $hasNoteEliminatoire, $session->type, $hasRattrapage);
-        }
-
-        $pourcentageCredits = $totalCredits > 0 ? ($creditsValides / $totalCredits) * 100 : 0;
-
-        if ($session->type === 'Normale') {
-            // ===== SESSION 1 (NORMALE) =====
-            
-            // ❌ Moyenne catastrophique → Exclus direct (ou redoublant si niveau strict)
-            if ($moyenneGenerale < 8) {
-                return $hasRattrapage ? 'redoublant' : 'exclus';
-            }
-            
-            // ❌ Note éliminatoire → Rattrapage obligatoire
-            if ($hasNoteEliminatoire) {
-                return $hasRattrapage ? 'rattrapage' : 'exclus';
-            }
-
-            // ✅ Admis si 75%+ crédits ET moyenne >= 10
-            if ($pourcentageCredits >= 75 && $moyenneGenerale >= 10) {
-                return 'admis';
-            }
-
-            // 🔄 Rattrapage si moyenne acceptable (8-10) ET au moins 50% crédits
-            if ($moyenneGenerale >= 8 && $moyenneGenerale < 10 && $pourcentageCredits >= 50) {
-                return $hasRattrapage ? 'rattrapage' : 'redoublant';
-            }
-
-            // ❌ Sinon redoublant ou exclus
-            return $hasRattrapage ? 'redoublant' : 'exclus';
-
-        } else {
-            // ===== SESSION 2 (RATTRAPAGE) =====
-            
-            // ❌ Moyenne catastrophique → Exclus
-            if ($moyenneGenerale < 8) {
-                return 'exclus';
-            }
-            
-            // ❌ Note éliminatoire → Exclus
-            if ($hasNoteEliminatoire) {
-                return 'exclus';
-            }
-
-            // ✅ Admis si 67%+ crédits ET moyenne >= 10
-            if ($pourcentageCredits >= 67 && $moyenneGenerale >= 10) {
-                return 'admis';
-            }
-
-            // 🔄 Redoublant si au moins 40% crédits ET moyenne >= 8
-            if ($pourcentageCredits >= 40 && $moyenneGenerale >= 8) {
-                return 'redoublant';
-            }
-
-            // ❌ Sinon exclus
-            return 'exclus';
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE OPTIMISÉE : Utiliser has_rattrapage
-     */
-    private function determinerDecision($moyenne, $creditsValides, $totalCredits, $hasNoteEliminatoire, $typeSession, $hasRattrapage = true)
-    {
-        $pourcentageCredits = $totalCredits > 0 ? ($creditsValides / $totalCredits) * 100 : 0;
-
-        if ($typeSession === 'Normale') {
-            // ===== SESSION 1 (NORMALE) =====
-            
-            // ❌ Moyenne catastrophique
-            if ($moyenne < 8) {
-                return $hasRattrapage ? 'redoublant' : 'exclus';
-            }
-            
-            // ❌ Note éliminatoire
-            if ($hasNoteEliminatoire) {
-                return $hasRattrapage ? 'rattrapage' : 'exclus';
-            }
-            
-            // ✅ Admis si moyenne >= 10 ET tous les crédits validés
-            if ($moyenne >= 10 && $creditsValides >= $totalCredits) {
-                return 'admis';
-            }
-            
-            // 🔄 Rattrapage si moyenne acceptable
-            if ($moyenne >= 8 && $pourcentageCredits >= 50) {
-                return $hasRattrapage ? 'rattrapage' : 'redoublant';
-            }
-            
-            return $hasRattrapage ? 'redoublant' : 'exclus';
-
-        } else {
-            // ===== SESSION 2 (RATTRAPAGE) =====
-            
-            // ❌ Moyenne catastrophique
-            if ($moyenne < 8) {
-                return 'exclus';
-            }
-            
-            // ❌ Note éliminatoire
-            if ($hasNoteEliminatoire) {
-                return 'exclus';
-            }
-            
-            // ✅ Admis si moyenne >= 10 ET au moins 67% crédits
-            if ($moyenne >= 10 && $pourcentageCredits >= 67) {
-                return 'admis';
-            }
-            
-            // 🔄 Redoublant si au moins 40% crédits ET moyenne >= 8
-            if ($pourcentageCredits >= 40 && $moyenne >= 8) {
-                return 'redoublant';
-            }
-            
-            return 'exclus';
-        }
     }
 
     public function render()

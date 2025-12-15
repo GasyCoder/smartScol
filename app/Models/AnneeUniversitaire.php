@@ -2,15 +2,17 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\SessionExam;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class AnneeUniversitaire extends Model
 {
     use HasFactory;
 
     protected $table = 'annees_universitaires';
-
+    
     protected $fillable = [
         'date_start',
         'date_end',
@@ -20,8 +22,21 @@ class AnneeUniversitaire extends Model
     protected $casts = [
         'date_start' => 'date',
         'date_end' => 'date',
-        'is_active' => 'boolean'
+        'is_active' => 'boolean',
     ];
+
+    // ✅ ACCESSEUR : Génère automatiquement le libellé
+    public function getLibelleAttribute()
+    {
+        if (!$this->date_start || !$this->date_end) {
+            return 'N/A';
+        }
+        
+        $anneeDebut = Carbon::parse($this->date_start)->year;
+        $anneeFin = Carbon::parse($this->date_end)->year;
+        
+        return "{$anneeDebut}-{$anneeFin}";
+    }
 
 
 
@@ -40,13 +55,5 @@ class AnneeUniversitaire extends Model
     public static function active()
     {
         return self::where('is_active', true)->first();
-    }
-
-    /**
-     * Retourne l'année universitaire sous forme d'une chaîne
-     */
-    public function getLibelleAttribute()
-    {
-        return $this->date_start->format('Y') . '-' . $this->date_end->format('Y');
     }
 }

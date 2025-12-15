@@ -103,7 +103,8 @@ class CalculAcademiqueService
                     'id' => $session->id,
                     'type' => $session->type,
                     'nom' => $session->nom ?? "Session {$session->type}",
-                    'annee' => $session->anneeUniversitaire->libelle ?? 'N/A'
+                    'annee' => $session->anneeUniversitaire->libelle ?? 'N/A',
+                    'niveau_id' => $niveauId ?: $etudiant->niveau_id
                 ],
                 'examen' => [ // ✅ AJOUT
                     'id' => $examen->id,
@@ -310,18 +311,49 @@ class CalculAcademiqueService
     }
 
     
-    // ✅ MÉTHODE : Détermine la décision selon logique médecine
+    // Dans App\Services\CalculAcademiqueService.php
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Vérifie si le niveau peut avoir des exclusions
+     */
+    private function niveauPeutExclure($niveauId)
+    {
+        try {
+            $niveau = Niveau::find($niveauId);
+            
+            if (!$niveau) {
+                return false; // Par défaut, pas d'exclusion si niveau non trouvé
+            }
+            
+            // Seul PACES peut exclure
+            return in_array($niveau->abr, ['PACES', 'L1']);
+            
+        } catch (\Exception $e) {
+            Log::error('Erreur vérification niveau exclusion', [
+                'niveau_id' => $niveauId,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE MODIFIÉE : Détermine la décision selon logique médecine avec gestion niveau
+     */
     private function determinerDecision_LogiqueMedecine($synthese, $session)
     {
         $creditsValides = $synthese['credits_valides'];
         $totalCreditsDisponibles = $synthese['total_credits'];
         $hasNoteEliminatoire = $synthese['a_note_eliminatoire'];
-        $moyenneGenerale = $synthese['moyenne_generale']; // Vraie moyenne
+        $moyenneGenerale = $synthese['moyenne_generale'];
+        
+        // ✅ AJOUT : Récupérer le niveau depuis la session
+        $niveauId = $session['niveau_id'] ?? null;
+        $peutExclure = $this->niveauPeutExclure($niveauId);
 
         if ($session['type'] === 'Normale') {
-            // ✅ SESSION NORMALE : Logique stricte académique
-
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = RATTRAPAGE (même avec tous les crédits)
+            // SESSION NORMALE
+            
             if ($hasNoteEliminatoire) {
                 return [
                     'code' => 'rattrapage',
@@ -334,7 +366,6 @@ class CalculAcademiqueService
                 ];
             }
 
-            // 2. ✅ RÈGLE ACADÉMIQUE STRICTE : Moyenne >= 10.0 ET tous les crédits = ADMIS
             if ($moyenneGenerale >= 10.0 && $creditsValides >= $totalCreditsDisponibles && $totalCreditsDisponibles > 0) {
                 return [
                     'code' => 'admis',
@@ -347,7 +378,6 @@ class CalculAcademiqueService
                 ];
             }
 
-            // 3. ✅ NOUVEAU : Si moyenne < 10.0, TOUJOURS rattrapage (même avec tous les crédits)
             if ($moyenneGenerale < 10.0) {
                 return [
                     'code' => 'rattrapage',
@@ -360,7 +390,6 @@ class CalculAcademiqueService
                 ];
             }
 
-            // 4. Moyenne >= 10 mais crédits insuffisants = RATTRAPAGE
             return [
                 'code' => 'rattrapage',
                 'libelle' => 'Autorisé(e) au rattrapage',
@@ -372,10 +401,10 @@ class CalculAcademiqueService
             ];
 
         } else {
-            // ✅ SESSION 2 (rattrapage) - Logique stricte également
+            // ✅ SESSION 2 (rattrapage) - LOGIQUE ADAPTÉE SELON NIVEAU
             
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = EXCLUSION
-            if ($hasNoteEliminatoire) {
+            // ✅ MODIFICATION : Exclusion seulement pour PACES
+            if ($hasNoteEliminatoire && $peutExclure) {
                 return [
                     'code' => 'exclus',
                     'libelle' => 'Exclu(e)',
@@ -385,13 +414,22 @@ class CalculAcademiqueService
                     'moyenne_reelle' => $moyenneGenerale,
                     'conforme_criteres' => false
                 ];
+            } elseif ($hasNoteEliminatoire && !$peutExclure) {
+                // ✅ Pour L2+ : Note éliminatoire = redoublant
+                return [
+                    'code' => 'redoublant',
+                    'libelle' => 'Autorisé(e) à redoubler',
+                    'motif' => 'Note éliminatoire en session de rattrapage',
+                    'credits_requis' => $totalCreditsDisponibles,
+                    'credits_obtenus' => $creditsValides,
+                    'moyenne_reelle' => $moyenneGenerale,
+                    'conforme_criteres' => false
+                ];
             }
 
-            // ✅ LOGIQUE ADAPTATIVE avec seuils proportionnels
-            $seuilAdmission = $totalCreditsDisponibles; // 100% des crédits disponibles
-            $seuilRedoublement = round($totalCreditsDisponibles * 0.67); // 67% des crédits disponibles
+            $seuilAdmission = $totalCreditsDisponibles;
+            $seuilRedoublement = round($totalCreditsDisponibles * 0.67);
 
-            // 2. ✅ ADMISSION S2 : Moyenne >= 10.0 ET tous les crédits
             if ($moyenneGenerale >= 10.0 && $creditsValides >= $seuilAdmission) {
                 return [
                     'code' => 'admis',
@@ -404,7 +442,6 @@ class CalculAcademiqueService
                 ];
             }
             
-            // 3. ✅ NOUVEAU : Si moyenne < 10.0, pas d'admission possible
             if ($moyenneGenerale < 10.0) {
                 if ($creditsValides >= $seuilRedoublement) {
                     return [
@@ -417,19 +454,32 @@ class CalculAcademiqueService
                         'conforme_criteres' => false
                     ];
                 } else {
-                    return [
-                        'code' => 'excluss',
-                        'libelle' => 'Exclu(e)',
-                        'motif' => 'Moyenne et crédits insuffisants en rattrapage',
-                        'credits_requis' => $seuilRedoublement,
-                        'credits_obtenus' => $creditsValides,
-                        'moyenne_reelle' => $moyenneGenerale,
-                        'conforme_criteres' => false
-                    ];
+                    // ✅ MODIFICATION : Exclusion uniquement pour PACES
+                    if ($peutExclure) {
+                        return [
+                            'code' => 'exclus',
+                            'libelle' => 'Exclu(e)',
+                            'motif' => 'Moyenne et crédits insuffisants en rattrapage',
+                            'credits_requis' => $seuilRedoublement,
+                            'credits_obtenus' => $creditsValides,
+                            'moyenne_reelle' => $moyenneGenerale,
+                            'conforme_criteres' => false
+                        ];
+                    } else {
+                        // Pour L2+ : redoublant au lieu d'exclus
+                        return [
+                            'code' => 'redoublant',
+                            'libelle' => 'Autorisé(e) à redoubler',
+                            'motif' => 'Moyenne et crédits insuffisants en rattrapage',
+                            'credits_requis' => $seuilRedoublement,
+                            'credits_obtenus' => $creditsValides,
+                            'moyenne_reelle' => $moyenneGenerale,
+                            'conforme_criteres' => false
+                        ];
+                    }
                 }
             }
             
-            // 4. Moyenne >= 10 mais crédits insuffisants pour admission complète
             if ($creditsValides >= $seuilRedoublement) {
                 return [
                     'code' => 'redoublant',
@@ -441,15 +491,28 @@ class CalculAcademiqueService
                     'conforme_criteres' => false
                 ];
             } else {
-                return [
-                    'code' => 'excluss',
-                    'libelle' => 'Exclu(e)',
-                    'motif' => 'Crédits très insuffisants en rattrapage',
-                    'credits_requis' => $seuilRedoublement,
-                    'credits_obtenus' => $creditsValides,
-                    'moyenne_reelle' => $moyenneGenerale,
-                    'conforme_criteres' => false
-                ];
+                // ✅ MODIFICATION : Dernière ligne aussi
+                if ($peutExclure) {
+                    return [
+                        'code' => 'exclus',
+                        'libelle' => 'Exclu(e)',
+                        'motif' => 'Crédits très insuffisants en rattrapage',
+                        'credits_requis' => $seuilRedoublement,
+                        'credits_obtenus' => $creditsValides,
+                        'moyenne_reelle' => $moyenneGenerale,
+                        'conforme_criteres' => false
+                    ];
+                } else {
+                    return [
+                        'code' => 'redoublant',
+                        'libelle' => 'Autorisé(e) à redoubler',
+                        'motif' => 'Crédits très insuffisants en rattrapage',
+                        'credits_requis' => $seuilRedoublement,
+                        'credits_obtenus' => $creditsValides,
+                        'moyenne_reelle' => $moyenneGenerale,
+                        'conforme_criteres' => false
+                    ];
+                }
             }
         }
     }
@@ -545,54 +608,45 @@ class CalculAcademiqueService
         if ($session['type'] === 'Normale') {
             // SESSION 1 - RÈGLE ACADÉMIQUE STRICTE
             
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = rattrapage
             if ($hasNoteEliminatoire) {
                 return 'rattrapage';
             }
 
-            // 2. ✅ RÈGLE STRICTE : Moyenne >= 10.0 ET crédits >= seuil = ADMIS
             if ($moyenneGenerale >= 10.0 && $creditsValides >= $config->credits_admission_s1) {
                 return 'admis';
             }
             
-            // 3. ✅ NOUVEAU : Si moyenne < 10.0, TOUJOURS rattrapage
             if ($moyenneGenerale < 10.0) {
                 return 'rattrapage';
             }
 
-            // 4. Moyenne >= 10 mais crédits insuffisants = rattrapage
             return 'rattrapage';
 
         } else {
             // SESSION 2 - RÈGLE ACADÉMIQUE STRICTE
             
-            // 1. PRIORITÉ ABSOLUE : Note éliminatoire = exclusion
+            // ✅ CORRECTION : Utiliser 'exclus' au lieu de 'excluss'
             if ($hasNoteEliminatoire) {
-                return 'excluss';
+                return 'exclus'; // ✅ CORRIGÉ
             }
 
-            // 2. ✅ RÈGLE STRICTE : Moyenne >= 10.0 ET crédits >= seuil = admis
             if ($moyenneGenerale >= 10.0 && $creditsValides >= $config->credits_admission_s2) {
                 return 'admis';
             }
             
-            // 3. ✅ NOUVEAU : Si moyenne < 10.0, pas d'admission possible
             if ($moyenneGenerale < 10.0) {
-                // Mais peut être redoublant si assez de crédits
                 if ($creditsValides >= $config->credits_redoublement_s2) {
                     return 'redoublant';
                 } else {
-                    return 'excluss';
+                    return 'exclus'; // ✅ CORRIGÉ
                 }
             }
             
-            // 4. Moyenne >= 10 mais crédits insuffisants pour admission
             if ($creditsValides >= $config->credits_redoublement_s2) {
                 return 'redoublant';
             }
             
-            // 5. Sinon = exclusion
-            return 'excluss';
+            return 'exclus'; // ✅ CORRIGÉ
         }
     }
 
