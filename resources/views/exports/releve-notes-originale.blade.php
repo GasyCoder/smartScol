@@ -306,7 +306,7 @@
         {{-- ✅ NOUVEAU : Note éliminatoire PACES --}}
         @if($etudiant->niveau && $etudiant->niveau->abr === 'PACES' && !empty($synthese['has_note_eliminatoire_paces']) && $synthese['has_note_eliminatoire_paces'])
             <div class="note-admission">
-                <p style="color: #d32f2f; font-weight: bold; margin-top: 5px;">
+                <p style="color: #000000ff; font-weight: bold; margin-top: 5px;">
                     Vous avez une note éliminatoire (note = 0). 
                     Les crédits des UE concernées ne sont pas validés même si la moyenne est >= 10/20.
                 </p>
