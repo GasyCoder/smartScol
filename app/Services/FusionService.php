@@ -834,6 +834,9 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
     /**
      * ✅ MÉTHODE CORRIGÉE : Étape 1 spécialisée pour rattrapage (RÉCUPÉRATION AUTO)
      */
+/**
+     * ✅ MÉTHODE CORRIGÉE : Étape 1 rattrapage avec traitement de TOUS les ECs
+     */
     private function executerEtape1Rattrapage(int $examenId, int $sessionRattrapageId, SessionExam $sessionRattrapage)
     {
         try {
@@ -846,7 +849,7 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                 return ['success' => false, 'message' => 'Session normale introuvable pour cette année universitaire.'];
             }
 
-            // 2. Étudiants éligibles au rattrapage (décision ou moyenne < 10)
+            // 2. Étudiants éligibles au rattrapage
             $eligibles = $this->getEtudiantsEligiblesRattrapage(
                 $examenId,
                 $sessionNormale->id,
@@ -859,7 +862,7 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
 
             $etudiantsEligiblesIds = $eligibles->pluck('etudiant_id')->toArray();
 
-            // 3. Résultats de la session Normale (base de comparaison)
+            // 3. Résultats de la session Normale
             $resultatsNormale = ResultatFinal::where('examen_id', $examenId)
                 ->where('session_exam_id', $sessionNormale->id)
                 ->where('statut', ResultatFinal::STATUT_PUBLIE)
@@ -869,14 +872,7 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                     return $item->etudiant_id . '_' . $item->ec_id;
                 });
 
-            if ($resultatsNormale->isEmpty()) {
-                return [
-                    'success' => false,
-                    'message' => 'Aucune note de session normale trouvée pour les étudiants éligibles.',
-                ];
-            }
-
-            // 4. Copies RATTRAPAGE réelles (sessionExamId = rattrapage)
+            // 4. Copies RATTRAPAGE réelles
             $copiesRattrapage = Copie::where('copies.examen_id', $examenId)
                 ->where('copies.session_exam_id', $sessionRattrapageId)
                 ->whereNotNull('copies.note')
@@ -899,7 +895,7 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                     return $copie->etudiant_id . '_' . $copie->ec_id;
                 });
 
-            // 5. Résultats fusion de cette session déjà existants (à ne pas dupliquer)
+            // 5. Résultats fusion existants (à ne pas dupliquer)
             $existants = ResultatFusion::where('examen_id', $examenId)
                 ->where('session_exam_id', $sessionRattrapageId)
                 ->get()
@@ -910,26 +906,29 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
             $batch = [];
             $compteur = 0;
 
+            // ================================================================
+            // TRAITEMENT 1 : ECs avec résultat normal (récupération/amélioration)
+            // ================================================================
             foreach ($resultatsNormale as $key => $resNormale) {
                 [$etudiantId, $ecId] = explode('_', $key);
 
-                // Ne pas regénérer un résultat déjà fusionné pour cette session
+                // Ne pas regénérer si existe déjà
                 if ($existants->has($key)) {
                     continue;
                 }
 
                 $noteNormale    = $resNormale->note;
                 $noteRattrapage = null;
-                $codeAnonymatId = $resNormale->code_anonymat_id; // fallback : code de la session normale
+                $codeAnonymatId = $resNormale->code_anonymat_id;
 
-                // Si l'étudiant a EFFECTIVEMENT passé le rattrapage sur cet EC
+                // Si copie rattrapage existe pour cet EC
                 if ($copiesRattrapage->has($key)) {
                     $copie          = $copiesRattrapage->get($key);
                     $noteRattrapage = $copie->note;
                     $codeAnonymatId = $copie->code_anonymat_id;
                 }
 
-                // 🔥 Règle métier : toujours prendre la note de rattrapage si elle existe
+                // Règle : toujours prendre la note de rattrapage si existe
                 $noteFinale = $this->determinerMeilleureNote($noteNormale, $noteRattrapage);
 
                 $batch[] = [
@@ -949,6 +948,36 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                 $compteur++;
             }
 
+            // ================================================================
+            // TRAITEMENT 2 : ECs SANS résultat normal mais AVEC copie rattrapage
+            // ================================================================
+            foreach ($copiesRattrapage as $key => $copie) {
+                // Si déjà traité dans TRAITEMENT 1 ou existe déjà
+                if ($resultatsNormale->has($key) || $existants->has($key)) {
+                    continue;
+                }
+
+                [$etudiantId, $ecId] = explode('_', $key);
+
+                // ✅ NOUVEAU CAS : Copie rattrapage sans résultat normal
+                // (Par ex: EC non passé en session normale mais passé en rattrapage)
+                $batch[] = [
+                    'etudiant_id'      => $etudiantId,
+                    'examen_id'        => $examenId,
+                    'ec_id'            => $ecId,
+                    'code_anonymat_id' => $copie->code_anonymat_id,
+                    'note'             => $copie->note,
+                    'genere_par'       => Auth::id(),
+                    'statut'           => ResultatFusion::STATUT_VERIFY_1,
+                    'etape_fusion'     => 1,
+                    'session_exam_id'  => $sessionRattrapageId,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ];
+
+                $compteur++;
+            }
+
             if ($compteur === 0) {
                 return [
                     'success' => false,
@@ -956,7 +985,7 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                 ];
             }
 
-            // Insertion / mise à jour en masse (clé unique par étudiant+EC+session)
+            // Insertion / mise à jour en masse
             foreach (array_chunk($batch, 500) as $chunk) {
                 DB::table('resultats_fusion')->upsert(
                     $chunk,
@@ -965,16 +994,25 @@ private function analyserDonneesPrefusion($examenId, $totalEtudiants, Collection
                 );
             }
 
+            Log::info('Fusion rattrapage terminée', [
+                'examen_id' => $examenId,
+                'session_id' => $sessionRattrapageId,
+                'lignes_fusionnees' => $compteur,
+                'avec_resultat_normal' => $resultatsNormale->count(),
+                'copies_rattrapage_seules' => $copiesRattrapage->count() - $resultatsNormale->count()
+            ]);
+
             return [
                 'success'            => true,
                 'resultats_generes'  => $compteur,
-                'message'            => "$compteur notes fusionnées pour la session de rattrapage (note de rattrapage prioritaire).",
+                'message'            => "$compteur notes fusionnées pour la session de rattrapage.",
             ];
         } catch (\Exception $e) {
             Log::error('Erreur fusion rattrapage', [
                 'examen_id'  => $examenId,
                 'session_id' => $sessionRattrapageId,
                 'error'      => $e->getMessage(),
+                'trace'      => $e->getTraceAsString()
             ]);
 
             return [

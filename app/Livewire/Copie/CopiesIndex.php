@@ -274,135 +274,116 @@ class CopiesIndex extends Component
         $this->showDeleteModal = false;
     }
 
+/**
+     * Méthode getCopies() SIMPLIFIÉE ET CORRIGÉE
+     * Remplacez TOUTE votre méthode getCopies() par celle-ci
+     */
     private function getCopies()
     {
-        $query = Copie::with(['codeAnonymat.ec.ue', 'utilisateurSaisie', 'sessionExam']);
+        // Requête de base avec eager loading
+        $query = Copie::query()
+            ->with([
+                'codeAnonymat' => function($q) {
+                    $q->withTrashed(); // IMPORTANT : Inclure codes supprimés
+                },
+                'codeAnonymat.ec.ue',
+                'utilisateurSaisie',
+                'sessionExam',
+            ])
+            ->whereNull('copies.deleted_at');
 
-        // LOGIQUE CORRECTE : En session rattrapage, montrer copies rattrapage + copies validées session normale
+        // ========================================
+        // FILTRE SESSION - LOGIQUE SIMPLIFIÉE
+        // ========================================
         if ($this->showBothSessions && $this->sessionNormaleId) {
-            // Récupérer les étudiants éligibles au rattrapage (ceux qui ont au moins une décision "rattrapage")
-            $etudiantsRattrapage = DB::table('resultats_finaux')
-                ->where('session_exam_id', $this->sessionNormaleId)
-                ->where('decision', 'rattrapage')
-                ->where('statut', 'publie')
-                ->select('etudiant_id')
-                ->distinct()
-                ->pluck('etudiant_id');
-
-            if ($etudiantsRattrapage->isEmpty()) {
-                // Aucun étudiant en rattrapage, afficher seulement session active
-                $query->where('session_exam_id', $this->session_exam_id);
-            } else {
-                $copieIds = collect();
-
-                // Utiliser le RattrapageService pour chaque étudiant
-                $rattrapageService = app(\App\Services\RattrapageService::class);
-
-                foreach ($etudiantsRattrapage as $etudiantId) {
-                    try {
-                        // Utiliser le service pour obtenir les ECs non validés
-                        $ecsAnalyse = $rattrapageService->getEcsNonValidesEtudiant($etudiantId, $this->sessionNormaleId);
-                        
-                        $ecsEnRattrapage = $ecsAnalyse['ecs_non_valides'] ?? [];
-                        
-                        // 1. Ajouter les copies de rattrapage pour les ECs en rattrapage
-                        if (!empty($ecsEnRattrapage)) {
-                            $copiesRattrapage = DB::table('copies')
-                                ->join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
-                                ->join('manchettes', function($join) use ($etudiantId) {
-                                    $join->on('codes_anonymat.id', '=', 'manchettes.code_anonymat_id')
-                                         ->where('manchettes.etudiant_id', '=', $etudiantId)
-                                         ->where('manchettes.session_exam_id', '=', $this->session_exam_id);
-                                })
-                                ->where('copies.session_exam_id', $this->session_exam_id)
-                                ->whereIn('codes_anonymat.ec_id', $ecsEnRattrapage)
-                                ->pluck('copies.id');
-                            
-                            $copieIds = $copieIds->concat($copiesRattrapage);
-                        }
-
-                        // 2. Ajouter les copies validées de session normale pour les ECs VALIDÉS
-                        $toutesLesEcs = DB::table('resultats_finaux')
-                            ->where('etudiant_id', $etudiantId)
-                            ->where('session_exam_id', $this->sessionNormaleId)
-                            ->where('statut', 'publie')
-                            ->pluck('ec_id')
-                            ->toArray();
-                        
-                        $ecsValidees = array_diff($toutesLesEcs, $ecsEnRattrapage);
-                        
-                        if (!empty($ecsValidees)) {
-                            $copiesValidees = DB::table('copies')
-                                ->join('codes_anonymat', 'copies.code_anonymat_id', '=', 'codes_anonymat.id')
-                                ->join('manchettes', function($join) use ($etudiantId) {
-                                    $join->on('codes_anonymat.id', '=', 'manchettes.code_anonymat_id')
-                                         ->where('manchettes.etudiant_id', '=', $etudiantId)
-                                         ->where('manchettes.session_exam_id', '=', $this->sessionNormaleId);
-                                })
-                                ->where('copies.session_exam_id', $this->sessionNormaleId)
-                                ->whereIn('codes_anonymat.ec_id', $ecsValidees)
-                                ->pluck('copies.id');
-                            
-                            $copieIds = $copieIds->concat($copiesValidees);
-                        }
-                        
-                    } catch (\Exception $e) {
-                        Log::error('Erreur récupération ECs pour étudiant', [
-                            'etudiant_id' => $etudiantId,
-                            'error' => $e->getMessage()
-                        ]);
-                    }
-                }
-
-                if ($copieIds->isNotEmpty()) {
-                    $query->whereIn('id', $copieIds->unique()->toArray());
-                } else {
-                    $query->where('id', 0); // Aucun résultat
-                }
-            }
+            // Mode rattrapage : afficher les DEUX sessions
+            $query->whereIn('session_exam_id', [
+                $this->session_exam_id,      // Session rattrapage
+                $this->sessionNormaleId       // Session normale
+            ]);
+            
+            Log::info('CopiesIndex - Mode rattrapage (2 sessions)', [
+                'session_rattrapage_id' => $this->session_exam_id,
+                'session_normale_id' => $this->sessionNormaleId
+            ]);
         } else {
-            // Session normale ou pas de logique rattrapage : afficher seulement session active
+            // Mode normal : seulement la session active
             if ($this->session_exam_id) {
                 $query->where('session_exam_id', $this->session_exam_id);
+                
+                Log::info('CopiesIndex - Mode normal (1 session)', [
+                    'session_id' => $this->session_exam_id
+                ]);
             }
         }
 
-        // Filtres simples
-        if ($this->niveau_id && $this->parcours_id) {
+        // ========================================
+        // FILTRES NIVEAU ET PARCOURS
+        // ========================================
+        if ($this->parcours_id && $this->niveau_id) {
             $examensIds = DB::table('examens')
                 ->where('niveau_id', $this->niveau_id)
                 ->where('parcours_id', $this->parcours_id)
                 ->whereNull('deleted_at')
                 ->pluck('id');
-            $query->whereIn('examen_id', $examensIds);
+            
+            if ($examensIds->isNotEmpty()) {
+                $query->whereIn('examen_id', $examensIds);
+            }
         } elseif ($this->niveau_id) {
             $examensIds = DB::table('examens')
                 ->where('niveau_id', $this->niveau_id)
                 ->whereNull('deleted_at')
                 ->pluck('id');
-            $query->whereIn('examen_id', $examensIds);
+            
+            if ($examensIds->isNotEmpty()) {
+                $query->whereIn('examen_id', $examensIds);
+            }
         }
 
+        // ========================================
+        // FILTRE EC
+        // ========================================
         if ($this->ec_id) {
             $query->where('ec_id', $this->ec_id);
         }
 
+        // ========================================
+        // FILTRE SECRÉTAIRE
+        // ========================================
         if ($this->saisie_par) {
             $query->where('saisie_par', $this->saisie_par);
         }
 
+        // ========================================
+        // RECHERCHE
+        // ========================================
         if ($this->search) {
             $query->where(function ($q) {
                 $q->whereHas('codeAnonymat', function ($sq) {
-                    $sq->where('code_complet', 'like', '%' . $this->search . '%');
+                    $sq->where('code_complet', 'like', '%' . $this->search . '%')
+                       ->withTrashed();
                 });
             });
         }
 
-        // Tri simple
+        // ========================================
+        // TRI
+        // ========================================
         $query->orderBy($this->sortField, $this->sortDirection);
 
-        return $query->paginate($this->perPage);
+        // ========================================
+        // LOG FINAL
+        // ========================================
+        $result = $query->paginate($this->perPage);
+        
+        Log::info('CopiesIndex - Résultat final', [
+            'total' => $result->total(),
+            'per_page' => $result->perPage(),
+            'current_page' => $result->currentPage()
+        ]);
+
+        return $result;
     }
 
     public function render()
